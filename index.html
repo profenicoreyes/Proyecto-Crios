@@ -247,6 +247,57 @@
     50%{opacity:1;text-shadow:0 0 14px rgba(120,221,255,.55)}
   }
 
+
+  /* CRIOS OS: lienzo fijo 16:9 que se escala y centra en cualquier pantalla */
+  html,body{
+    width:100%;height:100%;margin:0;overflow:hidden!important;
+    background:#02070d;
+  }
+  body{position:relative}
+  .app{
+    position:absolute!important;
+    width:1366px!important;
+    height:768px!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    transform-origin:top left;
+    will-change:transform,left,top;
+  }
+  .screen{
+    position:absolute!important;
+    inset:0!important;
+    width:1366px!important;
+    height:768px!important;
+    min-height:0!important;
+    padding:22px!important;
+    overflow:hidden!important;
+  }
+  .screen.active{
+    display:flex!important;
+    flex-direction:column;
+    justify-content:flex-start!important;
+  }
+  .hero{
+    width:min(1050px,calc(100% - 40px));
+    max-height:720px!important;
+    overflow:auto;
+    margin:auto!important;
+  }
+  .archive-grid,.map-wrap,.mission-wrap,.final-grid{
+    width:100%;
+    max-height:none!important;
+    height:700px!important;
+    margin:auto!important;
+  }
+  .archive,.data-card{max-height:700px!important}
+  .base-map{height:590px!important;min-height:0!important}
+  .sidepanel{max-height:650px!important}
+  .mission-wrap{height:718px!important}
+  .mission-grid{height:630px!important}
+  .mission-info{overflow:auto!important}
+  .final-grid{height:700px!important}
+  .version-mark{z-index:999!important}
+
 </style>
 </head>
 <body>
@@ -258,7 +309,7 @@
   </div>
 </div>
 <div class="scan"></div>
-<div class="version-mark">CRIOS OS · v1.0</div>
+<div class="version-mark">CRIOS OS · v1.1</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -659,6 +710,8 @@ function go(id){
   if(el){
     el.classList.add('active');
     el.querySelectorAll('.hero,.archive,.data-card,.sidepanel,.mission-info,.final-card').forEach(x=>x.scrollTop=0);
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
     const focused=document.activeElement;
     if(focused && typeof focused.blur==='function') focused.blur();
   }
@@ -767,23 +820,29 @@ function requestAppFullscreen(){
   const root=document.documentElement;
   if(document.fullscreenElement) return;
   const fn=root.requestFullscreen||root.webkitRequestFullscreen;
-  if(fn){ try{ fn.call(root); }catch(e){} }
+  if(fn){
+    try{
+      const p=fn.call(root);
+      if(p && typeof p.then==='function') p.finally(()=>setTimeout(fitCriosToViewport,120));
+    }catch(e){}
+  }
+  setTimeout(fitCriosToViewport,120);
 }
 function startAmbientAudio(){
   if(!soundOn||!audioCtx||ambientStarted) return;
   ambientStarted=true;
   const master=audioCtx.createGain();
-  master.gain.value=.045;
+  master.gain.value=.11;
   master.connect(audioCtx.destination);
 
   const low=audioCtx.createOscillator();
   const lowGain=audioCtx.createGain();
-  low.type='sine'; low.frequency.value=54; lowGain.gain.value=.22;
+  low.type='sine'; low.frequency.value=54; lowGain.gain.value=.28;
   low.connect(lowGain); lowGain.connect(master); low.start();
 
   const mid=audioCtx.createOscillator();
   const midGain=audioCtx.createGain();
-  mid.type='triangle'; mid.frequency.value=108; midGain.gain.value=.06;
+  mid.type='triangle'; mid.frequency.value=108; midGain.gain.value=.11;
   mid.connect(midGain); midGain.connect(master); mid.start();
 
   const lfo=audioCtx.createOscillator();
@@ -795,7 +854,7 @@ function startAmbientAudio(){
 }
 function uiClick(){
   if(!soundOn||!audioCtx) return;
-  beep(520,.035,.018);
+  beep(520,.045,.035);
 }
 
 function beep(freq=440,dur=.08,volume=.05){
@@ -868,7 +927,12 @@ async function activateIntro(){
 
   startAmbientAudio();
   requestAppFullscreen();
-  successSound();
+
+  // Secuencia audible de arranque
+  beep(180,.18,.08);
+  setTimeout(()=>beep(360,.12,.07),220);
+  setTimeout(()=>beep(540,.12,.065),430);
+  setTimeout(()=>successSound(),650);
 
   setTimeout(()=>go('aria'),3200);
 }
@@ -887,6 +951,22 @@ document.getElementById('intro').setAttribute('aria-label','Tocar para establece
 updateMap();
 loadUserName();
 
+
+
+function fitCriosToViewport(){
+  const app=document.querySelector('.app');
+  if(!app) return;
+  const designW=1366, designH=768;
+  const scale=Math.min(window.innerWidth/designW,window.innerHeight/designH);
+  const left=(window.innerWidth-designW*scale)/2;
+  const top=(window.innerHeight-designH*scale)/2;
+  app.style.transform=`scale(${scale})`;
+  app.style.left=`${left}px`;
+  app.style.top=`${top}px`;
+}
+window.addEventListener('resize',fitCriosToViewport);
+window.addEventListener('orientationchange',()=>setTimeout(fitCriosToViewport,120));
+fitCriosToViewport();
 
 </script>
 </body>
