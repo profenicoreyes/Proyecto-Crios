@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Proyecto CRIOS — CRIOS OS v1.4</title>
+<title>Proyecto CRIOS — CRIOS OS v1.5</title>
 <style>
   :root{
     --bg:#040b14; --panel:#0b1d2c; --panel2:#102b40; --ice:#78ddff;
@@ -80,10 +80,8 @@
   .big-number{font-size:clamp(3.3rem,8vw,7.5rem);font-weight:950;color:var(--warn);line-height:1}
   .data-card{padding:26px;display:flex;flex-direction:column;justify-content:center;min-height:260px;
     background:linear-gradient(145deg,rgba(14,48,71,.9),rgba(7,20,31,.9))}
-  .earth{width:220px;height:220px;border-radius:50%;margin:10px auto;position:relative;
-    background:radial-gradient(circle at 35% 30%,#9deeff 0 8%,#2488ae 9% 31%,#12546f 32% 58%,#062939 59%);
-    box-shadow:inset -38px -28px 45px rgba(0,0,0,.45),0 0 50px rgba(51,207,255,.24)}
-  .earth:after{content:"";position:absolute;inset:-13px;border:1px solid rgba(120,221,255,.35);border-radius:50%;transform:rotate(-18deg)}
+  .anomaly-graphic{width:100%;max-width:620px;margin:auto;padding:12px}
+  .anomaly-graphic svg{width:100%;height:auto;display:block}
   .polar-station{
       width:100%;max-width:720px;margin:0 auto;
       border-radius:18px;overflow:hidden;
@@ -234,11 +232,17 @@
   }
 
 
-  #intro{cursor:pointer;user-select:none}
+  #intro{cursor:default;user-select:none}
+  #intro.intro-ready{cursor:pointer}
   .tap-prompt{
     margin-top:22px;color:var(--ice);
+    opacity:0;visibility:hidden;pointer-events:none;
     font:800 .82rem ui-monospace,SFMono-Regular,Consolas,monospace;
     letter-spacing:.12em;text-align:center;
+    animation:none;transition:opacity .35s ease;
+  }
+  #intro.intro-ready .tap-prompt{
+    opacity:1;visibility:visible;pointer-events:auto;
     animation:tapPulse 1.5s ease-in-out infinite;
   }
   #intro.connection-started .tap-prompt{opacity:0;pointer-events:none}
@@ -300,13 +304,13 @@
 
 
   .system-controls{
-    position:fixed;right:14px;top:12px;z-index:1000;
-    display:flex;gap:8px
+    position:fixed;left:14px;bottom:12px;z-index:1000;
+    display:flex;flex-direction:column;gap:6px;align-items:flex-start
   }
   .system-control{
     border:1px solid rgba(120,221,255,.4);
     background:rgba(5,22,34,.9);color:#d9f5ff;
-    padding:8px 11px;border-radius:8px;
+    padding:7px 9px;border-radius:8px;
     font:800 .68rem ui-monospace,SFMono-Regular,Consolas,monospace;
     letter-spacing:.05em;cursor:pointer
   }
@@ -356,7 +360,7 @@
   <button id="audioControl" class="system-control" onclick="toggleAmbientAudio(event)">SILENCIAR AUDIO</button>
   <button id="fullscreenControl" class="system-control" onclick="toggleFullscreen(event)">PANTALLA COMPLETA</button>
 </div>
-<div class="version-mark">CRIOS OS · v1.4</div>
+<div class="version-mark">CRIOS OS · v1.5</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -408,7 +412,36 @@
       <p class="small">Fuente: Organización Meteorológica Mundial, Estado del Clima Mundial 2024.</p>
       <div class="actions"><button class="btn" onclick="go('record2')">Procesar siguiente registro</button></div>
     </article>
-    <aside class="data-card panel"><div class="earth"></div><p style="text-align:center;color:var(--muted)">Anomalía respecto de 1850–1900</p></aside>
+    <aside class="data-card panel"><div class="anomaly-graphic" aria-label="Visualización del aumento de temperatura media global">
+  <svg viewBox="0 0 520 420" role="img">
+    <defs>
+      <linearGradient id="tempBar" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#3caee8"/>
+        <stop offset=".55" stop-color="#ffd35a"/>
+        <stop offset="1" stop-color="#ff5b4f"/>
+      </linearGradient>
+      <radialGradient id="globeWarm" cx="35%" cy="28%">
+        <stop offset="0" stop-color="#ffde78"/>
+        <stop offset=".55" stop-color="#e76745"/>
+        <stop offset="1" stop-color="#8c2634"/>
+      </radialGradient>
+    </defs>
+    <rect x="55" y="45" width="82" height="280" rx="42" fill="#082437" stroke="#7edbff" stroke-width="4"/>
+    <rect x="79" y="96" width="34" height="205" rx="17" fill="url(#tempBar)"/>
+    <circle cx="96" cy="326" r="55" fill="#ff5b4f" stroke="#ffd2c8" stroke-width="4"/>
+    <line x1="137" y1="96" x2="185" y2="96" stroke="#ff7664" stroke-width="4"/>
+    <text x="198" y="104" fill="#ffb62e" font-size="30" font-family="Arial" font-weight="700">+1,55 °C</text>
+    <line x1="137" y1="301" x2="185" y2="301" stroke="#7edbff" stroke-width="3"/>
+    <text x="198" y="309" fill="#b8d9e6" font-size="22" font-family="Arial">Referencia 1850–1900</text>
+
+    <circle cx="355" cy="205" r="108" fill="url(#globeWarm)" stroke="#ffb62e" stroke-width="4"/>
+    <path d="M285 165 q42 -50 83 -18 q18 15 42 8 q34 -10 46 22 q-16 29 -42 26 q-27 -2 -42 20 q-23 35 -68 14 q-35 -16 -19 -72Z" fill="#ffd27a" opacity=".72"/>
+    <path d="M314 263 q30 -20 55 -8 q20 9 35 30 q-20 23 -46 19 q-37 -7 -44 -41Z" fill="#ffd27a" opacity=".6"/>
+    <path d="M255 205 A100 100 0 0 0 455 205" fill="none" stroke="#ffdca2" stroke-width="3" opacity=".55"/>
+    <path d="M355 97 C320 140 320 270 355 313 C390 270 390 140 355 97" fill="none" stroke="#ffdca2" stroke-width="3" opacity=".55"/>
+    <text x="355" y="380" fill="#c8e6f1" font-size="23" font-family="Arial" text-anchor="middle">Temperatura media global</text>
+  </svg>
+</div><p style="text-align:center;color:var(--muted)">Anomalía respecto de 1850–1900</p></aside>
   </div>
 </section>
 
@@ -996,32 +1029,78 @@ document.addEventListener('fullscreenchange',()=>{
   setTimeout(fitCriosToViewport,120);
 });
 function startAmbientAudio(){
+  if(!audioCtx||ambientStarted) return;
+  ambientStarted=true;
+
+  const master=audioCtx.createGain();
+  master.gain.setValueAtTime(.12,audioCtx.currentTime);
+  master.connect(audioCtx.destination);
+
+  const drone1=audioCtx.createOscillator();
+  const drone2=audioCtx.createOscillator();
+  const drone3=audioCtx.createOscillator();
+  const g1=audioCtx.createGain(),g2=audioCtx.createGain(),g3=audioCtx.createGain();
+  drone1.type='sine'; drone1.frequency.value=55; g1.gain.value=.42;
+  drone2.type='triangle'; drone2.frequency.value=82.5; g2.gain.value=.16;
+  drone3.type='sine'; drone3.frequency.value=110; g3.gain.value=.08;
+  drone1.connect(g1);g1.connect(master);
+  drone2.connect(g2);g2.connect(master);
+  drone3.connect(g3);g3.connect(master);
+  drone1.start();drone2.start();drone3.start();
+
+  const noiseBuffer=audioCtx.createBuffer(1,audioCtx.sampleRate*4,audioCtx.sampleRate);
+  const noiseData=noiseBuffer.getChannelData(0);
+  let smooth=0;
+  for(let i=0;i<noiseData.length;i++){
+    smooth=.992*smooth+.008*(Math.random()*2-1);
+    noiseData[i]=smooth*2.8;
+  }
+  const noise=audioCtx.createBufferSource();
+  noise.buffer=noiseBuffer;noise.loop=true;
+  const filter=audioCtx.createBiquadFilter();
+  filter.type='lowpass';filter.frequency.value=900;
+  const ng=audioCtx.createGain();ng.gain.value=.25;
+  noise.connect(filter);filter.connect(ng);ng.connect(master);noise.start();
+
+  const pulse=audioCtx.createOscillator();
+  const pulseGain=audioCtx.createGain();
+  pulse.type='sine';pulse.frequency.value=45;
+  pulseGain.gain.value=0;
+  pulse.connect(pulseGain);pulseGain.connect(master);pulse.start();
+  function pulseOnce(){
+    const now=audioCtx.currentTime;
+    pulseGain.gain.cancelScheduledValues(now);
+    pulseGain.gain.setValueAtTime(0,now);
+    pulseGain.gain.linearRampToValueAtTime(.42,now+.05);
+    pulseGain.gain.exponentialRampToValueAtTime(.001,now+.55);
+  }
+  pulseOnce();
+  const pulseTimer=setInterval(pulseOnce,2600);
+
+  ambientNodes=[drone1,drone2,drone3,noise,pulse,g1,g2,g3,ng,pulseGain,master,{timer:pulseTimer}];
   const player=document.getElementById('ambientAudio');
-  if(!player) return;
-  player.volume=.58;
-  player.play().then(()=>{
-    ambientStarted=true;
-    updateAudioButton();
-  }).catch(()=>{});
+  if(player){player.pause();player.currentTime=0;}
+  updateAudioButton();
 }
 function updateAudioButton(){
   const btn=document.getElementById('audioControl');
-  const player=document.getElementById('ambientAudio');
-  if(!btn||!player) return;
-  const muted=player.paused||player.muted;
-  btn.textContent=muted?'ACTIVAR AUDIO':'SILENCIAR AUDIO';
-  btn.classList.toggle('muted',muted);
+  if(!btn) return;
+  btn.textContent=soundOn?'SILENCIAR AUDIO':'ACTIVAR AUDIO';
+  btn.classList.toggle('muted',!soundOn);
 }
 async function toggleAmbientAudio(event){
   if(event) event.stopPropagation();
-  const player=document.getElementById('ambientAudio');
-  if(!player) return;
-  if(player.paused){
-    player.muted=false;
-    player.volume=.58;
-    try{await player.play();}catch(e){}
+  soundOn=!soundOn;
+  if(soundOn){
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended'){try{await audioCtx.resume();}catch(e){}}
+    if(!ambientStarted) startAmbientAudio();
+    else ambientNodes.forEach(n=>{if(n&&n.gain&&n.gain.value!==undefined){} });
   }else{
-    player.pause();
+    ambientNodes.forEach(n=>{
+      try{if(n.timer) clearInterval(n.timer); else if(typeof n.stop==='function') n.stop(); if(typeof n.disconnect==='function') n.disconnect();}catch(e){}
+    });
+    ambientNodes=[];ambientStarted=false;
   }
   updateAudioButton();
 }
@@ -1085,12 +1164,14 @@ function validateFinalProcedure(){ensureMissionData();const raw=document.getElem
 
 
 let introActivated=false;
+let introReady=false;
 
 async function activateIntro(){
-  if(introActivated) return;
+  if(!introReady||introActivated) return;
   introActivated=true;
 
   const intro=document.getElementById('intro');
+  intro.classList.remove('intro-ready');
   intro.classList.add('connection-started');
   const prompt=document.getElementById('tapPrompt');
   if(prompt) prompt.textContent='SEÑAL RECIBIDA';
@@ -1114,13 +1195,21 @@ async function activateIntro(){
     setTimeout(()=>go('aria'),2850);
 }
 
-document.getElementById('intro').addEventListener('pointerdown',activateIntro,{once:true});
+setTimeout(()=>{
+  introReady=true;
+  const intro=document.getElementById('intro');
+  intro.classList.add('intro-ready');
+  const prompt=document.getElementById('tapPrompt');
+  if(prompt) prompt.textContent='TOCÁ CUALQUIER PUNTO PARA ESTABLECER LA CONEXIÓN';
+},4100);
+
+document.getElementById('intro').addEventListener('pointerdown',activateIntro);
 document.getElementById('intro').addEventListener('keydown',(event)=>{
   if(event.key==='Enter'||event.key===' '){
     event.preventDefault();
     activateIntro();
   }
-},{once:true});
+});
 document.getElementById('intro').setAttribute('tabindex','0');
 document.getElementById('intro').setAttribute('role','button');
 document.getElementById('intro').setAttribute('aria-label','Tocar para establecer la conexión');
