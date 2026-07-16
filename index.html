@@ -1,4 +1,4 @@
-<!doctype html>
+ <!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -171,12 +171,25 @@
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
   }
+
+  .procedure-box{margin-top:20px;padding:16px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.16)}
+  .procedure-box label{display:block;color:var(--ice);font-weight:900;margin-bottom:9px;letter-spacing:.04em}
+  .procedure-row{display:flex;gap:10px}
+  .procedure-row input{min-width:0;flex:1;background:#061520;border:1px solid rgba(120,221,255,.42);color:var(--text);
+    padding:13px 14px;border-radius:10px;font-size:1rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .result-step{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(120,221,255,.22)}
+  .result-step.locked{opacity:.42;pointer-events:none}
+  .mission-code{font:800 .75rem ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted);letter-spacing:.08em}
+  .data-chip{display:inline-block;margin:3px 5px 3px 0;padding:5px 8px;border-radius:999px;border:1px solid var(--line);
+    color:#dff8ff;background:rgba(7,31,46,.7);font-size:.8rem}
+  @media(max-width:560px){.procedure-row{flex-direction:column}}
+
 </style>
 </head>
 <body>
 <div class="app">
 <div class="scan"></div>
-<div class="version-mark">CRIOS OS · v0.4</div>
+<div class="version-mark">CRIOS OS · v0.8</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -328,37 +341,46 @@
 
 <section id="mission-energy" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 01</div><h2>Centro de Energía</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
-    <div class="mission-grid">
-      <div class="blueprint panel">
-        <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Plano rectangular dividido en dos sectores y una zona dañada">
-  <g fill="none" stroke="#80e8ff" stroke-width="4">
-    <rect x="120" y="105" width="460" height="210"/>
-    <line x1="292" y1="105" x2="292" y2="315"/>
-    <rect x="420" y="210" width="96" height="72" stroke="#ff5b6b"/>
-    <line x1="120" y1="75" x2="580" y2="75"/><line x1="120" y1="68" x2="120" y2="82"/><line x1="580" y1="68" x2="580" y2="82"/>
-    <line x1="90" y1="105" x2="90" y2="315"/><line x1="83" y1="105" x2="97" y2="105"/><line x1="83" y1="315" x2="97" y2="315"/>
-  </g>
-  <g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle">
-    <text x="350" y="60">24 m</text>
-    <text x="205" y="205">9 m</text>
-    <text x="436" y="205">MEDIDA DESCONOCIDA</text>
-    <text x="350" y="350">SECTOR OESTE + SECTOR ESTE</text>
-  </g>
-  <text x="62" y="215" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 62 215)">8 m</text>
-  <g fill="#ff9aa4" font-size="18" font-family="Arial" text-anchor="middle">
-    <text x="468" y="242">ZONA DAÑADA</text><text x="468" y="266">5 m × 3 m</text>
-  </g>
-</svg>
+    <div class="mission-head">
+      <div>
+        <div class="brand">MISIÓN 01</div>
+        <h2>Centro de Energía</h2>
+        <div class="mission-code" id="variant-energy">VARIANTE —</div>
       </div>
+      <button class="btn secondary" onclick="go('map')">Cerrar módulo</button>
+    </div>
+
+    <div class="mission-grid">
+      <div class="blueprint panel" id="blueprint-energy"></div>
+
       <div class="mission-info panel">
-        <div class="brief"><strong>A.R.I.A.:</strong> Sin conocer la superficie activa, no puedo distribuir la calefacción.</div>
-        <p>El edificio mide <strong>24 m de ancho</strong> y <strong>8 m de alto</strong>. El sector oeste ocupa <strong>9 m</strong> del ancho total. Una zona dañada de <strong>5 m × 3 m</strong> ya no debe calefaccionarse.</p>
-        <p><strong>Determinen cuántos metros cuadrados continúan calefaccionándose.</strong></p>
-        <div class="formula-ref"><div>Rectángulo: base × altura</div><div>Superficie útil: total − zona dañada</div></div>
-        <div class="answer"><input id="answer-energy" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('energy',177)">Validar</button></div>
-        <div id="feedback-energy" class="feedback"></div>
-        <details><summary>Pista de A.R.I.A.</summary><p>Primero averigüen cuánto mide el sector este. También pueden calcular directamente el área del rectángulo completo.</p></details>
+        <div class="brief"><strong>A.R.I.A.:</strong> Sin conocer la superficie activa no puedo distribuir correctamente la calefacción.</div>
+        <div id="context-energy"><p id="missionText-energy"></p><div id="data-energy"></div><p><strong id="question-energy"></strong></p></div>
+
+        <div class="procedure-box">
+          <label for="procedure-energy">REGISTRO DE PROCEDIMIENTO</label>
+          <p class="small">Escribí una única expresión con las operaciones que representan tu razonamiento.</p>
+          <div class="procedure-row">
+            <input id="procedure-energy" autocomplete="off" spellcheck="false"
+              placeholder="Ejemplo: 24*8 - 5*3">
+            <button class="btn" onclick="validateProcedure('energy')">Verificar procedimiento</button>
+          </div>
+          <div id="procedureFeedback-energy" class="feedback"></div>
+
+          <div id="resultStep-energy" class="result-step locked">
+            <label for="answer-energy">RESULTADO FINAL</label>
+            <div class="answer">
+              <input id="answer-energy" inputmode="decimal" placeholder="Resultado en m²">
+              <button class="btn" onclick="validateMissionResult('energy')">Ejecutar reparación</button>
+            </div>
+            <div id="feedback-energy" class="feedback"></div>
+          </div>
+        </div>
+
+        <details id="hint-energy" onclick="registerHint('energy')">
+          <summary>Solicitar asistencia de A.R.I.A.</summary>
+          <div id="hintText-energy"></div>
+        </details>
       </div>
     </div>
   </div>
@@ -366,35 +388,46 @@
 
 <section id="mission-greenhouse" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 02</div><h2>Invernadero</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
-    <div class="mission-grid">
-      <div class="blueprint panel">
-        <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Rectángulo con estanque triangular">
-  <g fill="none" stroke="#80e8ff" stroke-width="4">
-    <rect x="120" y="90" width="460" height="260"/>
-    <path d="M270 295 L430 295 L350 175 Z" stroke="#ffb62e"/>
-    <line x1="120" y1="62" x2="580" y2="62"/><line x1="120" y1="55" x2="120" y2="69"/><line x1="580" y1="55" x2="580" y2="69"/>
-    <line x1="90" y1="90" x2="90" y2="350"/><line x1="83" y1="90" x2="97" y2="90"/><line x1="83" y1="350" x2="97" y2="350"/>
-    <line x1="270" y1="318" x2="430" y2="318"/><line x1="350" y1="175" x2="350" y2="295" stroke-dasharray="8 8"/>
-  </g>
-  <g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle">
-    <text x="350" y="48">18 m</text><text x="350" y="385">SUPERFICIE TOTAL DEL INVERNADERO</text>
-  </g>
-  <text x="63" y="220" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 63 220)">12 m</text>
-  <g fill="#ffd179" font-size="18" font-family="Arial" text-anchor="middle">
-    <text x="350" y="340">base: 6 m</text><text x="380" y="235">altura: 4 m</text><text x="350" y="155">ESTANQUE</text>
-  </g>
-</svg>
+    <div class="mission-head">
+      <div>
+        <div class="brand">MISIÓN 02</div>
+        <h2>Invernadero</h2>
+        <div class="mission-code" id="variant-greenhouse">VARIANTE —</div>
       </div>
+      <button class="btn secondary" onclick="go('map')">Cerrar módulo</button>
+    </div>
+
+    <div class="mission-grid">
+      <div class="blueprint panel" id="blueprint-greenhouse"></div>
+
       <div class="mission-info panel">
-        <div class="brief"><strong>A.R.I.A.:</strong> Debo calcular la superficie actualmente disponible para producir alimentos.</div>
-        <p>El invernadero es un rectángulo de <strong>18 m × 12 m</strong>. El estanque triangular central tiene <strong>6 m de base</strong> y <strong>4 m de altura</strong>.</p>
-        <p>Durante la tormenta se perdieron <strong>18 m²</strong> de cultivo. Después se recuperaron <strong>7 m²</strong>.</p>
-        <p><strong>Determinen la superficie cultivable actual.</strong></p>
-        <div class="formula-ref"><div>Triángulo: base × altura ÷ 2</div><div>Consideren pérdidas y recuperaciones</div></div>
-        <div class="answer"><input id="answer-greenhouse" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('greenhouse',193)">Validar</button></div>
-        <div id="feedback-greenhouse" class="feedback"></div>
-        <details><summary>Pista de A.R.I.A.</summary><p>El estanque ocupa espacio dentro del rectángulo. Después de hallar la zona inicial de cultivo, apliquen los cambios registrados.</p></details>
+        <div class="brief"><strong>A.R.I.A.:</strong> Necesito determinar la superficie que todavía puede destinarse a la producción de alimentos.</div>
+        <div id="context-greenhouse"><p id="missionText-greenhouse"></p><div id="data-greenhouse"></div><p><strong id="question-greenhouse"></strong></p></div>
+
+        <div class="procedure-box">
+          <label for="procedure-greenhouse">REGISTRO DE PROCEDIMIENTO</label>
+          <p class="small">Escribí una única expresión con las operaciones que representan tu razonamiento.</p>
+          <div class="procedure-row">
+            <input id="procedure-greenhouse" autocomplete="off" spellcheck="false"
+              placeholder="Ejemplo: 24*8 - 5*3">
+            <button class="btn" onclick="validateProcedure('greenhouse')">Verificar procedimiento</button>
+          </div>
+          <div id="procedureFeedback-greenhouse" class="feedback"></div>
+
+          <div id="resultStep-greenhouse" class="result-step locked">
+            <label for="answer-greenhouse">RESULTADO FINAL</label>
+            <div class="answer">
+              <input id="answer-greenhouse" inputmode="decimal" placeholder="Resultado en m²">
+              <button class="btn" onclick="validateMissionResult('greenhouse')">Ejecutar reparación</button>
+            </div>
+            <div id="feedback-greenhouse" class="feedback"></div>
+          </div>
+        </div>
+
+        <details id="hint-greenhouse" onclick="registerHint('greenhouse')">
+          <summary>Solicitar asistencia de A.R.I.A.</summary>
+          <div id="hintText-greenhouse"></div>
+        </details>
       </div>
     </div>
   </div>
@@ -402,35 +435,46 @@
 
 <section id="mission-ice" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 03</div><h2>Banco de Hielo</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
-    <div class="mission-grid">
-      <div class="blueprint panel">
-        <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sala cuadrada con cámara circular central">
-  <g fill="none" stroke="#80e8ff" stroke-width="4">
-    <rect x="180" y="55" width="340" height="340"/>
-    <circle cx="350" cy="225" r="112" stroke="#ffb62e"/>
-    <line x1="238" y1="225" x2="462" y2="225" stroke="#ffb62e"/>
-    <line x1="180" y1="30" x2="520" y2="30"/><line x1="180" y1="23" x2="180" y2="37"/><line x1="520" y1="23" x2="520" y2="37"/>
-  </g>
-  <g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle">
-    <text x="350" y="20">16 m</text><text x="350" y="420">SALA CUADRADA</text>
-  </g>
-  <text x="145" y="230" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 145 230)">16 m</text>
-  <g fill="#ffd179" font-size="18" font-family="Arial" text-anchor="middle">
-    <text x="350" y="214">DIÁMETRO</text><text x="350" y="244">10 m</text><text x="350" y="102">CÁMARA CIRCULAR</text>
-  </g>
-  <text x="560" y="380" fill="#dff9ff" font-size="20" font-family="Arial">π ≈ 3</text>
-</svg>
+    <div class="mission-head">
+      <div>
+        <div class="brand">MISIÓN 03</div>
+        <h2>Banco de Hielo</h2>
+        <div class="mission-code" id="variant-ice">VARIANTE —</div>
       </div>
+      <button class="btn secondary" onclick="go('map')">Cerrar módulo</button>
+    </div>
+
+    <div class="mission-grid">
+      <div class="blueprint panel" id="blueprint-ice"></div>
+
       <div class="mission-info panel">
-        <div class="brief"><strong>A.R.I.A.:</strong> Solo la superficie exterior a la cámara circular debe mantenerse accesible y refrigerada.</div>
-        <p>La sala es cuadrada y mide <strong>16 m de lado</strong>. La cámara central tiene <strong>10 m de diámetro</strong>. Usen <strong>π ≈ 3</strong>.</p>
-        <p>Se recuperaron <strong>12 m²</strong> de un corredor auxiliar, pero fue necesario sellar otros <strong>8 m²</strong>.</p>
-        <p><strong>Determinen la superficie operativa.</strong></p>
-        <div class="formula-ref"><div>Círculo: π × radio × radio</div><div>Radio = diámetro ÷ 2</div></div>
-        <div class="answer"><input id="answer-ice" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('ice',185)">Validar</button></div>
-        <div id="feedback-ice" class="feedback"></div>
-        <details><summary>Pista de A.R.I.A.</summary><p>El plano informa el diámetro, pero la fórmula necesita el radio. La cámara circular no forma parte del espacio operativo exterior.</p></details>
+        <div class="brief"><strong>A.R.I.A.:</strong> La cámara circular contiene las muestras. Solo la superficie exterior puede utilizarse para el trabajo técnico.</div>
+        <div id="context-ice"><p id="missionText-ice"></p><div id="data-ice"></div><p><strong id="question-ice"></strong></p></div>
+
+        <div class="procedure-box">
+          <label for="procedure-ice">REGISTRO DE PROCEDIMIENTO</label>
+          <p class="small">Escribí una única expresión con las operaciones que representan tu razonamiento.</p>
+          <div class="procedure-row">
+            <input id="procedure-ice" autocomplete="off" spellcheck="false"
+              placeholder="Ejemplo: 24*8 - 5*3">
+            <button class="btn" onclick="validateProcedure('ice')">Verificar procedimiento</button>
+          </div>
+          <div id="procedureFeedback-ice" class="feedback"></div>
+
+          <div id="resultStep-ice" class="result-step locked">
+            <label for="answer-ice">RESULTADO FINAL</label>
+            <div class="answer">
+              <input id="answer-ice" inputmode="decimal" placeholder="Resultado en m²">
+              <button class="btn" onclick="validateMissionResult('ice')">Ejecutar reparación</button>
+            </div>
+            <div id="feedback-ice" class="feedback"></div>
+          </div>
+        </div>
+
+        <details id="hint-ice" onclick="registerHint('ice')">
+          <summary>Solicitar asistencia de A.R.I.A.</summary>
+          <div id="hintText-ice"></div>
+        </details>
       </div>
     </div>
   </div>
@@ -438,39 +482,46 @@
 
 <section id="mission-hangar" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 04</div><h2>Hangar de Perforación</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
-    <div class="mission-grid">
-      <div class="blueprint panel">
-        <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Figura en L con medidas exteriores y una zona bloqueada">
-  <path d="M130 80 H570 V190 H390 V350 H130 Z" fill="none" stroke="#80e8ff" stroke-width="5"/>
-  <rect x="185" y="245" width="100" height="72" fill="none" stroke="#ff5b6b" stroke-width="4"/>
-  <g fill="none" stroke="#80e8ff" stroke-width="3">
-    <line x1="130" y1="50" x2="570" y2="50"/><line x1="130" y1="43" x2="130" y2="57"/><line x1="570" y1="43" x2="570" y2="57"/>
-    <line x1="100" y1="80" x2="100" y2="350"/><line x1="93" y1="80" x2="107" y2="80"/><line x1="93" y1="350" x2="107" y2="350"/>
-    <line x1="390" y1="210" x2="570" y2="210"/><line x1="410" y1="190" x2="410" y2="350"/>
-  </g>
-  <g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle">
-    <text x="350" y="35">22 m</text>
-    <text x="480" y="235">13 m</text>
-    <text x="435" y="280" transform="rotate(-90 435 280)">6 m</text>
-    <text x="480" y="178">MEDIDAS POR RECONSTRUIR</text>
-    <text x="330" y="395">PLANTA DEL HANGAR</text>
-  </g>
-  <text x="72" y="220" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 72 220)">14 m</text>
-  <g fill="#ff9aa4" font-size="17" font-family="Arial" text-anchor="middle">
-    <text x="235" y="274">ZONA BLOQUEADA</text><text x="235" y="298">4 m × 5 m</text>
-  </g>
-</svg>
+    <div class="mission-head">
+      <div>
+        <div class="brand">MISIÓN 04</div>
+        <h2>Hangar de Perforación</h2>
+        <div class="mission-code" id="variant-hangar">VARIANTE —</div>
       </div>
+      <button class="btn secondary" onclick="go('map')">Cerrar módulo</button>
+    </div>
+
+    <div class="mission-grid">
+      <div class="blueprint panel" id="blueprint-hangar"></div>
+
       <div class="mission-info panel">
         <div class="brief"><strong>A.R.I.A.:</strong> El vehículo perforador necesita una superficie libre segura para maniobrar.</div>
-        <p>El hangar tiene forma de L. Sus medidas exteriores son <strong>22 m × 14 m</strong>. El brazo superior mide <strong>13 m</strong> y el inferior tiene <strong>6 m de altura</strong>.</p>
-        <p>Una zona de carga de <strong>4 m × 5 m</strong> está bloqueada. Se recuperaron <strong>6 m²</strong> de un corredor lateral.</p>
-        <p><strong>Reconstruyan las medidas borradas y determinen la superficie disponible.</strong></p>
-        <div class="formula-ref"><div>Puede calcularse: rectángulo grande − esquina faltante</div><div>Después incorporen los cambios</div></div>
-        <div class="answer"><input id="answer-hangar" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('hangar',222)">Validar</button></div>
-        <div id="feedback-hangar" class="feedback"></div>
-        <details><summary>Pista de A.R.I.A.</summary><p>Las medidas interiores se obtienen comparando cada medida total con la parte conocida: 22 − 13 y 14 − 6.</p></details>
+        <div id="context-hangar"><p id="missionText-hangar"></p><div id="data-hangar"></div><p><strong id="question-hangar"></strong></p></div>
+
+        <div class="procedure-box">
+          <label for="procedure-hangar">REGISTRO DE PROCEDIMIENTO</label>
+          <p class="small">Escribí una única expresión con las operaciones que representan tu razonamiento.</p>
+          <div class="procedure-row">
+            <input id="procedure-hangar" autocomplete="off" spellcheck="false"
+              placeholder="Ejemplo: 24*8 - 5*3">
+            <button class="btn" onclick="validateProcedure('hangar')">Verificar procedimiento</button>
+          </div>
+          <div id="procedureFeedback-hangar" class="feedback"></div>
+
+          <div id="resultStep-hangar" class="result-step locked">
+            <label for="answer-hangar">RESULTADO FINAL</label>
+            <div class="answer">
+              <input id="answer-hangar" inputmode="decimal" placeholder="Resultado en m²">
+              <button class="btn" onclick="validateMissionResult('hangar')">Ejecutar reparación</button>
+            </div>
+            <div id="feedback-hangar" class="feedback"></div>
+          </div>
+        </div>
+
+        <details id="hint-hangar" onclick="registerHint('hangar')">
+          <summary>Solicitar asistencia de A.R.I.A.</summary>
+          <div id="hintText-hangar"></div>
+        </details>
       </div>
     </div>
   </div>
@@ -481,9 +532,20 @@
     <div class="final-card panel">
       <div class="brand">ACTIVACIÓN FINAL</div>
       <h2>La red debe funcionar como un solo sistema</h2>
-      <p>Sumen las cuatro superficies recuperadas. Luego resten <strong>35 m²</strong> de corredores que continúan aislados y agreguen <strong>8 m²</strong> de reserva térmica.</p>
-      <div class="systems">ENERGÍA = 177 m²<br>INVERNADERO = 193 m²<br>BANCO DE HIELO = 185 m²<br>HANGAR = 222 m²<br>AJUSTES = −35 m² + 8 m²</div>
-      <div class="answer"><input id="finalAnswer" inputmode="numeric" placeholder="Superficie final"><button class="btn" onclick="validateFinal()">Estabilizar</button></div>
+      <p id="finalInstruction">Combinen las cuatro superficies recuperadas y apliquen los ajustes finales indicados por A.R.I.A.</p>
+      <div class="systems" id="finalSystems"></div>
+      <div class="procedure-box">
+        <label for="finalProcedure">REGISTRO DE PROCEDIMIENTO FINAL</label>
+        <div class="procedure-row">
+          <input id="finalProcedure" autocomplete="off" spellcheck="false" placeholder="Escribí la expresión completa">
+          <button class="btn" onclick="validateFinalProcedure()">Verificar procedimiento</button>
+        </div>
+        <div id="finalProcedureFeedback" class="feedback"></div>
+        <div id="finalResultStep" class="result-step locked">
+          <label for="finalAnswer">RESULTADO FINAL</label>
+          <div class="answer"><input id="finalAnswer" inputmode="decimal" placeholder="Superficie final"><button class="btn" onclick="validateFinal()">Estabilizar</button></div>
+        </div>
+      </div>
       <div id="finalFeedback" class="feedback"></div>
       <div class="actions"><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     </div>
@@ -497,7 +559,7 @@
 <section id="credits" class="screen">
   <div class="hero panel">
     <div class="brand">PROYECTO CRIOS · ARCHIVO RECUPERADO</div>
-    <h1 class="glow">750 m²</h1>
+    <h1 class="glow"><span id="creditsTotal">—</span> m²</h1>
     <h2>Sistema restablecido</h2>
     <p class="subtitle"><span data-user-name>Equipo</span>, las cámaras permanecen operativas. Las muestras de hielo que conservan la memoria climática del planeta están a salvo.</p>
     <div class="terminal">PROTOCOLO DE EMERGENCIA: DESACTIVADO<br>BANCO DE HIELO: ESTABLE<br>TRANSMISIÓN: RESTABLECIDA<br>PROYECTO CRIOS: OPERATIVO</div>
@@ -512,7 +574,11 @@
 
 <script>
 const missionIds=['energy','greenhouse','ice','hangar'];
-let progress=JSON.parse(localStorage.getItem('crios-progress')||'{}');
+let progress=JSON.parse(localStorage.getItem('crios-progress-v2')||'{}');
+let missionData={};
+let sessionStats=JSON.parse(sessionStorage.getItem('crios-session-stats')||'{}');
+let missionOpenedAt={};
+let hintRegistered={};
 let audioCtx=null, soundOn=true;
 let introTimer=null;
 
@@ -522,6 +588,7 @@ function go(id){
   if(el){el.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});}
   if(soundOn) beep(420,.06);
   if(id==='map') updateMap();
+  if(id==='final') renderFinal();
   if(id==='reveal'){
     loadUserName();
     const saved=localStorage.getItem('crios-user-name');
@@ -529,23 +596,14 @@ function go(id){
     document.getElementById('missionWelcome')?.classList.toggle('hidden',!saved);
   }
 }
-function openMission(id){go('mission-'+id)}
-function normalize(v){return Number(String(v).replace(',','.').replace(/[^\d.-]/g,''))}
-function validate(id,expected){
-  const input=document.getElementById('answer-'+id);
-  const fb=document.getElementById('feedback-'+id);
-  const value=normalize(input.value);
-  fb.className='feedback show '+(value===expected?'ok':'bad');
-  if(value===expected){
-    fb.innerHTML='✓ Cálculo confirmado. Módulo restablecido. Regresando al mapa…';
-    progress[id]=true; save(); if(soundOn) successSound();
-    setTimeout(()=>go('map'),1400);
-  }else{
-    fb.innerHTML='⚠ El resultado no coincide con los sensores. Revisen las medidas y el orden de las operaciones.';
-    if(soundOn) beep(165,.14);
-  }
+function openMission(id){
+  renderMission(id);
+  missionOpenedAt[id]=Date.now();
+  go('mission-'+id);
 }
-function save(){localStorage.setItem('crios-progress',JSON.stringify(progress));updateMap()}
+function normalize(v){return Number(String(v).replace(',','.').replace(/[^\d.-]/g,''))}
+
+function save(){localStorage.setItem('crios-progress-v2',JSON.stringify(progress));updateMap()}
 function updateMap(){
   let done=0;
   missionIds.forEach(id=>{
@@ -566,19 +624,24 @@ function updateMap(){
 function validateFinal(){
   const value=normalize(document.getElementById('finalAnswer').value);
   const fb=document.getElementById('finalFeedback');
-  if(value===750){
-    fb.className='feedback show ok';fb.textContent='✓ Red energética estable. Activando secuencia final…';
-    document.getElementById('finalStatus').innerHTML='<div class="result">100 %</div><h2 style="color:var(--ok)">COMPLEJO ESTABLE</h2><p>Superficie controlada: 750 m²</p>';
-    localStorage.setItem('crios-complete','true'); if(soundOn) successSound();
+  const expected=getFinalExpected();
+  if(value===expected){
+    fb.className='feedback show ok';
+    fb.textContent='Coincidencia confirmada. Activando secuencia final…';
+    document.getElementById('finalStatus').innerHTML='<div class="result">100 %</div><h2 style="color:var(--ok)">COMPLEJO ESTABLE</h2><p>Superficie controlada: '+expected+' m²</p>';
+    document.getElementById('creditsTotal').textContent=expected;
+    localStorage.setItem('crios-complete-v2','true');
+    if(soundOn) successSound();
     setTimeout(()=>go('credits'),1700);
   }else{
-    fb.className='feedback show bad';fb.textContent='⚠ La red permanece inestable. Revisen la suma de los módulos y los dos ajustes finales.';
+    fb.className='feedback show bad';
+    fb.textContent='La red permanece inestable. Revisá la expresión final y el resultado.';
     if(soundOn) beep(150,.16);
   }
 }
 function resetProgress(){
   if(confirm('¿Reiniciar todo el progreso de la simulación?')){
-    progress={};localStorage.removeItem('crios-progress');localStorage.removeItem('crios-complete');localStorage.removeItem('crios-user-name');
+    progress={};localStorage.removeItem('crios-progress-v2');localStorage.removeItem('crios-complete-v2');localStorage.removeItem('crios-user-name');sessionStorage.removeItem('crios-session-stats');
     document.querySelectorAll('input').forEach(i=>i.value='');
     document.querySelectorAll('.feedback').forEach(f=>{f.className='feedback';f.textContent=''});
     updateMap();go('intro');
@@ -619,6 +682,7 @@ function identifyUser(){
 
   fb.className='feedback';
   document.getElementById('missionLogin').classList.add('hidden');
+  ensureMissionData();
   document.getElementById('missionWelcome').classList.remove('hidden');
 }
 function beep(freq=440,dur=.08){
@@ -629,6 +693,51 @@ function beep(freq=440,dur=.08){
   o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
 }
 function successSound(){[440,660,880].forEach((f,i)=>setTimeout(()=>beep(f,.11),i*100))}
+const VARIANT_COUNT=36;
+function hashString(str){let h=2166136261;const s=String(str||'operador').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function seeded(seed){let x=seed>>>0;return function(){x+=0x6D2B79F5;let t=x;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296}}
+function pick(arr,r){return arr[Math.floor(r()*arr.length)]}
+function variantIdFor(name){return (hashString(name)%VARIANT_COUNT)+1}
+function generateMissionData(name){
+  const seed=hashString(name),r=seeded(seed),variant=variantIdFor(name);
+  const eW=pick([20,22,24,26,28],r),eH=pick([6,7,8,9],r),eWest=pick([7,8,9,10,11],r),eDW=pick([3,4,5,6],r),eDH=pick([2,3,4],r);
+  const energy={variant,totalW:eW,height:eH,west:eWest,east:eW-eWest,damageW:eDW,damageH:eDH,expected:eW*eH-eDW*eDH,required:[eW,eH,eDW,eDH],hint:'La superficie activa es la del rectángulo completo menos la zona dañada. Si querés reconstruir el sector este: ancho total − sector oeste.'};
+  const gW=pick([16,18,20,22],r),gH=pick([10,12,14],r),gBase=pick([4,6,8],r),gTriH=pick([3,4,5,6],r),gLoss=pick([12,15,18,20],r),gRec=pick([4,6,7,9],r);
+  const greenhouse={variant,width:gW,height:gH,base:gBase,triH:gTriH,loss:gLoss,recovered:gRec,expected:gW*gH-(gBase*gTriH/2)-gLoss+gRec,required:[gW,gH,gBase,gTriH,gLoss,gRec],hint:'Primero calculá el área total. El estanque triangular no se cultiva. Después aplicá la pérdida y la recuperación.'};
+  const iSide=pick([14,16,18,20],r),iDiam=pick([8,10,12],r),iRec=pick([8,10,12,14],r),iSeal=pick([4,6,8,10],r),iRad=iDiam/2;
+  const ice={variant,side:iSide,diam:iDiam,rad:iRad,pi:3,recovered:iRec,sealed:iSeal,expected:iSide*iSide-(3*iRad*iRad)+iRec-iSeal,required:[iSide,iDiam,3,iRec,iSeal],alternatives:[[iSide,iSide,3,iRad,iRad,iRec,iSeal]],hint:'La fórmula del círculo necesita el radio. El radio es la mitad del diámetro. La cámara circular no pertenece al espacio operativo.'};
+  const hW=pick([20,22,24,26],r),hH=pick([12,14,16],r),upper=pick([11,12,13,14,15],r),lowerH=pick([5,6,7],r),missingW=hW-upper,missingH=hH-lowerH,bW=pick([3,4,5],r),bH=pick([3,4,5],r),hRec=pick([4,6,8],r);
+  const hangar={variant,width:hW,height:hH,upper,lowerH,missingW,missingH,blockW:bW,blockH:bH,recovered:hRec,expected:hW*hH-(missingW*missingH)-(bW*bH)+hRec,required:[hW,hH,upper,lowerH,bW,bH,hRec],alternatives:[[hW,hH,missingW,missingH,bW,bH,hRec]],hint:'Reconstruí las medidas interiores: ancho faltante = total − brazo superior; altura faltante = total − brazo inferior.'};
+  return {variant,energy,greenhouse,ice,hangar,adjustMinus:pick([24,28,30,32,35],r),adjustPlus:pick([6,8,10,12],r)}
+}
+function ensureMissionData(){missionData=generateMissionData(localStorage.getItem('crios-user-name')||'operador')}
+function chips(items){return items.map(x=>'<span class="data-chip">'+x+'</span>').join('')}
+function renderMission(id){
+  ensureMissionData();const d=missionData[id];document.getElementById('variant-'+id).textContent='CONFIGURACIÓN INDIVIDUAL · VARIANTE '+String(d.variant).padStart(2,'0');
+  if(id==='energy'){missionText('energy',`El módulo ocupa un rectángulo de <strong>${d.totalW} m de ancho</strong> y <strong>${d.height} m de altura</strong>. El sector oeste ocupa ${d.west} m del ancho. Una zona dañada de <strong>${d.damageW} m × ${d.damageH} m</strong> ya no debe calefaccionarse.`,[''+d.totalW+' m total',''+d.west+' m oeste',''+d.height+' m altura',d.damageW+'×'+d.damageH+' m dañados'],'¿Qué superficie continúa calefaccionándose?',svgEnergy(d))}
+  if(id==='greenhouse'){missionText('greenhouse',`El invernadero mide <strong>${d.width} m × ${d.height} m</strong>. El estanque triangular tiene <strong>${d.base} m de base</strong> y <strong>${d.triH} m de altura</strong>. La tormenta inutilizó ${d.loss} m² y luego se recuperaron ${d.recovered} m².`,[d.width+'×'+d.height+' m','triángulo '+d.base+'×'+d.triH+' m','−'+d.loss+' m²','+'+d.recovered+' m²'],'¿Qué superficie puede cultivarse actualmente?',svgGreenhouse(d))}
+  if(id==='ice'){missionText('ice',`La sala es cuadrada y mide <strong>${d.side} m de lado</strong>. La cámara circular tiene <strong>${d.diam} m de diámetro</strong>. Usen <strong>π ≈ 3</strong>. Se recuperaron ${d.recovered} m² de corredor y se sellaron ${d.sealed} m².`,[d.side+' m lado',d.diam+' m diámetro','π≈3','+'+d.recovered+' m²','−'+d.sealed+' m²'],'¿Qué superficie exterior queda operativa?',svgIce(d))}
+  if(id==='hangar'){missionText('hangar',`La planta en L tiene medidas exteriores de <strong>${d.width} m × ${d.height} m</strong>. El brazo superior mide ${d.upper} m y el inferior tiene ${d.lowerH} m de altura. Una zona de ${d.blockW} m × ${d.blockH} m está bloqueada y se recuperaron ${d.recovered} m² de corredor.`,[d.width+'×'+d.height+' m','brazo '+d.upper+' m','altura inferior '+d.lowerH+' m','bloqueo '+d.blockW+'×'+d.blockH+' m','+'+d.recovered+' m²'],'¿Qué superficie queda disponible para maniobrar?',svgHangar(d))}
+  document.getElementById('hintText-'+id).innerHTML='<p>'+d.hint+'</p>';
+}
+function missionText(id,text,data,question,svg){document.getElementById('missionText-'+id).innerHTML=text;document.getElementById('data-'+id).innerHTML=chips(data);document.getElementById('question-'+id).textContent=question;document.getElementById('blueprint-'+id).innerHTML=svg}
+function svgEnergy(d){return `<svg viewBox="0 0 700 430"><g fill="none" stroke="#80e8ff" stroke-width="4"><rect x="120" y="105" width="460" height="210"/><line x1="${120+460*d.west/d.totalW}" y1="105" x2="${120+460*d.west/d.totalW}" y2="315"/><rect x="420" y="210" width="96" height="72" stroke="#ff5b6b"/></g><g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle"><text x="350" y="60">${d.totalW} m</text><text x="205" y="205">${d.west} m</text><text x="440" y="205">¿ ?</text></g><text x="62" y="215" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 62 215)">${d.height} m</text><g fill="#ff9aa4" font-size="18" font-family="Arial" text-anchor="middle"><text x="468" y="242">ZONA DAÑADA</text><text x="468" y="266">${d.damageW} m × ${d.damageH} m</text></g></svg>`}
+function svgGreenhouse(d){return `<svg viewBox="0 0 700 430"><g fill="none" stroke="#80e8ff" stroke-width="4"><rect x="120" y="90" width="460" height="260"/><path d="M270 295 L430 295 L350 175 Z" stroke="#ffb62e"/><line x1="350" y1="175" x2="350" y2="295" stroke-dasharray="8 8"/></g><g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle"><text x="350" y="48">${d.width} m</text></g><text x="63" y="220" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 63 220)">${d.height} m</text><g fill="#ffd179" font-size="18" font-family="Arial" text-anchor="middle"><text x="350" y="340">base: ${d.base} m</text><text x="385" y="235">altura: ${d.triH} m</text></g></svg>`}
+function svgIce(d){return `<svg viewBox="0 0 700 430"><g fill="none" stroke="#80e8ff" stroke-width="4"><rect x="180" y="55" width="340" height="340"/><circle cx="350" cy="225" r="112" stroke="#ffb62e"/><line x1="238" y1="225" x2="462" y2="225" stroke="#ffb62e"/></g><g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle"><text x="350" y="35">${d.side} m</text></g><text x="145" y="230" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 145 230)">${d.side} m</text><g fill="#ffd179" font-size="18" font-family="Arial" text-anchor="middle"><text x="350" y="214">DIÁMETRO</text><text x="350" y="244">${d.diam} m</text></g><text x="560" y="380" fill="#dff9ff" font-size="20" font-family="Arial">π ≈ 3</text></svg>`}
+function svgHangar(d){return `<svg viewBox="0 0 700 430"><path d="M130 80 H570 V190 H390 V350 H130 Z" fill="none" stroke="#80e8ff" stroke-width="5"/><rect x="185" y="245" width="100" height="72" fill="none" stroke="#ff5b6b" stroke-width="4"/><g fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle"><text x="350" y="35">${d.width} m</text><text x="480" y="235">${d.upper} m</text><text x="435" y="280" transform="rotate(-90 435 280)">${d.lowerH} m</text><text x="480" y="178">¿ ?</text></g><text x="72" y="220" fill="#dff9ff" font-size="20" font-family="Arial" text-anchor="middle" transform="rotate(-90 72 220)">${d.height} m</text><g fill="#ff9aa4" font-size="17" font-family="Arial" text-anchor="middle"><text x="235" y="274">ZONA BLOQUEADA</text><text x="235" y="298">${d.blockW} m × ${d.blockH} m</text></g></svg>`}
+function sanitizeExpression(raw){let s=String(raw||'').trim().toLowerCase();s=s.replace(/,/g,'.').replace(/π/g,'3').replace(/\bpi\b/g,'3').replace(/[×x·]/g,'*').replace(/[÷:]/g,'/').replace(/\^/g,'**');if(!/^[0-9+\-*/().\s]+$/.test(s))throw new Error();return s}
+function safeEvaluate(raw){const s=sanitizeExpression(raw);if(!s||s.length>180)throw new Error();const value=Function('"use strict";return ('+s+')')();if(!Number.isFinite(value))throw new Error();return value}
+function extractNumbers(raw){const s=String(raw||'').replace(/,/g,'.').replace(/π/gi,'3').replace(/\bpi\b/gi,'3');return (s.match(/\d+(?:\.\d+)?/g)||[]).map(Number)}
+function containsRequiredNumbers(raw,required){const nums=extractNumbers(raw);return required.every(req=>nums.some(n=>Math.abs(n-req)<1e-9))}
+function procedureUsesEssentialData(id,raw){const d=missionData[id];if(containsRequiredNumbers(raw,d.required))return true;return Array.isArray(d.alternatives)&&d.alternatives.some(set=>containsRequiredNumbers(raw,set))}
+function validateProcedure(id){ensureMissionData();const input=document.getElementById('procedure-'+id),fb=document.getElementById('procedureFeedback-'+id),d=missionData[id];sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].procedureAttempts++;persistStats();try{const value=safeEvaluate(input.value),usesData=procedureUsesEssentialData(id,input.value),equivalent=Math.abs(value-d.expected)<1e-9;if(equivalent&&usesData){fb.className='feedback show ok';fb.textContent='Procedimiento compatible. A.R.I.A. habilitó el ingreso del resultado final.';document.getElementById('resultStep-'+id).classList.remove('locked');if(soundOn)successSound()}else if(equivalent){fb.className='feedback show bad';fb.textContent='La expresión llega al valor esperado, pero no registra los datos esenciales del plano.'}else{fb.className='feedback show bad';fb.textContent='La expresión no representa todavía la superficie solicitada. Revisá signos, paréntesis y orden de operaciones.'}}catch(e){fb.className='feedback show bad';fb.textContent='No pude interpretar la expresión. Usá números, +, −, *, / y paréntesis.'}}
+function validateMissionResult(id){ensureMissionData();const value=normalize(document.getElementById('answer-'+id).value),fb=document.getElementById('feedback-'+id),expected=missionData[id].expected;sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].attempts++;persistStats();if(Math.abs(value-expected)<1e-9){fb.className='feedback show ok';fb.textContent='Resultado compatible. Módulo recuperado. Regresando al mapa…';progress[id]=true;sessionStats[id].completed=true;sessionStats[id].timeMs=(sessionStats[id].timeMs||0)+(Date.now()-(missionOpenedAt[id]||Date.now()));persistStats();save();if(soundOn)successSound();setTimeout(()=>go('map'),1400)}else{fb.className='feedback show bad';fb.textContent='El resultado no coincide con la simulación. Revisá el procedimiento antes de volver a intentarlo.'}}
+function registerHint(id){if(hintRegistered[id])return;hintRegistered[id]=true;sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].hints++;persistStats()}
+function persistStats(){sessionStorage.setItem('crios-session-stats',JSON.stringify(sessionStats))}
+function getFinalExpected(){ensureMissionData();return missionData.energy.expected+missionData.greenhouse.expected+missionData.ice.expected+missionData.hangar.expected-missionData.adjustMinus+missionData.adjustPlus}
+function renderFinal(){ensureMissionData();document.getElementById('finalSystems').innerHTML=`ENERGÍA = ${missionData.energy.expected} m²<br>INVERNADERO = ${missionData.greenhouse.expected} m²<br>BANCO DE HIELO = ${missionData.ice.expected} m²<br>HANGAR = ${missionData.hangar.expected} m²<br>AJUSTES = −${missionData.adjustMinus} m² + ${missionData.adjustPlus} m²`;document.getElementById('finalInstruction').innerHTML=`Sumen las cuatro superficies recuperadas. Luego resten <strong>${missionData.adjustMinus} m²</strong> de corredores aislados y agreguen <strong>${missionData.adjustPlus} m²</strong> de reserva térmica.`}
+function validateFinalProcedure(){ensureMissionData();const raw=document.getElementById('finalProcedure').value,fb=document.getElementById('finalProcedureFeedback'),expected=getFinalExpected(),required=[missionData.energy.expected,missionData.greenhouse.expected,missionData.ice.expected,missionData.hangar.expected,missionData.adjustMinus,missionData.adjustPlus];try{const value=safeEvaluate(raw);if(Math.abs(value-expected)<1e-9&&containsRequiredNumbers(raw,required)){fb.className='feedback show ok';fb.textContent='Procedimiento final compatible. Secuencia de estabilización habilitada.';document.getElementById('finalResultStep').classList.remove('locked');if(soundOn)successSound()}else if(Math.abs(value-expected)<1e-9){fb.className='feedback show bad';fb.textContent='El valor coincide, pero faltan datos esenciales de los módulos o de los ajustes.'}else{fb.className='feedback show bad';fb.textContent='La expresión final no coincide con la red de superficies recuperadas.'}}catch(e){fb.className='feedback show bad';fb.textContent='No pude interpretar la expresión final.'}}
+
 updateMap();
 loadUserName();
 
