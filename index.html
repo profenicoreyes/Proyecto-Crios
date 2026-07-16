@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#071320">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Proyecto CRIOS — Simulación científica</title>
 <style>
   :root{
@@ -144,6 +147,9 @@
   .sources{font-size:.8rem;color:var(--muted);line-height:1.6}
   .small{font-size:.86rem;color:var(--muted)}
   .hidden{display:none!important}
+  .version-mark{position:fixed;right:14px;bottom:10px;z-index:50;
+    color:rgba(156,182,198,.62);font:700 .68rem ui-monospace,SFMono-Regular,Consolas,monospace;
+    letter-spacing:.08em;pointer-events:none}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);opacity:0;z-index:100;
     padding:12px 16px;border-radius:10px;background:#0b293d;border:1px solid var(--line);box-shadow:var(--shadow);transition:.3s}
   .toast.show{opacity:1;transform:translateX(-50%)}
@@ -170,6 +176,7 @@
 <body>
 <div class="app">
 <div class="scan"></div>
+<div class="version-mark">CRIOS OS · v0.4</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -204,7 +211,7 @@
       Módulos sin respuesta: 4
     </div>
     <p class="subtitle">Antes de acceder a la misión, deben revisarse dos registros históricos. Comprender su relación será fundamental para interpretar lo ocurrido.</p>
-    <div class="actions"><button class="btn" onclick="go('record1')">Abrir registro 001</button></div>
+    <div class="actions"><button class="btn" onclick="go('record1')">Iniciar análisis histórico</button></div>
   </div>
 </section>
 
@@ -218,7 +225,7 @@
       <p>Fue el año más cálido del registro instrumental hasta ese momento. Superar 1,5 °C durante un año no significaba todavía haber superado el objetivo climático de largo plazo, pero mostraba la rapidez del calentamiento.</p>
       <div class="big-number">+1,55 °C</div>
       <p class="small">Fuente: Organización Meteorológica Mundial, Estado del Clima Mundial 2024.</p>
-      <div class="actions"><button class="btn" onclick="go('record2')">Abrir registro 002</button></div>
+      <div class="actions"><button class="btn" onclick="go('record2')">Procesar siguiente registro</button></div>
     </article>
     <aside class="data-card panel"><div class="earth"></div><p style="text-align:center;color:var(--muted)">Anomalía respecto de 1850–1900</p></aside>
   </div>
@@ -235,7 +242,7 @@
       <div class="big-number">+20 cm</div>
       <p style="margin-top:8px;font-weight:800;color:var(--warn)">AUMENTO DEL NIVEL MEDIO GLOBAL DEL MAR</p>
       <p class="small">Fuentes: IPCC AR6; Agencia Espacial Europea y programas polares de Francia e Italia.</p>
-      <div class="actions"><button class="btn" onclick="go('reveal')">Relacionar archivos</button></div>
+      <div class="actions"><button class="btn" onclick="go('reveal')">Ejecutar correlación</button></div>
     </article>
     <aside class="data-card panel"><div class="concordia"></div><p style="text-align:center;color:var(--muted)">Estación polar inspiradora del universo CRIOS</p></aside>
   </div>
@@ -270,7 +277,7 @@
     <div id="missionWelcome" class="hidden">
       <h3 style="margin-top:24px;color:var(--ok)">Identidad confirmada: <span data-user-name>equipo</span></h3>
       <p class="subtitle">Las cuatro misiones pueden realizarse en cualquier orden.</p>
-      <div class="actions"><button class="btn" onclick="go('map')">Abrir mapa del complejo</button></div>
+      <div class="actions"><button class="btn" onclick="go('map')">Inicializar mapa operativo</button></div>
     </div>
   </div>
 </section>
@@ -311,7 +318,7 @@
         <div class="mini" id="mini-hangar">● Hangar: sin respuesta</div>
       </div>
       <div class="actions">
-        <button class="btn" id="finalBtn" onclick="go('final')" disabled>Activación final</button>
+        <button class="btn" id="finalBtn" onclick="go('final')" disabled>Ejecutar protocolo final</button>
         <button class="btn secondary" onclick="resetProgress()">Reiniciar</button>
       </div>
       <p class="small">El progreso se guarda automáticamente en este dispositivo.</p>
@@ -321,7 +328,7 @@
 
 <section id="mission-energy" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 01</div><h2>Centro de Energía</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-head"><div><div class="brand">MISIÓN 01</div><h2>Centro de Energía</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     <div class="mission-grid">
       <div class="blueprint panel">
         <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Plano rectangular dividido en dos sectores y una zona dañada">
@@ -359,7 +366,7 @@
 
 <section id="mission-greenhouse" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 02</div><h2>Invernadero</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-head"><div><div class="brand">MISIÓN 02</div><h2>Invernadero</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     <div class="mission-grid">
       <div class="blueprint panel">
         <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Rectángulo con estanque triangular">
@@ -395,7 +402,7 @@
 
 <section id="mission-ice" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 03</div><h2>Banco de Hielo</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-head"><div><div class="brand">MISIÓN 03</div><h2>Banco de Hielo</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     <div class="mission-grid">
       <div class="blueprint panel">
         <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sala cuadrada con cámara circular central">
@@ -431,7 +438,7 @@
 
 <section id="mission-hangar" class="screen mission">
   <div class="mission-wrap">
-    <div class="mission-head"><div><div class="brand">MISIÓN 04</div><h2>Hangar de Perforación</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-head"><div><div class="brand">MISIÓN 04</div><h2>Hangar de Perforación</h2></div><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     <div class="mission-grid">
       <div class="blueprint panel">
         <svg viewBox="0 0 700 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Figura en L con medidas exteriores y una zona bloqueada">
@@ -478,7 +485,7 @@
       <div class="systems">ENERGÍA = 177 m²<br>INVERNADERO = 193 m²<br>BANCO DE HIELO = 185 m²<br>HANGAR = 222 m²<br>AJUSTES = −35 m² + 8 m²</div>
       <div class="answer"><input id="finalAnswer" inputmode="numeric" placeholder="Superficie final"><button class="btn" onclick="validateFinal()">Estabilizar</button></div>
       <div id="finalFeedback" class="feedback"></div>
-      <div class="actions"><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+      <div class="actions"><button class="btn secondary" onclick="go('map')">Cerrar módulo</button></div>
     </div>
     <div id="successPanel" class="final-card panel" style="display:flex;flex-direction:column;justify-content:center">
       <div class="brand">ESTADO DEL PROYECTO</div>
@@ -498,7 +505,7 @@
     <div class="sources">
       Datos históricos utilizados: Organización Meteorológica Mundial, <em>State of the Global Climate 2024</em>; IPCC, Sexto Informe de Evaluación; información institucional sobre la estación Concordia. La base CRIOS, A.R.I.A. y los hechos de 2089 son ficticios.
     </div>
-    <div class="actions"><button class="btn" onclick="go('map')">Revisar complejo</button><button class="btn secondary" onclick="resetProgress()">Reiniciar simulación</button></div>
+    <div class="actions"><button class="btn" onclick="go('map')">Abrir mapa operativo</button><button class="btn secondary" onclick="resetProgress()">Restablecer sistema</button></div>
   </div>
 </section>
 </div>
