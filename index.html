@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -184,12 +184,81 @@
     color:#dff8ff;background:rgba(7,31,46,.7);font-size:.8rem}
   @media(max-width:560px){.procedure-row{flex-direction:column}}
 
+
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{overscroll-behavior:none}
+  .app{height:100dvh;min-height:100dvh}
+  .screen{
+    position:absolute;inset:0;
+    width:100%;height:100dvh;min-height:0;
+    padding:clamp(12px,2vw,28px);
+    overflow:hidden;
+  }
+  .screen.active{
+    display:flex;
+    justify-content:center;
+    animation:fade .35s ease;
+  }
+  .hero{max-height:calc(100dvh - 40px);overflow:auto;scrollbar-width:thin}
+  .archive-grid,.map-wrap,.mission-wrap,.final-grid{max-height:calc(100dvh - 42px)}
+  .archive-grid{align-items:stretch}
+  .archive,.data-card{max-height:calc(100dvh - 70px);overflow:auto}
+  .map-wrap{min-height:0}
+  .map{min-height:0;height:100%}
+  .base-map{height:calc(100dvh - 150px);min-height:430px}
+  .sidepanel{max-height:calc(100dvh - 120px);overflow:auto}
+  .mission-wrap{display:flex;flex-direction:column;height:calc(100dvh - 30px);min-height:0}
+  .mission-head{flex:0 0 auto;margin-bottom:10px}
+  .mission-grid{flex:1 1 auto;min-height:0;grid-template-columns:minmax(0,1.05fr) minmax(340px,.95fr);gap:14px}
+  .blueprint{min-height:0;height:100%;padding:12px}
+  .blueprint svg{width:100%;height:100%;max-height:none}
+  .mission-info{height:100%;min-height:0;overflow:auto;padding:18px}
+  .mission-info p,.mission-info li{line-height:1.42;margin:.55em 0}
+  .brief{margin:8px 0 10px;padding:11px 13px}
+  .procedure-box{margin-top:10px;padding:12px}
+  details{margin-top:10px}
+  .final-grid{height:calc(100dvh - 38px);align-items:stretch}
+  .final-card{height:100%;overflow:auto;padding:24px}
+  .orientation-warning{display:none;position:fixed;inset:0;z-index:9999;background:#040b14;color:#eaf8ff;padding:28px;align-items:center;justify-content:center;text-align:center}
+  .orientation-warning .panel{max-width:520px;padding:30px}
+  @media (orientation:portrait) and (max-width:900px){.orientation-warning{display:flex}}
+  @media(max-height:720px) and (orientation:landscape){
+    h1{font-size:clamp(2rem,6vw,4.5rem)}
+    h2{font-size:clamp(1.45rem,3vw,2.3rem)}
+    .subtitle{font-size:.96rem;line-height:1.45}
+    .topbar{margin-bottom:8px}
+    .mission-info{font-size:.9rem}
+    .procedure-row input,.answer input{padding:9px 11px}
+    .btn{padding:9px 13px;font-size:.82rem}
+    .data-chip{font-size:.72rem;padding:4px 7px}
+  }
+
+
+  #intro{cursor:pointer;user-select:none}
+  .tap-prompt{
+    margin-top:22px;color:var(--ice);
+    font:800 .82rem ui-monospace,SFMono-Regular,Consolas,monospace;
+    letter-spacing:.12em;text-align:center;
+    animation:tapPulse 1.5s ease-in-out infinite;
+  }
+  #intro.connection-started .tap-prompt{opacity:0;pointer-events:none}
+  @keyframes tapPulse{
+    0%,100%{opacity:.38}
+    50%{opacity:1;text-shadow:0 0 14px rgba(120,221,255,.55)}
+  }
+
 </style>
 </head>
 <body>
 <div class="app">
+<div class="orientation-warning">
+  <div class="panel">
+    <h2 class="glow">Girá el dispositivo</h2>
+    <p>CRIOS fue diseñado para utilizarse en modo horizontal.</p>
+  </div>
+</div>
 <div class="scan"></div>
-<div class="version-mark">CRIOS OS · v0.8</div>
+<div class="version-mark">CRIOS OS · v1.0</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -204,7 +273,7 @@
       <div class="check">RECUPERANDO DATOS…</div>
     </div>
     <p class="subtitle">Transmisión fechada el <strong>17 de julio de 2089</strong>. Origen: meseta antártica oriental.</p>
-    <p class="small" style="margin-top:22px">Acceso automático en curso…</p>
+    <p id="tapPrompt" class="tap-prompt">TOCÁ CUALQUIER PUNTO PARA ESTABLECER LA CONEXIÓN</p>
   </div>
 </section>
 
@@ -581,12 +650,19 @@ let missionOpenedAt={};
 let hintRegistered={};
 let audioCtx=null, soundOn=true;
 let introTimer=null;
+let ambientNodes=[];
+let ambientStarted=false;
 
 function go(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   const el=document.getElementById(id);
-  if(el){el.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});}
-  if(soundOn) beep(420,.06);
+  if(el){
+    el.classList.add('active');
+    el.querySelectorAll('.hero,.archive,.data-card,.sidepanel,.mission-info,.final-card').forEach(x=>x.scrollTop=0);
+    const focused=document.activeElement;
+    if(focused && typeof focused.blur==='function') focused.blur();
+  }
+  if(soundOn) uiClick();
   if(id==='map') updateMap();
   if(id==='final') renderFinal();
   if(id==='reveal'){
@@ -678,6 +754,7 @@ function identifyUser(){
 
   audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
   if(audioCtx.state==='suspended') audioCtx.resume();
+  if(!ambientStarted) startAmbientAudio();
   successSound();
 
   fb.className='feedback';
@@ -685,10 +762,46 @@ function identifyUser(){
   ensureMissionData();
   document.getElementById('missionWelcome').classList.remove('hidden');
 }
-function beep(freq=440,dur=.08){
+
+function requestAppFullscreen(){
+  const root=document.documentElement;
+  if(document.fullscreenElement) return;
+  const fn=root.requestFullscreen||root.webkitRequestFullscreen;
+  if(fn){ try{ fn.call(root); }catch(e){} }
+}
+function startAmbientAudio(){
+  if(!soundOn||!audioCtx||ambientStarted) return;
+  ambientStarted=true;
+  const master=audioCtx.createGain();
+  master.gain.value=.045;
+  master.connect(audioCtx.destination);
+
+  const low=audioCtx.createOscillator();
+  const lowGain=audioCtx.createGain();
+  low.type='sine'; low.frequency.value=54; lowGain.gain.value=.22;
+  low.connect(lowGain); lowGain.connect(master); low.start();
+
+  const mid=audioCtx.createOscillator();
+  const midGain=audioCtx.createGain();
+  mid.type='triangle'; mid.frequency.value=108; midGain.gain.value=.06;
+  mid.connect(midGain); midGain.connect(master); mid.start();
+
+  const lfo=audioCtx.createOscillator();
+  const lfoGain=audioCtx.createGain();
+  lfo.frequency.value=.08; lfoGain.gain.value=.018;
+  lfo.connect(lfoGain); lfoGain.connect(master.gain); lfo.start();
+
+  ambientNodes=[low,mid,lfo,master];
+}
+function uiClick(){
+  if(!soundOn||!audioCtx) return;
+  beep(520,.035,.018);
+}
+
+function beep(freq=440,dur=.08,volume=.05){
   if(!soundOn||!audioCtx)return;
   const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-  o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(.05,audioCtx.currentTime);
+  o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(volume,audioCtx.currentTime);
   g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
   o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
 }
@@ -738,12 +851,43 @@ function getFinalExpected(){ensureMissionData();return missionData.energy.expect
 function renderFinal(){ensureMissionData();document.getElementById('finalSystems').innerHTML=`ENERGÍA = ${missionData.energy.expected} m²<br>INVERNADERO = ${missionData.greenhouse.expected} m²<br>BANCO DE HIELO = ${missionData.ice.expected} m²<br>HANGAR = ${missionData.hangar.expected} m²<br>AJUSTES = −${missionData.adjustMinus} m² + ${missionData.adjustPlus} m²`;document.getElementById('finalInstruction').innerHTML=`Sumen las cuatro superficies recuperadas. Luego resten <strong>${missionData.adjustMinus} m²</strong> de corredores aislados y agreguen <strong>${missionData.adjustPlus} m²</strong> de reserva térmica.`}
 function validateFinalProcedure(){ensureMissionData();const raw=document.getElementById('finalProcedure').value,fb=document.getElementById('finalProcedureFeedback'),expected=getFinalExpected(),required=[missionData.energy.expected,missionData.greenhouse.expected,missionData.ice.expected,missionData.hangar.expected,missionData.adjustMinus,missionData.adjustPlus];try{const value=safeEvaluate(raw);if(Math.abs(value-expected)<1e-9&&containsRequiredNumbers(raw,required)){fb.className='feedback show ok';fb.textContent='Procedimiento final compatible. Secuencia de estabilización habilitada.';document.getElementById('finalResultStep').classList.remove('locked');if(soundOn)successSound()}else if(Math.abs(value-expected)<1e-9){fb.className='feedback show bad';fb.textContent='El valor coincide, pero faltan datos esenciales de los módulos o de los ajustes.'}else{fb.className='feedback show bad';fb.textContent='La expresión final no coincide con la red de superficies recuperadas.'}}catch(e){fb.className='feedback show bad';fb.textContent='No pude interpretar la expresión final.'}}
 
+
+let introActivated=false;
+
+async function activateIntro(){
+  if(introActivated) return;
+  introActivated=true;
+
+  const intro=document.getElementById('intro');
+  intro.classList.add('connection-started');
+
+  audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){
+    try{ await audioCtx.resume(); }catch(e){}
+  }
+
+  startAmbientAudio();
+  requestAppFullscreen();
+  successSound();
+
+  setTimeout(()=>go('aria'),3200);
+}
+
+document.getElementById('intro').addEventListener('pointerdown',activateIntro,{once:true});
+document.getElementById('intro').addEventListener('keydown',(event)=>{
+  if(event.key==='Enter'||event.key===' '){
+    event.preventDefault();
+    activateIntro();
+  }
+},{once:true});
+document.getElementById('intro').setAttribute('tabindex','0');
+document.getElementById('intro').setAttribute('role','button');
+document.getElementById('intro').setAttribute('aria-label','Tocar para establecer la conexión');
+
 updateMap();
 loadUserName();
 
-introTimer=setTimeout(()=>{
-  if(document.getElementById('intro').classList.contains('active')) go('aria');
-},5200);
+
 </script>
 </body>
 </html>
