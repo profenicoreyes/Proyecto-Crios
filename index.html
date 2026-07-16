@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071320">
+<title>Proyecto CRIOS — Simulación científica</title>
+<style>
+  :root{
+    --bg:#040b14; --panel:#0b1d2c; --panel2:#102b40; --ice:#78ddff;
+    --cyan:#33cfff; --ok:#44e08b; --warn:#ffb62e; --danger:#ff4d5f;
+    --text:#eaf8ff; --muted:#9cb6c6; --line:rgba(120,221,255,.25);
+    --shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+    font-family:Inter,Segoe UI,Roboto,Arial,sans-serif}
+  body{overflow-x:hidden}
+  button,input{font:inherit}
+  button{cursor:pointer}
+  a{color:var(--ice)}
+  .app{min-height:100vh;position:relative;overflow:hidden;
+    background:
+      radial-gradient(circle at 85% 10%,rgba(51,207,255,.14),transparent 30%),
+      radial-gradient(circle at 10% 90%,rgba(70,110,255,.12),transparent 35%),
+      linear-gradient(135deg,#02070d,#071522 55%,#081b29)}
+  .app:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.18;
+    background-image:linear-gradient(rgba(120,221,255,.08) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(120,221,255,.08) 1px,transparent 1px);
+    background-size:42px 42px;mask-image:linear-gradient(to bottom,black,transparent 85%)}
+  .scan{position:fixed;left:0;right:0;height:2px;top:-5px;z-index:20;pointer-events:none;
+    background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    box-shadow:0 0 16px var(--cyan);opacity:.45;animation:scan 8s linear infinite}
+  @keyframes scan{to{transform:translateY(110vh)}}
+  .screen{display:none;min-height:100vh;padding:clamp(18px,3vw,44px);position:relative;z-index:2}
+  .screen.active{display:flex;flex-direction:column;animation:fade .45s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+  .brand{letter-spacing:.18em;font-weight:900;color:var(--ice);font-size:.9rem}
+  .status{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .pill{border:1px solid var(--line);background:rgba(8,29,44,.7);padding:7px 11px;
+    border-radius:999px;color:var(--muted);font-size:.78rem;backdrop-filter:blur(8px)}
+  .pill strong{color:var(--text)}
+  .panel{border:1px solid var(--line);background:linear-gradient(145deg,rgba(14,42,61,.9),rgba(5,18,29,.88));
+    box-shadow:var(--shadow);border-radius:20px;backdrop-filter:blur(12px)}
+  .hero{max-width:1050px;margin:auto;width:100%;padding:clamp(24px,5vw,64px);position:relative;overflow:hidden}
+  .hero:after{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:-120px;top:-130px;
+    border:1px solid rgba(120,221,255,.22);box-shadow:0 0 80px rgba(51,207,255,.15) inset}
+  h1,h2,h3{margin:0 0 12px;line-height:1.08}
+  h1{font-size:clamp(2.4rem,7vw,6.2rem);letter-spacing:.05em;text-transform:uppercase}
+  h2{font-size:clamp(1.8rem,4vw,3.4rem)}
+  h3{font-size:1.22rem}
+  .glow{color:var(--ice);text-shadow:0 0 24px rgba(120,221,255,.35)}
+  .subtitle{color:var(--muted);font-size:clamp(1rem,2vw,1.35rem);max-width:760px;line-height:1.65}
+  .terminal{margin:28px 0;border-left:3px solid var(--cyan);padding:12px 18px;background:rgba(0,0,0,.23);
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#c8f5ff;line-height:1.75}
+  .check{opacity:0;animation:reveal .3s forwards}
+  .check:nth-child(2){animation-delay:.7s}.check:nth-child(3){animation-delay:1.5s}
+  .check:nth-child(4){animation-delay:2.3s}.check:nth-child(5){animation-delay:3.1s}
+  @keyframes reveal{to{opacity:1}}
+  .btn{border:1px solid rgba(120,221,255,.45);color:var(--text);background:linear-gradient(135deg,#0a5877,#0b2f49);
+    padding:13px 19px;border-radius:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);transition:.2s}
+  .btn:hover,.btn:focus{transform:translateY(-2px);box-shadow:0 0 26px rgba(51,207,255,.25);outline:none}
+  .btn.secondary{background:rgba(8,27,40,.8)}
+  .btn.danger{border-color:rgba(255,77,95,.45);background:#431623}
+  .btn[disabled]{opacity:.4;cursor:not-allowed;transform:none}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+  .aria-logo{width:110px;height:110px;border-radius:50%;display:grid;place-items:center;margin-bottom:20px;
+    border:1px solid var(--line);background:radial-gradient(circle,rgba(51,207,255,.22),rgba(0,0,0,.2));
+    box-shadow:0 0 40px rgba(51,207,255,.15)}
+  .aria-logo:before{content:"A";font-size:3.4rem;font-weight:900;color:var(--ice)}
+  .archive-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:22px;max-width:1200px;margin:auto;width:100%}
+  .archive{padding:clamp(22px,4vw,42px)}
+  .archive .stamp{color:var(--ok);font-family:monospace;letter-spacing:.1em;font-weight:900}
+  .archive p{line-height:1.7;color:#d9edf6}
+  .big-number{font-size:clamp(3.3rem,8vw,7.5rem);font-weight:950;color:var(--warn);line-height:1}
+  .data-card{padding:26px;display:flex;flex-direction:column;justify-content:center;min-height:260px;
+    background:linear-gradient(145deg,rgba(14,48,71,.9),rgba(7,20,31,.9))}
+  .earth{width:220px;height:220px;border-radius:50%;margin:10px auto;position:relative;
+    background:radial-gradient(circle at 35% 30%,#9deeff 0 8%,#2488ae 9% 31%,#12546f 32% 58%,#062939 59%);
+    box-shadow:inset -38px -28px 45px rgba(0,0,0,.45),0 0 50px rgba(51,207,255,.24)}
+  .earth:after{content:"";position:absolute;inset:-13px;border:1px solid rgba(120,221,255,.35);border-radius:50%;transform:rotate(-18deg)}
+  .concordia{min-height:300px;border-radius:16px;position:relative;overflow:hidden;
+    background:linear-gradient(#0a2035 0 46%,#cbe9f4 47% 58%,#8cb3c4 59% 100%)}
+  .concordia:before{content:"";position:absolute;left:8%;right:8%;bottom:22%;height:22%;
+    background:linear-gradient(90deg,#e8f4f7 0 35%,#b7d1da 36% 72%,#e9f4f6 73%);
+    clip-path:polygon(0 35%,7% 10%,26% 8%,31% 0,48% 10%,56% 0,77% 8%,92% 6%,100% 35%,100% 100%,0 100%);
+    box-shadow:0 8px 18px rgba(0,0,0,.25)}
+  .concordia:after{content:"";position:absolute;width:4px;height:31%;left:72%;bottom:44%;background:#b8d9e6;
+    box-shadow:0 -20px 0 -1px #ff5e68}
+  .map-wrap{max-width:1250px;margin:auto;width:100%;display:grid;grid-template-columns:1fr 330px;gap:20px;align-items:stretch}
+  .map{min-height:620px;padding:22px;position:relative;overflow:hidden}
+  .map:before{content:"";position:absolute;inset:0;background:
+    radial-gradient(ellipse at center,rgba(106,212,255,.08),transparent 55%),
+    repeating-linear-gradient(30deg,rgba(255,255,255,.015) 0 2px,transparent 2px 8px)}
+  .base-map{position:relative;height:560px;border-radius:16px;border:1px solid rgba(120,221,255,.17);
+    background:linear-gradient(155deg,#0d2637,#07141f);overflow:hidden}
+  .base-map svg{width:100%;height:100%}
+  .module{position:absolute;min-width:145px;padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(6,24,37,.93);color:var(--text);text-align:left;box-shadow:0 8px 20px rgba(0,0,0,.32);
+    transition:.2s}
+  .module:hover{transform:scale(1.03);border-color:var(--ice)}
+  .module.done{border-color:rgba(68,224,139,.8);box-shadow:0 0 24px rgba(68,224,139,.16)}
+  .module .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--danger);margin-right:7px}
+  .module.done .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .m-energy{left:10%;top:18%}.m-green{right:10%;top:18%}.m-ice{left:11%;bottom:17%}.m-hangar{right:10%;bottom:17%}
+  .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:165px;height:165px;border-radius:50%;
+    display:grid;place-items:center;text-align:center;border:1px solid rgba(120,221,255,.25);
+    background:radial-gradient(circle,rgba(51,207,255,.18),rgba(6,20,31,.88) 65%);font-weight:900}
+  .sidepanel{padding:24px}
+  .progress{height:10px;background:#07131e;border:1px solid var(--line);border-radius:99px;overflow:hidden;margin:12px 0 22px}
+  .progress span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--ok));transition:.6s}
+  .mini-list{display:grid;gap:10px}
+  .mini{padding:12px;border:1px solid var(--line);border-radius:10px;color:var(--muted)}
+  .mission-wrap{max-width:1250px;width:100%;margin:auto}
+  .mission-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px}
+  .mission-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:20px}
+  .blueprint{padding:20px;min-height:500px;display:grid;place-items:center;position:relative;overflow:hidden;
+    background:
+      linear-gradient(rgba(83,182,220,.08) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(83,182,220,.08) 1px,transparent 1px),
+      linear-gradient(145deg,#082033,#0b2c42);
+    background-size:24px 24px}
+  .blueprint svg{width:100%;max-height:480px}
+  .mission-info{padding:25px}
+  .mission-info p,.mission-info li{line-height:1.6;color:#d7ebf4}
+  .brief{border-left:3px solid var(--warn);background:rgba(255,182,46,.08);padding:14px 15px;border-radius:6px;margin:16px 0}
+  .formula-ref{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:15px 0}
+  .formula-ref div{padding:10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:.88rem}
+  .answer{display:flex;gap:10px;margin-top:20px}
+  .answer input{min-width:0;flex:1;background:#061520;border:1px solid rgba(120,221,255,.42);color:var(--text);
+    padding:13px 14px;border-radius:10px;font-size:1.1rem}
+  .feedback{min-height:45px;margin-top:13px;padding:11px 12px;border-radius:9px;display:none}
+  .feedback.show{display:block}
+  .feedback.ok{background:rgba(68,224,139,.11);border:1px solid rgba(68,224,139,.45);color:#9affc6}
+  .feedback.bad{background:rgba(255,77,95,.1);border:1px solid rgba(255,77,95,.4);color:#ffc0c8}
+  details{margin-top:16px;border:1px solid var(--line);border-radius:10px;padding:12px;background:rgba(0,0,0,.18)}
+  summary{cursor:pointer;color:var(--ice);font-weight:800}
+  .final-grid{max-width:1050px;margin:auto;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .final-card{padding:32px}
+  .systems{font-family:monospace;line-height:2;color:#c5efff}
+  .result{font-size:4.3rem;font-weight:950;color:var(--ok)}
+  .sources{font-size:.8rem;color:var(--muted);line-height:1.6}
+  .small{font-size:.86rem;color:var(--muted)}
+  .hidden{display:none!important}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);opacity:0;z-index:100;
+    padding:12px 16px;border-radius:10px;background:#0b293d;border:1px solid var(--line);box-shadow:var(--shadow);transition:.3s}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+  @media(max-width:900px){
+    .archive-grid,.map-wrap,.mission-grid,.final-grid{grid-template-columns:1fr}
+    .map{min-height:540px}.base-map{height:500px}
+    .module{min-width:126px;font-size:.82rem}
+    .m-energy{left:4%;top:13%}.m-green{right:4%;top:13%}.m-ice{left:4%;bottom:13%}.m-hangar{right:4%;bottom:13%}
+    .core{width:130px;height:130px;font-size:.85rem}
+  }
+  @media(max-width:560px){
+    .screen{padding:14px}.hero{padding:24px}.base-map{height:570px}
+    .module{min-width:115px;padding:9px;font-size:.75rem}
+    .m-energy{left:3%;top:11%}.m-green{right:3%;top:29%}.m-ice{left:3%;bottom:29%}.m-hangar{right:3%;bottom:11%}
+    .answer{flex-direction:column}.mission-head{flex-direction:column}
+    .formula-ref{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+<div class="scan"></div>
+<div id="toast" class="toast"></div>
+
+<section id="intro" class="screen active">
+  <div class="hero panel">
+    <div class="brand">RED SATELITAL INTERNACIONAL · CANAL DE EMERGENCIA</div>
+    <h1 class="glow">Estableciendo<br>conexión…</h1>
+    <div class="terminal" aria-live="polite">
+      <div class="check">✓ Satélites sincronizados</div>
+      <div class="check">✓ Señal de baja frecuencia encontrada</div>
+      <div class="check">✓ Archivo temporal localizado</div>
+      <div class="check">✓ Integridad parcial confirmada</div>
+      <div class="check">RECUPERANDO DATOS…</div>
+    </div>
+    <p class="subtitle">Transmisión fechada el <strong>17 de julio de 2089</strong>. Origen: meseta antártica oriental.</p>
+    <div class="actions">
+      <button class="btn" onclick="go('aria')">Acceder al sistema</button>
+      <button class="btn secondary" onclick="toggleSound()" id="soundBtn">Sonido: apagado</button>
+    </div>
+  </div>
+</section>
+
+<section id="aria" class="screen">
+  <div class="topbar"><div class="brand">A.R.I.A. · SISTEMA DE INVESTIGACIÓN</div><div class="status"><span class="pill">Acceso <strong>temporal</strong></span></div></div>
+  <div class="hero panel">
+    <div class="aria-logo"></div>
+    <h2 class="glow">Usuario identificado</h2>
+    <div class="terminal">
+      A.R.I.A. / Artificial Research Intelligence Assistant<br>
+      Estado del complejo: <span style="color:var(--danger)">CRÍTICO</span><br>
+      Integridad de archivos: 43 %<br>
+      Módulos sin respuesta: 4
+    </div>
+    <p class="subtitle">Antes de conceder acceso al complejo, deben revisarse dos registros históricos. Comprender su relación será fundamental para la misión.</p>
+    <div class="actions"><button class="btn" onclick="go('record1')">Abrir registro 001</button></div>
+  </div>
+</section>
+
+<section id="record1" class="screen">
+  <div class="topbar"><div class="brand">ARCHIVO HISTÓRICO 001</div><div class="status"><span class="pill"><strong>VERIFICADO</strong> · OMM</span></div></div>
+  <div class="archive-grid">
+    <article class="archive panel">
+      <div class="stamp">REGISTRO AUTÉNTICO · AÑO 2024</div>
+      <h2>La señal era inequívoca</h2>
+      <p>En 2024, la temperatura media global de la superficie fue aproximadamente <strong>1,55 °C superior</strong> al promedio de 1850–1900, usado como referencia preindustrial.</p>
+      <p>Fue el año más cálido del registro instrumental hasta ese momento. Superar 1,5 °C durante un año no significaba todavía haber superado el objetivo climático de largo plazo, pero mostraba la rapidez del calentamiento.</p>
+      <div class="big-number">+1,55 °C</div>
+      <p class="small">Fuente: Organización Meteorológica Mundial, Estado del Clima Mundial 2024.</p>
+      <div class="actions"><button class="btn" onclick="go('record2')">Abrir registro 002</button></div>
+    </article>
+    <aside class="data-card panel"><div class="earth"></div><p style="text-align:center;color:var(--muted)">Anomalía respecto de 1850–1900</p></aside>
+  </div>
+</section>
+
+<section id="record2" class="screen">
+  <div class="topbar"><div class="brand">ARCHIVO HISTÓRICO 002</div><div class="status"><span class="pill"><strong>VERIFICADO</strong> · IPCC / ESA</span></div></div>
+  <div class="archive-grid">
+    <article class="archive panel">
+      <div class="stamp">REGISTRO AUTÉNTICO · SIGLO XXI</div>
+      <h2>El hielo guardaba la memoria</h2>
+      <p>Entre 1901 y 2018, el nivel medio global del mar aumentó aproximadamente <strong>20 cm</strong>. La velocidad del aumento se aceleró durante el período observado.</p>
+      <p>En la meseta antártica funcionaba Concordia, una estación franco-italiana operativa todo el año desde 2005, ubicada a unos <strong>3233 m</strong> de altitud. Allí y en otros proyectos polares se estudiaban núcleos de hielo capaces de conservar aire antiguo.</p>
+      <div class="big-number">20 cm</div>
+      <p class="small">Fuentes: IPCC AR6; Agencia Espacial Europea y programas polares de Francia e Italia.</p>
+      <div class="actions"><button class="btn" onclick="go('reveal')">Relacionar archivos</button></div>
+    </article>
+    <aside class="data-card panel"><div class="concordia"></div><p style="text-align:center;color:var(--muted)">Estación polar inspiradora del universo CRIOS</p></aside>
+  </div>
+</section>
+
+<section id="reveal" class="screen">
+  <div class="hero panel">
+    <div class="brand">COINCIDENCIA ENCONTRADA</div>
+    <h1 class="glow">Proyecto<br>CRIOS</h1>
+    <p class="subtitle"><em>Reconstruir el pasado para comprender el futuro.</em></p>
+    <div class="terminal">
+      Año: 2089<br>
+      Ubicación: Antártida oriental<br>
+      Función primaria: conservación del registro climático terrestre<br>
+      Estado: <span style="color:var(--danger)">FALLO EN CASCADA</span>
+    </div>
+    <p class="subtitle">Una tormenta dañó el sistema energético y destruyó fragmentos de los planos digitales. Cuatro módulos necesitan intervención humana. Las misiones pueden realizarse en cualquier orden.</p>
+    <div class="actions"><button class="btn" onclick="go('map')">Ingresar al complejo</button></div>
+  </div>
+</section>
+
+<section id="map" class="screen">
+  <div class="topbar">
+    <div><div class="brand">COMPLEJO CRIOS · MAPA OPERATIVO</div><h2>Seleccione un módulo</h2></div>
+    <div class="status"><span class="pill">Módulos recuperados: <strong id="doneCount">0/4</strong></span></div>
+  </div>
+  <div class="map-wrap">
+    <div class="map panel">
+      <div class="base-map">
+        <svg viewBox="0 0 900 560" aria-hidden="true">
+          <defs><linearGradient id="iceg" x1="0" x2="1"><stop stop-color="#163d54"/><stop offset="1" stop-color="#0a2436"/></linearGradient></defs>
+          <path d="M70 150 L245 150 L330 250 L450 250" fill="none" stroke="#2d728f" stroke-width="18" opacity=".42"/>
+          <path d="M830 150 L655 150 L570 250 L450 250" fill="none" stroke="#2d728f" stroke-width="18" opacity=".42"/>
+          <path d="M70 420 L245 420 L330 310 L450 310" fill="none" stroke="#2d728f" stroke-width="18" opacity=".42"/>
+          <path d="M830 420 L655 420 L570 310 L450 310" fill="none" stroke="#2d728f" stroke-width="18" opacity=".42"/>
+          <circle cx="450" cy="280" r="105" fill="url(#iceg)" stroke="#56c9ef" stroke-opacity=".3"/>
+          <circle cx="450" cy="280" r="72" fill="none" stroke="#56c9ef" stroke-opacity=".17"/>
+          <path d="M40 75 Q210 20 350 90 T860 70" fill="none" stroke="#78ddff" stroke-opacity=".09" stroke-width="2"/>
+          <path d="M25 490 Q230 430 390 500 T875 480" fill="none" stroke="#78ddff" stroke-opacity=".09" stroke-width="2"/>
+        </svg>
+        <button class="module m-energy" id="card-energy" onclick="openMission('energy')"><span class="dot"></span><strong>Centro de Energía</strong><br><span class="small">Calefacción</span></button>
+        <button class="module m-green" id="card-greenhouse" onclick="openMission('greenhouse')"><span class="dot"></span><strong>Invernadero</strong><br><span class="small">Cultivos</span></button>
+        <button class="module m-ice" id="card-ice" onclick="openMission('ice')"><span class="dot"></span><strong>Banco de Hielo</strong><br><span class="small">Muestras</span></button>
+        <button class="module m-hangar" id="card-hangar" onclick="openMission('hangar')"><span class="dot"></span><strong>Hangar</strong><br><span class="small">Perforación</span></button>
+        <div class="core">A.R.I.A.<br><span class="small">Centro de control</span></div>
+      </div>
+    </div>
+    <aside class="sidepanel panel">
+      <h3>Estado de recuperación</h3>
+      <div class="progress"><span id="progressBar"></span></div>
+      <div class="mini-list">
+        <div class="mini" id="mini-energy">● Energía: sin respuesta</div>
+        <div class="mini" id="mini-greenhouse">● Invernadero: sin respuesta</div>
+        <div class="mini" id="mini-ice">● Banco de Hielo: sin respuesta</div>
+        <div class="mini" id="mini-hangar">● Hangar: sin respuesta</div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="finalBtn" onclick="go('final')" disabled>Activación final</button>
+        <button class="btn secondary" onclick="resetProgress()">Reiniciar</button>
+      </div>
+      <p class="small">El progreso se guarda automáticamente en este dispositivo.</p>
+    </aside>
+  </div>
+</section>
+
+<section id="mission-energy" class="screen mission">
+  <div class="mission-wrap">
+    <div class="mission-head"><div><div class="brand">MISIÓN 01</div><h2>Centro de Energía</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-grid">
+      <div class="blueprint panel">
+        <svg viewBox="0 0 700 430" role="img" aria-label="Plano rectangular dividido en dos sectores y una zona dañada">
+          <g fill="none" stroke="#80e8ff" stroke-width="5">
+            <rect x="90" y="95" width="520" height="220"/>
+            <line x1="285" y1="95" x2="285" y2="315"/>
+            <rect x="420" y="205" width="108" height="83" stroke="#ff5b6b"/>
+          </g>
+          <g fill="#dff9ff" font-size="22" font-family="Arial">
+            <text x="300" y="68">ANCHO TOTAL: 24 m</text>
+            <text x="145" y="190">9 m</text>
+            <text x="405" y="190">¿ ?</text>
+            <text x="38" y="210" transform="rotate(-90 38 210)">ALTURA: 8 m</text>
+            <text x="430" y="245" fill="#ff9aa4">5 m × 3 m</text>
+            <text x="224" y="354">SECTOR OESTE</text><text x="440" y="354">SECTOR ESTE</text>
+          </g>
+        </svg>
+      </div>
+      <div class="mission-info panel">
+        <div class="brief"><strong>A.R.I.A.:</strong> Sin conocer la superficie activa, no puedo distribuir la calefacción.</div>
+        <p>El edificio mide <strong>24 m de ancho</strong> y <strong>8 m de alto</strong>. El sector oeste ocupa <strong>9 m</strong> del ancho total. Una zona dañada de <strong>5 m × 3 m</strong> ya no debe calefaccionarse.</p>
+        <p><strong>Determinen cuántos metros cuadrados continúan calefaccionándose.</strong></p>
+        <div class="formula-ref"><div>Rectángulo: base × altura</div><div>Superficie útil: total − zona dañada</div></div>
+        <div class="answer"><input id="answer-energy" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('energy',177)">Validar</button></div>
+        <div id="feedback-energy" class="feedback"></div>
+        <details><summary>Pista de A.R.I.A.</summary><p>Primero averigüen cuánto mide el sector este. También pueden calcular directamente el área del rectángulo completo.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mission-greenhouse" class="screen mission">
+  <div class="mission-wrap">
+    <div class="mission-head"><div><div class="brand">MISIÓN 02</div><h2>Invernadero</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-grid">
+      <div class="blueprint panel">
+        <svg viewBox="0 0 700 430" role="img" aria-label="Rectángulo con estanque triangular">
+          <g fill="none" stroke="#80e8ff" stroke-width="5"><rect x="85" y="75" width="530" height="285"/><path d="M260 300 L440 300 L350 180 Z" stroke="#ffb62e"/></g>
+          <g fill="#dff9ff" font-size="22" font-family="Arial">
+            <text x="290" y="52">18 m</text><text x="40" y="230" transform="rotate(-90 40 230)">12 m</text>
+            <text x="313" y="330" fill="#ffd179">base 6 m</text><text x="365" y="245" fill="#ffd179">altura 4 m</text>
+            <text x="280" y="392">ZONA DE CULTIVO</text>
+          </g>
+        </svg>
+      </div>
+      <div class="mission-info panel">
+        <div class="brief"><strong>A.R.I.A.:</strong> Debo calcular la superficie actualmente disponible para producir alimentos.</div>
+        <p>El invernadero es un rectángulo de <strong>18 m × 12 m</strong>. El estanque triangular central tiene <strong>6 m de base</strong> y <strong>4 m de altura</strong>.</p>
+        <p>Durante la tormenta se perdieron <strong>18 m²</strong> de cultivo. Después se recuperaron <strong>7 m²</strong>.</p>
+        <p><strong>Determinen la superficie cultivable actual.</strong></p>
+        <div class="formula-ref"><div>Triángulo: base × altura ÷ 2</div><div>Consideren pérdidas y recuperaciones</div></div>
+        <div class="answer"><input id="answer-greenhouse" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('greenhouse',193)">Validar</button></div>
+        <div id="feedback-greenhouse" class="feedback"></div>
+        <details><summary>Pista de A.R.I.A.</summary><p>El estanque ocupa espacio dentro del rectángulo. Después de hallar la zona inicial de cultivo, apliquen los cambios registrados.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mission-ice" class="screen mission">
+  <div class="mission-wrap">
+    <div class="mission-head"><div><div class="brand">MISIÓN 03</div><h2>Banco de Hielo</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-grid">
+      <div class="blueprint panel">
+        <svg viewBox="0 0 700 430" role="img" aria-label="Sala cuadrada con cámara circular central">
+          <g fill="none" stroke="#80e8ff" stroke-width="5"><rect x="150" y="60" width="400" height="320"/><circle cx="350" cy="220" r="125" stroke="#ffb62e"/><line x1="225" y1="220" x2="475" y2="220" stroke="#ffb62e"/></g>
+          <g fill="#dff9ff" font-size="22" font-family="Arial"><text x="320" y="40">16 m</text><text x="108" y="250" transform="rotate(-90 108 250)">16 m</text><text x="310" y="207" fill="#ffd179">10 m</text><text x="265" y="416">π ≈ 3</text></g>
+        </svg>
+      </div>
+      <div class="mission-info panel">
+        <div class="brief"><strong>A.R.I.A.:</strong> Solo la superficie exterior a la cámara circular debe mantenerse accesible y refrigerada.</div>
+        <p>La sala es cuadrada y mide <strong>16 m de lado</strong>. La cámara central tiene <strong>10 m de diámetro</strong>. Usen <strong>π ≈ 3</strong>.</p>
+        <p>Se recuperaron <strong>12 m²</strong> de un corredor auxiliar, pero fue necesario sellar otros <strong>8 m²</strong>.</p>
+        <p><strong>Determinen la superficie operativa.</strong></p>
+        <div class="formula-ref"><div>Círculo: π × radio × radio</div><div>Radio = diámetro ÷ 2</div></div>
+        <div class="answer"><input id="answer-ice" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('ice',185)">Validar</button></div>
+        <div id="feedback-ice" class="feedback"></div>
+        <details><summary>Pista de A.R.I.A.</summary><p>El plano informa el diámetro, pero la fórmula necesita el radio. La cámara circular no forma parte del espacio operativo exterior.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mission-hangar" class="screen mission">
+  <div class="mission-wrap">
+    <div class="mission-head"><div><div class="brand">MISIÓN 04</div><h2>Hangar de Perforación</h2></div><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    <div class="mission-grid">
+      <div class="blueprint panel">
+        <svg viewBox="0 0 700 430" role="img" aria-label="Figura en L con medidas exteriores y una zona bloqueada">
+          <path d="M100 70 H600 V190 H400 V360 H100 Z" fill="none" stroke="#80e8ff" stroke-width="6"/>
+          <rect x="170" y="245" width="110" height="80" fill="none" stroke="#ff5b6b" stroke-width="5"/>
+          <g fill="#dff9ff" font-size="22" font-family="Arial">
+            <text x="315" y="48">22 m</text><text x="62" y="235" transform="rotate(-90 62 235)">14 m</text>
+            <text x="430" y="165">13 m</text><text x="370" y="298" transform="rotate(-90 370 298)">6 m</text>
+            <text x="180" y="287" fill="#ff9aa4">4 m × 5 m</text>
+            <text x="422" y="255">¿ ?</text><text x="485" y="215">¿ ?</text>
+          </g>
+        </svg>
+      </div>
+      <div class="mission-info panel">
+        <div class="brief"><strong>A.R.I.A.:</strong> El vehículo perforador necesita una superficie libre segura para maniobrar.</div>
+        <p>El hangar tiene forma de L. Sus medidas exteriores son <strong>22 m × 14 m</strong>. El brazo superior mide <strong>13 m</strong> y el inferior tiene <strong>6 m de altura</strong>.</p>
+        <p>Una zona de carga de <strong>4 m × 5 m</strong> está bloqueada. Se recuperaron <strong>6 m²</strong> de un corredor lateral.</p>
+        <p><strong>Reconstruyan las medidas borradas y determinen la superficie disponible.</strong></p>
+        <div class="formula-ref"><div>Puede calcularse: rectángulo grande − esquina faltante</div><div>Después incorporen los cambios</div></div>
+        <div class="answer"><input id="answer-hangar" inputmode="numeric" placeholder="Resultado en m²"><button class="btn" onclick="validate('hangar',222)">Validar</button></div>
+        <div id="feedback-hangar" class="feedback"></div>
+        <details><summary>Pista de A.R.I.A.</summary><p>Las medidas interiores se obtienen comparando cada medida total con la parte conocida: 22 − 13 y 14 − 6.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="final" class="screen">
+  <div class="final-grid">
+    <div class="final-card panel">
+      <div class="brand">ACTIVACIÓN FINAL</div>
+      <h2>La red debe funcionar como un solo sistema</h2>
+      <p>Sumen las cuatro superficies recuperadas. Luego resten <strong>35 m²</strong> de corredores que continúan aislados y agreguen <strong>8 m²</strong> de reserva térmica.</p>
+      <div class="systems">ENERGÍA = 177 m²<br>INVERNADERO = 193 m²<br>BANCO DE HIELO = 185 m²<br>HANGAR = 222 m²<br>AJUSTES = −35 m² + 8 m²</div>
+      <div class="answer"><input id="finalAnswer" inputmode="numeric" placeholder="Superficie final"><button class="btn" onclick="validateFinal()">Estabilizar</button></div>
+      <div id="finalFeedback" class="feedback"></div>
+      <div class="actions"><button class="btn secondary" onclick="go('map')">Volver al mapa</button></div>
+    </div>
+    <div id="successPanel" class="final-card panel" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="brand">ESTADO DEL PROYECTO</div>
+      <div id="finalStatus"><h2 style="color:var(--warn)">Esperando cálculo…</h2><p class="subtitle">A.R.I.A. mantiene el sistema en modo de emergencia.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="credits" class="screen">
+  <div class="hero panel">
+    <div class="brand">PROYECTO CRIOS · ARCHIVO RECUPERADO</div>
+    <h1 class="glow">750 m²</h1>
+    <h2>Sistema restablecido</h2>
+    <p class="subtitle">Las cámaras permanecen operativas. Las muestras de hielo que conservan la memoria climática del planeta están a salvo.</p>
+    <div class="terminal">PROTOCOLO DE EMERGENCIA: DESACTIVADO<br>BANCO DE HIELO: ESTABLE<br>TRANSMISIÓN: RESTABLECIDA<br>PROYECTO CRIOS: OPERATIVO</div>
+    <p><strong>Reconstruir el pasado para comprender el futuro.</strong></p>
+    <div class="sources">
+      Datos históricos utilizados: Organización Meteorológica Mundial, <em>State of the Global Climate 2024</em>; IPCC, Sexto Informe de Evaluación; información institucional sobre la estación Concordia. La base CRIOS, A.R.I.A. y los hechos de 2089 son ficticios.
+    </div>
+    <div class="actions"><button class="btn" onclick="go('map')">Revisar complejo</button><button class="btn secondary" onclick="resetProgress()">Reiniciar simulación</button></div>
+  </div>
+</section>
+</div>
+
+<script>
+const missionIds=['energy','greenhouse','ice','hangar'];
+let progress=JSON.parse(localStorage.getItem('crios-progress')||'{}');
+let audioCtx=null, soundOn=false;
+
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el){el.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});}
+  if(soundOn) beep(420,.06);
+  if(id==='map') updateMap();
+}
+function openMission(id){go('mission-'+id)}
+function normalize(v){return Number(String(v).replace(',','.').replace(/[^\d.-]/g,''))}
+function validate(id,expected){
+  const input=document.getElementById('answer-'+id);
+  const fb=document.getElementById('feedback-'+id);
+  const value=normalize(input.value);
+  fb.className='feedback show '+(value===expected?'ok':'bad');
+  if(value===expected){
+    fb.innerHTML='✓ Cálculo confirmado. Módulo restablecido. Podés volver al mapa.';
+    progress[id]=true; save(); if(soundOn) successSound();
+  }else{
+    fb.innerHTML='⚠ El resultado no coincide con los sensores. Revisen las medidas y el orden de las operaciones.';
+    if(soundOn) beep(165,.14);
+  }
+}
+function save(){localStorage.setItem('crios-progress',JSON.stringify(progress));updateMap()}
+function updateMap(){
+  let done=0;
+  missionIds.forEach(id=>{
+    const isDone=!!progress[id]; if(isDone) done++;
+    const card=document.getElementById('card-'+id);
+    const mini=document.getElementById('mini-'+id);
+    if(card) card.classList.toggle('done',isDone);
+    if(mini){
+      mini.style.color=isDone?'#9affc6':'var(--muted)';
+      const names={energy:'Energía',greenhouse:'Invernadero',ice:'Banco de Hielo',hangar:'Hangar'};
+      mini.textContent=(isDone?'✓ ':'● ')+names[id]+': '+(isDone?'operativo':'sin respuesta');
+    }
+  });
+  document.getElementById('doneCount').textContent=done+'/4';
+  document.getElementById('progressBar').style.width=(done*25)+'%';
+  document.getElementById('finalBtn').disabled=done<4;
+}
+function validateFinal(){
+  const value=normalize(document.getElementById('finalAnswer').value);
+  const fb=document.getElementById('finalFeedback');
+  if(value===750){
+    fb.className='feedback show ok';fb.textContent='✓ Red energética estable. Activando secuencia final…';
+    document.getElementById('finalStatus').innerHTML='<div class="result">100 %</div><h2 style="color:var(--ok)">COMPLEJO ESTABLE</h2><p>Superficie controlada: 750 m²</p>';
+    localStorage.setItem('crios-complete','true'); if(soundOn) successSound();
+    setTimeout(()=>go('credits'),1700);
+  }else{
+    fb.className='feedback show bad';fb.textContent='⚠ La red permanece inestable. Revisen la suma de los módulos y los dos ajustes finales.';
+    if(soundOn) beep(150,.16);
+  }
+}
+function resetProgress(){
+  if(confirm('¿Reiniciar todo el progreso de la simulación?')){
+    progress={};localStorage.removeItem('crios-progress');localStorage.removeItem('crios-complete');
+    document.querySelectorAll('input').forEach(i=>i.value='');
+    document.querySelectorAll('.feedback').forEach(f=>{f.className='feedback';f.textContent=''});
+    updateMap();go('intro');
+  }
+}
+function toast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1900);
+}
+function toggleSound(){
+  soundOn=!soundOn;
+  document.getElementById('soundBtn').textContent='Sonido: '+(soundOn?'encendido':'apagado');
+  if(soundOn){audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();beep(500,.08);toast('Audio de interfaz activado');}
+}
+function beep(freq=440,dur=.08){
+  if(!soundOn||!audioCtx)return;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(.05,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+  o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
+}
+function successSound(){[440,660,880].forEach((f,i)=>setTimeout(()=>beep(f,.11),i*100))}
+updateMap();
+</script>
+</body>
+</html>
