@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "views": {
+    "overview": { "title": "Estado de la base" },
+    "missions": {
+      "title": "Misiones",
+      "code": "M-00",
+      "heading": "Motor de misiones inicializado",
+      "text": "El núcleo está preparado para cargar desafíos desde archivos de datos. Las misiones se incorporarán en el siguiente sprint."
+    },
+    "archives": {
+      "title": "Archivo central",
+      "code": "AR",
+      "heading": "Directorio científico disponible",
+      "text": "El sistema de archivos está operativo. Los registros recuperables se integrarán en el siguiente sprint."
+    },
+    "diagnostics": {
+      "title": "Diagnóstico",
+      "code": "DX",
+      "heading": "Diagnóstico parcial",
+      "text": "Los sensores locales responden. El análisis completo requiere la activación progresiva de los módulos científicos."
+    }
+  },
+  "ariaMessages": {
+    "overview": "Estado general.",
+    "missions": "Directorio de misiones.",
+    "archives": "Archivo central.",
+    "diagnostics": "Diagnóstico del sistema."
+  }
+}

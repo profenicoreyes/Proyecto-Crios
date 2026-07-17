@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#071018">
+  <meta name="description" content="CRIOS OS v2.0 — Sistema operativo científico educativo.">
+  <title>CRIOS OS v2.0</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./css/main.css">
+  <link rel="stylesheet" href="./css/animations.css">
+</head>
+<body>
+  <noscript>
+    <div class="noscript-warning">
+      CRIOS OS requiere JavaScript para iniciar.
+    </div>
+  </noscript>
+
+  <div id="app" class="app-shell" aria-live="polite">
+    <section id="startup-screen" class="startup-screen" aria-label="Inicio de CRIOS OS">
+      <div class="startup-noise" aria-hidden="true"></div>
+
+      <div class="startup-frame">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-mark__ring"></span>
+          <span class="brand-mark__core"></span>
+        </div>
+
+        <div class="startup-heading">
+          <p class="eyebrow">CRIOS SCIENTIFIC OPERATIONS NETWORK</p>
+          <h1>CRIOS OS <span>v2.0</span></h1>
+          <p class="startup-subtitle">BASE ANTÁRTICA // TERMINAL DE RECUPERACIÓN</p>
+        </div>
+
+        <div id="boot-console" class="boot-console" role="log" aria-label="Secuencia de arranque">
+          <div id="boot-lines" class="boot-lines"></div>
+          <span class="boot-cursor" aria-hidden="true"></span>
+        </div>
+
+        <div class="startup-footer">
+          <span id="startup-status">EN ESPERA</span>
+          <span>TERMINAL 01</span>
+        </div>
+
+        <button id="start-button" class="start-button" type="button">
+          <span class="start-button__signal" aria-hidden="true"></span>
+          INICIAR SISTEMA
+        </button>
+      </div>
+    </section>
+
+    <section id="desktop" class="desktop" aria-label="Escritorio de CRIOS OS" hidden>
+      <header class="topbar">
+        <div class="topbar__identity">
+          <button id="system-menu-button" class="system-emblem" type="button" aria-label="Abrir menú del sistema">
+            <span class="system-emblem__ring"></span>
+            <span class="system-emblem__core"></span>
+          </button>
+          <div>
+            <p class="topbar__title">CRIOS OS</p>
+            <p class="topbar__subtitle">SCIENTIFIC OPERATIONS SYSTEM</p>
+          </div>
+        </div>
+
+        <div class="topbar__telemetry" aria-label="Telemetría del sistema">
+          <div class="telemetry-item">
+            <span class="telemetry-label">SECTOR</span>
+            <strong>ANT-04</strong>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">ENLACE</span>
+            <strong class="status-online">ESTABLE</strong>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">TEMP. EXT.</span>
+            <strong>−31 °C</strong>
+          </div>
+        </div>
+
+        <div class="topbar__actions">
+          <button id="audio-toggle" class="icon-button" type="button" aria-pressed="false" aria-label="Silenciar audio">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4z"></path>
+              <path class="audio-wave" d="M16 9.5c1.1 1.4 1.1 3.6 0 5"></path>
+              <path class="audio-wave" d="M18.5 7c2.5 2.8 2.5 7.2 0 10"></path>
+            </svg>
+          </button>
+
+          <button id="fullscreen-toggle" class="icon-button" type="button" aria-label="Activar pantalla completa">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="dock" aria-label="Aplicaciones">
+          <button class="dock-item dock-item--active" type="button" data-app="overview" aria-label="Estado general">
+            <span class="dock-icon dock-icon--grid" aria-hidden="true"></span>
+            <span>ESTADO</span>
+          </button>
+
+          <button class="dock-item" type="button" data-app="missions" aria-label="Misiones">
+            <span class="dock-icon dock-icon--target" aria-hidden="true"></span>
+            <span>MISIONES</span>
+          </button>
+
+          <button class="dock-item" type="button" data-app="archives" aria-label="Archivos">
+            <span class="dock-icon dock-icon--archive" aria-hidden="true"></span>
+            <span>ARCHIVOS</span>
+          </button>
+
+          <button class="dock-item" type="button" data-app="diagnostics" aria-label="Diagnóstico">
+            <span class="dock-icon dock-icon--pulse" aria-hidden="true"></span>
+            <span>DIAGNÓSTICO</span>
+          </button>
+        </aside>
+
+        <section class="desktop-main">
+          <div class="desktop-header">
+            <div>
+              <p class="eyebrow">PANEL PRINCIPAL</p>
+              <h2 id="workspace-title">Estado de la base</h2>
+            </div>
+
+            <div class="operator-badge">
+              <span class="operator-badge__dot"></span>
+              <div>
+                <span>OPERADOR</span>
+                <strong id="operator-name">NO IDENTIFICADO</strong>
+              </div>
+            </div>
+          </div>
+
+          <div id="workspace-content" class="workspace-content">
+            <section class="system-grid" aria-label="Resumen de sistemas">
+              <article class="system-card system-card--primary">
+                <header class="system-card__header">
+                  <div>
+                    <p class="system-card__label">INTEGRIDAD GENERAL</p>
+                    <h3>Base CRIOS</h3>
+                  </div>
+                  <span class="system-card__state state-warning">RECUPERACIÓN</span>
+                </header>
+
+                <div class="integrity-display">
+                  <div class="integrity-orbit" aria-hidden="true">
+                    <span class="integrity-orbit__outer"></span>
+                    <span class="integrity-orbit__middle"></span>
+                    <span class="integrity-orbit__core"></span>
+                  </div>
+                  <div class="integrity-value">
+                    <strong>42%</strong>
+                    <span>OPERATIVA</span>
+                  </div>
+                </div>
+
+                <div class="system-progress" aria-label="Integridad de la base: 42%">
+                  <span style="width: 42%"></span>
+                </div>
+
+                <footer class="system-card__footer">
+                  <span>7 módulos fuera de línea</span>
+                  <span>Último enlace: 00:14:22</span>
+                </footer>
+              </article>
+
+              <article class="system-card">
+                <header class="system-card__header">
+                  <div>
+                    <p class="system-card__label">ENERGÍA</p>
+                    <h3>Red auxiliar</h3>
+                  </div>
+                  <span class="system-card__state state-online">ESTABLE</span>
+                </header>
+
+                <div class="metric-value">
+                  <strong>63.8</strong>
+                  <span>kW disponibles</span>
+                </div>
+
+                <div class="mini-chart" aria-hidden="true">
+                  <span style="height: 24%"></span>
+                  <span style="height: 38%"></span>
+                  <span style="height: 31%"></span>
+                  <span style="height: 56%"></span>
+                  <span style="height: 44%"></span>
+                  <span style="height: 61%"></span>
+                  <span style="height: 67%"></span>
+                  <span style="height: 63%"></span>
+                  <span style="height: 72%"></span>
+                  <span style="height: 68%"></span>
+                </div>
+
+                <footer class="system-card__footer">
+                  <span>Consumo: 41.2 kW</span>
+                  <span>Reserva: 22.6 kW</span>
+                </footer>
+              </article>
+
+              <article class="system-card">
+                <header class="system-card__header">
+                  <div>
+                    <p class="system-card__label">COMUNICACIONES</p>
+                    <h3>Enlace orbital</h3>
+                  </div>
+                  <span class="system-card__state state-warning">LIMITADO</span>
+                </header>
+
+                <div class="signal-display" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+
+                <div class="metric-row">
+                  <div>
+                    <span>LATENCIA</span>
+                    <strong>842 ms</strong>
+                  </div>
+                  <div>
+                    <span>PAQUETES</span>
+                    <strong>97.1%</strong>
+                  </div>
+                </div>
+
+                <footer class="system-card__footer">
+                  <span>Canal científico activo</span>
+                </footer>
+              </article>
+
+              <article class="system-card">
+                <header class="system-card__header">
+                  <div>
+                    <p class="system-card__label">ARCHIVO CENTRAL</p>
+                    <h3>Datos recuperables</h3>
+                  </div>
+                  <span class="system-card__state state-online">ACCESIBLE</span>
+                </header>
+
+                <div class="archive-summary">
+                  <div>
+                    <strong>12</strong>
+                    <span>ARCHIVOS</span>
+                  </div>
+                  <div>
+                    <strong>04</strong>
+                    <span>PRIORITARIOS</span>
+                  </div>
+                </div>
+
+                <button id="open-missions-button" class="secondary-button" type="button">
+                  ABRIR DIRECTORIO
+                  <span aria-hidden="true">→</span>
+                </button>
+              </article>
+            </section>
+
+            <section class="activity-panel" aria-label="Actividad reciente">
+              <header class="panel-header">
+                <div>
+                  <p class="system-card__label">REGISTRO</p>
+                  <h3>Actividad reciente</h3>
+                </div>
+                <span class="live-indicator"><i></i> EN VIVO</span>
+              </header>
+
+              <div id="activity-log" class="activity-log">
+                <div class="activity-entry">
+                  <time>00:14</time>
+                  <span class="activity-entry__marker marker-warning"></span>
+                  <div>
+                    <strong>Secuencia de recuperación iniciada</strong>
+                    <p>Acceso local autorizado.</p>
+                  </div>
+                </div>
+                <div class="activity-entry">
+                  <time>00:13</time>
+                  <span class="activity-entry__marker marker-online"></span>
+                  <div>
+                    <strong>Núcleo A.R.I.A. disponible</strong>
+                    <p>Canal de asistencia habilitado.</p>
+                  </div>
+                </div>
+                <div class="activity-entry">
+                  <time>00:12</time>
+                  <span class="activity-entry__marker marker-neutral"></span>
+                  <div>
+                    <strong>Diagnóstico incompleto</strong>
+                    <p>Se requieren datos del operador.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <div id="window-layer" class="window-layer" aria-live="polite"></div>
+
+      <div id="aria-panel" class="aria-panel" role="status" aria-live="polite">
+        <div class="aria-panel__identity">
+          <span class="aria-core" aria-hidden="true"></span>
+          <div>
+            <span>A.R.I.A.</span>
+            <small>ASISTENTE DE RECUPERACIÓN</small>
+          </div>
+        </div>
+        <p id="aria-message">Operador...</p>
+      </div>
+
+      <div id="system-menu" class="system-menu" hidden>
+        <div class="system-menu__header">
+          <span>CRIOS OS v2.0</span>
+          <small>BUILD 2.0.0-S1.5</small>
+        </div>
+        <button id="restart-button" type="button">REINICIAR SISTEMA</button>
+        <button id="lock-button" type="button">BLOQUEAR TERMINAL</button>
+      </div>
+
+      <div id="operator-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="operator-modal-title" hidden>
+        <div class="modal">
+          <button id="modal-close" class="modal-close" type="button" aria-label="Cerrar">×</button>
+          <p class="eyebrow">IDENTIFICACIÓN LOCAL</p>
+          <h2 id="operator-modal-title">Registrar operador</h2>
+          <p class="modal-copy">El identificador se utilizará para generar una variante científica única en cada misión.</p>
+
+          <form id="operator-form">
+            <label for="operator-input">IDENTIFICADOR</label>
+            <input
+              id="operator-input"
+              name="operator"
+              type="text"
+              autocomplete="off"
+              maxlength="40"
+              placeholder="Ej.: Lucía Fernández"
+              required
+            >
+            <p id="operator-error" class="field-error" aria-live="assertive"></p>
+
+            <button class="primary-button" type="submit">
+              AUTORIZAR ACCESO
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div id="locked-screen" class="locked-screen" hidden>
+        <div class="locked-screen__content">
+          <span class="brand-mark brand-mark--small" aria-hidden="true">
+            <span class="brand-mark__ring"></span>
+            <span class="brand-mark__core"></span>
+          </span>
+          <p class="eyebrow">TERMINAL BLOQUEADA</p>
+          <h2>CRIOS OS</h2>
+          <button id="unlock-button" class="primary-button" type="button">RESTABLECER ACCESO</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <audio id="audio-boot" preload="auto" src="./assets/audio/boot.mp3"></audio>
+  <audio id="audio-ambient" preload="auto" loop src="./assets/audio/ambient.mp3"></audio>
+  <audio id="audio-interface" preload="auto" src="./assets/audio/interface.mp3"></audio>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

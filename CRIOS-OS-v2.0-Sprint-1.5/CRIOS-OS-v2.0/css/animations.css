@@ -1,0 +1,143 @@
+@keyframes cursorBlink {
+  0%, 48% { opacity: 1; }
+  49%, 100% { opacity: 0; }
+}
+
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinReverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@keyframes ariaPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(119, 242, 176, 0.28);
+    transform: scale(0.92);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(119, 242, 176, 0.62);
+    transform: scale(1);
+  }
+}
+
+@keyframes bootLineIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes desktopReveal {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(1.012);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes panelReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes startupExit {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes scanMove {
+  from { transform: translateY(-120%); }
+  to { transform: translateY(120%); }
+}
+
+.boot-cursor {
+  animation: cursorBlink 900ms steps(1, end) infinite;
+}
+
+.brand-mark__ring,
+.system-emblem__ring {
+  animation: spinSlow 16s linear infinite;
+}
+
+.brand-mark__ring::before,
+.system-emblem__ring::before {
+  animation: spinReverse 9s linear infinite;
+}
+
+.boot-line {
+  animation: bootLineIn 240ms ease both;
+}
+
+.integrity-orbit__outer {
+  animation: spinSlow 18s linear infinite;
+}
+
+.integrity-orbit__middle {
+  animation: spinReverse 26s linear infinite;
+}
+
+.integrity-orbit__core {
+  animation: spinSlow 8s linear infinite;
+}
+
+.aria-core::before {
+  animation: ariaPulse 2.6s ease-in-out infinite;
+}
+
+.live-indicator i,
+.start-button__signal,
+.operator-badge__dot {
+  animation: pulseSoft 2.1s ease-in-out infinite;
+}
+
+.desktop.desktop--visible {
+  animation: desktopReveal 700ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.system-card,
+.activity-panel {
+  animation: panelReveal 520ms ease both;
+}
+
+.system-card:nth-child(2) { animation-delay: 60ms; }
+.system-card:nth-child(3) { animation-delay: 110ms; }
+.system-card:nth-child(4) { animation-delay: 160ms; }
+.activity-panel { animation-delay: 210ms; }
+
+.startup-screen.startup-screen--leaving {
+  animation: startupExit 600ms cubic-bezier(.4, 0, .2, 1) forwards;
+}
+
+.startup-screen.startup-screen--booting .startup-frame::after {
+  animation: pulseSoft 1.2s ease-in-out infinite;
+}
