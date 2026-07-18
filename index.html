@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Proyecto CRIOS — CRIOS OS v1.22</title>
+<title>Proyecto CRIOS — CRIOS OS v1.25</title>
 <link rel="stylesheet" href="css/crios.css">
 </head>
 <body>
@@ -24,7 +24,7 @@
   <button id="audioControl" class="system-control" onclick="toggleAmbientAudio(event)">SILENCIAR MÚSICA</button>
   <button id="fullscreenControl" class="system-control" onclick="toggleFullscreen(event)">PANTALLA COMPLETA</button>
 </div>
-<div class="version-mark">CRIOS OS · v1.22</div>
+<div class="version-mark">CRIOS OS · v1.23</div>
 <div id="toast" class="toast"></div>
 
 <section id="intro" class="screen active">
@@ -249,18 +249,39 @@
     <div id="missionWelcome" class="hidden">
       <h3 style="margin-top:24px;color:var(--ok)">Identidad confirmada: <span data-user-name>equipo</span></h3>
       <p class="subtitle">Grupo: <strong id="confirmedGroup">—</strong></p>
-      <p class="subtitle">Las cuatro misiones pueden realizarse en cualquier orden.</p>
+      <p class="subtitle">Seleccioná el recorrido operativo que querés iniciar.</p>
       <div class="actions">
-        <button class="btn" onclick="go('map')">Inicializar mapa operativo</button>
+        <button class="btn" onclick="abrirSelectorCampanas()">Seleccionar campaña</button>
         <button class="btn secondary" onclick="resetProgress()">Nueva sesión / cambiar identidad</button>
       </div>
     </div>
   </div>
 </section>
 
+<section id="campanas" class="screen">
+  <div class="topbar">
+    <div><div class="brand">CRIOS OS · ARCHIVO DE CAMPAÑAS</div><h2>Seleccione un recorrido</h2></div>
+    <div class="status"><span class="pill" id="campaignCount">0 campañas</span></div>
+  </div>
+  <div class="campaign-layout">
+    <div class="campaign-intro panel">
+      <div class="brand">A.R.I.A. · DIRECTORIO PEDAGÓGICO</div>
+      <h1>Campañas disponibles</h1>
+      <p class="subtitle">Cada campaña reúne misiones de una materia y un tema determinados. El progreso se guarda de forma independiente.</p>
+      <div id="campaignList" class="campaign-list"></div>
+      <div class="actions"><button class="btn secondary" onclick="go('reveal')">Volver a identidad</button></div>
+    </div>
+    <aside class="campaign-detail panel" id="campaignDetail">
+      <div class="brand">INFORMACIÓN DEL RECORRIDO</div>
+      <h2>Seleccione una campaña</h2>
+      <p class="subtitle">A.R.I.A. mostrará aquí su clasificación, cantidad de misiones y progreso guardado.</p>
+    </aside>
+  </div>
+</section>
+
 <section id="map" class="screen">
   <div class="topbar">
-    <div><div class="brand">COMPLEJO CRIOS · MAPA OPERATIVO</div><h2>Seleccione un módulo</h2></div>
+    <div><div class="brand">COMPLEJO CRIOS · MAPA OPERATIVO</div><h2 id="mapCampaignTitle">Seleccione un módulo</h2><div class="small" id="mapCampaignClass"></div></div>
     <div class="status"><span class="pill">Módulos recuperados: <strong id="doneCount">0/4</strong></span></div>
   </div>
   <div class="map-wrap">
@@ -288,6 +309,7 @@
       <div class="mini-list" id="missionStatusList"></div>
       <div class="actions">
         <button class="btn" id="finalBtn" onclick="go('final')" disabled>Ejecutar protocolo final</button>
+        <button class="btn secondary" onclick="abrirSelectorCampanas()">Cambiar campaña</button>
         <button class="btn secondary" onclick="resetProgress()">Nueva sesión / cambiar identidad</button>
       </div>
       <p class="small">El progreso se guarda automáticamente en este dispositivo.</p>
@@ -347,7 +369,14 @@
 </section>
 </div>
 
-<script src="js/missions.js"></script>
+<script src="js/config.js"></script>
+<script src="js/datos/taxonomia.js"></script>
+<script src="js/datos/campanas.js"></script>
+<script src="js/nucleo/registro-misiones.js"></script>
+<script src="js/misiones/matematica/geometria/areas/centro-energia.js"></script>
+<script src="js/misiones/matematica/geometria/areas/invernadero.js"></script>
+<script src="js/misiones/matematica/geometria/areas/banco-hielo.js"></script>
+<script src="js/misiones/matematica/geometria/areas/hangar-perforacion.js"></script>
 <script src="js/crios.js"></script>
 </body>
 </html>

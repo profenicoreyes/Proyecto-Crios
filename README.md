@@ -1,32 +1,28 @@
-# CRIOS OS v1.22 — versión refactorizada
+# CRIOS OS v1.25
 
-Esta versión conserva la experiencia del juego y separa el proyecto en tres partes:
+Aplicación educativa inmersiva organizada mediante misiones y campañas.
 
-- `index.html`: estructura general y pantallas narrativas.
-- `css/crios.css`: todo el diseño visual.
-- `js/crios.js`: motor, sesiones, navegación, audio, registro y validaciones.
-- `js/missions.js`: catálogo completo de misiones.
+## Versión actual
 
-## Cambiar una misión
+La Fase 3A incorpora:
 
-Abrí `js/missions.js`, buscá su identificador (`energy`, `greenhouse`, `ice` o `hangar`) y editá:
+- selector de campañas;
+- clasificación visible por materia, tema y contenido;
+- progreso independiente para cada campaña;
+- selección dinámica de las misiones del mapa;
+- registro de la campaña en los datos de sesión;
+- compatibilidad con el progreso anterior.
 
-- textos y nombre;
-- generación de datos;
-- resultado esperado;
-- datos obligatorios del procedimiento;
-- pista;
-- dibujo SVG.
+La campaña publicada actualmente es **Reactivación de la base antártica**, clasificada en:
 
-## Agregar una misión
+**Matemática → Geometría → Cálculo de áreas**
 
-1. Copiá uno de los objetos dentro de `MISSION_DEFINITIONS`.
-2. Cambiá el identificador y sus propiedades.
-3. Asignale una posición con `mapClass`.
-4. El motor crea automáticamente la pantalla, el botón del mapa, el indicador de progreso, el registro y su participación en el cálculo final.
+## Publicación en GitHub Pages
 
-No hace falta modificar `index.html` ni las funciones generales de validación.
+Subir el contenido de esta carpeta a la raíz del repositorio. `index.html` debe quedar en la raíz.
 
-## Regla de mantenimiento
+## Documentación
 
-Los detalles pedagógicos pertenecen a `missions.js`. La lógica común pertenece a `crios.js`. Evitá volver a copiar pantallas completas para crear una misión.
+- `AUDITORIA_FASE_1.md`
+- `FASE_2_CATALOGO_Y_CAMPANAS.md`
+- `FASE_3A_SELECTOR_DE_CAMPANAS.md`

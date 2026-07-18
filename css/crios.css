@@ -453,3 +453,23 @@
     .archive-screen--climate .archive .actions{padding-top:8px!important}
     .archive-screen--climate .data-card{padding:9px!important}
   }
+
+/* Fase 3A — Selector de campañas */
+.campaign-layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,.85fr);gap:22px;padding:22px;height:calc(100% - 92px)}
+.campaign-intro,.campaign-detail{padding:28px;overflow:auto}
+.campaign-list{display:grid;gap:14px;margin-top:22px}
+.campaign-card{width:100%;text-align:left;border:1px solid rgba(86,201,239,.25);background:linear-gradient(135deg,rgba(12,42,60,.92),rgba(5,22,35,.95));border-radius:16px;padding:18px;color:var(--text);cursor:pointer;transition:.2s transform,.2s border-color,.2s box-shadow}
+.campaign-card:hover,.campaign-card.selected{transform:translateY(-2px);border-color:var(--cyan);box-shadow:0 0 24px rgba(86,201,239,.16)}
+.campaign-card.locked{opacity:.52;cursor:not-allowed;transform:none}
+.campaign-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.campaign-card h3{margin:0 0 6px;color:#d9f7ff;font-size:1.2rem}
+.campaign-card p{margin:0;color:var(--muted)}
+.campaign-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
+.campaign-tag{border:1px solid rgba(86,201,239,.22);border-radius:999px;padding:5px 9px;font-size:.76rem;color:#a9dbea;background:rgba(8,30,44,.72)}
+.campaign-progress{margin-top:14px;font-size:.82rem;color:var(--muted)}
+.campaign-progress-track{height:6px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-top:7px}
+.campaign-progress-fill{height:100%;background:var(--cyan);transform-origin:left;transition:transform .25s ease}
+.campaign-detail .detail-grid{display:grid;gap:12px;margin:20px 0}
+.campaign-detail .detail-row{padding:12px;border-left:2px solid rgba(86,201,239,.45);background:rgba(7,27,42,.58)}
+.campaign-detail .detail-row span{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+@media(max-width:900px){.campaign-layout{grid-template-columns:1fr}.campaign-detail{display:none}}
