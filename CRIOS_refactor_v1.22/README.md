@@ -30,3 +30,24 @@ No hace falta modificar `index.html` ni las funciones generales de validación.
 ## Regla de mantenimiento
 
 Los detalles pedagógicos pertenecen a `missions.js`. La lógica común pertenece a `crios.js`. Evitá volver a copiar pantallas completas para crear una misión.
+# CRIOS OS
+
+Sistema inmersivo para la enseñanza de Física mediante misiones interactivas.
+
+## Características
+
+- Historia narrativa
+- IA A.R.I.A.
+- Misiones modulares
+- Registro de resultados
+- Integración con Google Sheets
+
+## Tecnologías
+
+- HTML
+- CSS
+- JavaScript
+
+## Estado
+
+Versión 2.0.0
