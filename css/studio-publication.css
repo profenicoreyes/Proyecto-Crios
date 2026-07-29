@@ -1,0 +1,173 @@
+/* CRIOS Studio Publication panel styles */
+#studioPublicationPanel.studio-publication-panel {
+  margin-top: 1rem;
+  border: 1px solid rgba(122, 196, 255, 0.3);
+  border-radius: 10px;
+  padding: 0.9rem;
+  background: rgba(8, 21, 36, 0.58);
+}
+
+#studioPublicationPanel .studio-publication-title {
+  margin: 0 0 0.55rem 0;
+  font-size: 1rem;
+}
+
+#studioPublicationPanel .studio-publication-status,
+#studioPublicationPanel .studio-publication-revision {
+  font-size: 0.86rem;
+  margin: 0.2rem 0;
+  color: #d0e9ff;
+}
+
+#studioPublicationPanel .studio-publication-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.65rem 0 0.7rem;
+}
+
+#studioPublicationPanel .studio-publication-validation-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+#studioPublicationPanel .studio-publication-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border: 1px solid rgba(120, 175, 214, 0.25);
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  background: rgba(3, 14, 28, 0.5);
+  font-size: 0.8rem;
+}
+
+#studioPublicationPanel .studio-publication-key {
+  color: #9dc8ea;
+}
+
+#studioPublicationPanel .studio-publication-value {
+  color: #f6fbff;
+  word-break: break-word;
+  text-align: right;
+}
+
+#studioPublicationPanel .studio-publication-issues,
+#studioPublicationPanel .studio-publication-history,
+#studioPublicationPanel .studio-publication-activation-history {
+  list-style: none;
+  padding: 0;
+  margin: 0.45rem 0;
+}
+
+#studioPublicationPanel .studio-publication-issue,
+#studioPublicationPanel .studio-publication-history-item,
+#studioPublicationPanel .studio-publication-history-empty {
+  border: 1px solid rgba(120, 175, 214, 0.22);
+  border-radius: 8px;
+  padding: 0.42rem 0.5rem;
+  margin-bottom: 0.36rem;
+  font-size: 0.8rem;
+  background: rgba(3, 14, 28, 0.44);
+  color: #e8f5ff;
+}
+
+#studioPublicationPanel .studio-publication-history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+#studioPublicationPanel .studio-publication-history-text {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#studioPublicationPanel .studio-publication-active-badge {
+  border: 1px solid rgba(70, 220, 155, 0.72);
+  border-radius: 8px;
+  padding: 0.2rem 0.45rem;
+  color: #bfffe1;
+  background: rgba(20, 80, 57, 0.5);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+#studioPublicationPanel .studio-publication-entry-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+#studioPublicationPanel #studioActivationDeactivateButton {
+  margin: 0 0 0.55rem;
+}
+
+#studioPublicationPanel .studio-publication-issue-error {
+  border-color: rgba(255, 94, 94, 0.62);
+  background: rgba(70, 16, 16, 0.35);
+}
+
+#studioPublicationPanel .studio-publication-issue-warning {
+  border-color: rgba(255, 197, 76, 0.62);
+  background: rgba(64, 44, 14, 0.35);
+}
+
+#studioPublicationPanel .studio-publication-issue-info {
+  border-color: rgba(91, 168, 255, 0.62);
+  background: rgba(13, 37, 66, 0.35);
+}
+
+#studioPublicationPanel .studio-publication-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+  margin: 0.5rem 0 0.6rem;
+}
+
+#studioPublicationPanel .studio-publication-history-title {
+  margin: 0.45rem 0 0.3rem;
+  font-size: 0.92rem;
+}
+
+#studioPublicationPanel .studio-publication-memory-notice {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  color: #8fbcdd;
+}
+
+#studioPublicationPanel .studio-persistence-warning {
+  color: #ffd68a;
+}
+
+#studioPublicationPanel .studio-persistence-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.5rem 0;
+  color: #d0e9ff;
+  font-size: 0.8rem;
+}
+
+#studioPublicationPanel .studio-persistence-consent input {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+#studioPublicationPanel #studioPersistenceClearButton {
+  margin-bottom: 0.35rem;
+}
+
+@media (max-width: 860px) {
+  #studioPublicationPanel .studio-publication-validation-summary {
+    grid-template-columns: 1fr;
+  }
+
+  #studioPublicationPanel .studio-publication-actions {
+    flex-direction: column;
+  }
+}

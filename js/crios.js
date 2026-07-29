@@ -4,8 +4,17 @@
 let campanaActiva = null;
 let misionesActivas = [];
 let missionIds = [];
+const runtimeCampaignMode = CRIOS_CONFIG.runtimeCampaignMode;
+const runtimeCampaignModeValid = runtimeCampaignMode === 'legacy' || runtimeCampaignMode === 'published';
+let preparedRuntimeCampaign = null;
 
 function obtenerMision(id) {
+  if (runtimeCampaignMode === 'published') {
+    const bridge = preparedRuntimeCampaign && preparedRuntimeCampaign.bridge;
+    const misionPublicada = bridge && bridge.missionById ? bridge.missionById[id] : null;
+    if (!misionPublicada) throw new Error(`No existe una misión publicada preparada con el id: ${id}`);
+    return misionPublicada;
+  }
   const mision = REGISTRO_MISIONES.obtener(id);
   if (!mision) throw new Error(`No existe una misión registrada con el id: ${id}`);
   return mision;
@@ -13,6 +22,497 @@ function obtenerMision(id) {
 const CRIOS_VERSION = CRIOS_CONFIG.version;
 const RESULTS_ENDPOINT = CRIOS_CONFIG.resultsEndpoint;
 const STORAGE = CRIOS_CONFIG.storage;
+const DOMAIN_SCRIPT_PATHS = [
+  'js/release/release-model.js',
+  'js/release/release-validator.js',
+  'js/release/release-factory.js',
+  'js/session/session-model.js',
+  'js/session/session-validator.js',
+  'js/session/session-factory.js',
+  'js/player-state/player-state-validator.js',
+  'js/player-state/player-state-service.js',
+  'js/runtime/runtime-core.js',
+  'js/navigation/navigation-core.js',
+  'js/runtime/bootstrap/runtime-bootstrap-adapter.js'
+];
+
+let domainModulesPromise = null;
+let domainReady = false;
+let domainRelease = null;
+let domainSession = null;
+let domainRuntime = null;
+let domainNavigation = null;
+
+function getTracer() {
+  try {
+    const tracer = window.CRIOS_TRACE;
+    if (!tracer) return null;
+    if (typeof tracer.isRecording !== 'function') return null;
+    if (typeof tracer.emit !== 'function') return null;
+    return tracer;
+  } catch (error) {
+    return null;
+  }
+}
+
+function isTraceRecording() {
+  try {
+    const tracer = getTracer();
+    return Boolean(tracer && tracer.isRecording());
+  } catch (error) {
+    return false;
+  }
+}
+
+function traceEvent(eventType, payloadOrFactory) {
+  try {
+    const tracer = getTracer();
+    if (!tracer) return false;
+    if (!isTraceRecording()) return false;
+
+    let payload = payloadOrFactory;
+    if (typeof payloadOrFactory === 'function') {
+      payload = payloadOrFactory();
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      payload = {};
+    }
+
+    if (payload.sourceFile === undefined || payload.sourceFile === null) {
+      payload.sourceFile = 'js/crios.js';
+    }
+
+    return tracer.emit(eventType, payload);
+  } catch (error) {
+    return false;
+  }
+}
+
+function traceErrorData(error) {
+  return {
+    name: error && error.name ? String(error.name) : 'Error',
+    message: error && error.message ? String(error.message) : String(error || 'unknown')
+  };
+}
+
+function captureMissionTraceSnapshot() {
+  return {
+    sessionMissionIndex: domainSession && Number.isInteger(domainSession.currentMissionIndex)
+      ? domainSession.currentMissionIndex
+      : null,
+    sessionMissionId: domainSession && domainSession.progress
+      ? domainSession.progress.currentMissionId || null
+      : null,
+    runtimeMissionId: domainRuntime && domainRuntime.mission
+      ? domainRuntime.mission.id || null
+      : null,
+    navigationMissionId: domainNavigation
+      ? domainNavigation.currentMissionId || null
+      : null
+  };
+}
+
+function captureVisibleTraceSnapshot() {
+  const activeScreen = document.querySelector('.screen.active');
+  return {
+    currentScreen: currentScreen,
+    activeScreenId: activeScreen ? activeScreen.id : null,
+    routePath: window.location ? window.location.pathname : null,
+    routeHash: window.location ? window.location.hash : null,
+    dedicatedGameOverScreen: Boolean(document.getElementById('gameOver'))
+  };
+}
+
+function traceReturnEarly(scope, reason, details) {
+  traceEvent('flow:return-early', {
+    scope: scope,
+    reason: reason,
+    details: details || null
+  });
+}
+
+function traceAsyncScheduled(scope, kind, details) {
+  traceEvent('async:scheduled', {
+    scope: scope,
+    kind: kind,
+    details: details || null
+  });
+}
+
+function traceAsyncResolved(scope, kind, details) {
+  traceEvent('async:resolved', {
+    scope: scope,
+    kind: kind,
+    details: details || null
+  });
+}
+
+function traceAsyncRejected(scope, kind, error) {
+  traceEvent('async:rejected', {
+    scope: scope,
+    kind: kind,
+    error: traceErrorData(error)
+  });
+}
+
+function registerDomainModule(name, contract) {
+  window.CRIOS_DOMAIN = window.CRIOS_DOMAIN || {};
+  window.CRIOS_DOMAIN[name] = contract;
+}
+
+function loadDomainScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-crios-domain="' + src + '"]');
+    if (existing) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.dataset.criosDomain = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No se pudo cargar módulo de dominio: ' + src));
+    document.head.appendChild(script);
+  });
+}
+
+function ensureDomainModulesLoaded() {
+  if (domainModulesPromise) {
+    traceReturnEarly('ensureDomainModulesLoaded', 'already-scheduled', null);
+    return domainModulesPromise;
+  }
+
+  window.__CRIOS_REGISTER_DOMAIN_MODULE__ = registerDomainModule;
+  traceAsyncScheduled('ensureDomainModulesLoaded', 'domain-script-chain', {
+    scripts: DOMAIN_SCRIPT_PATHS.slice()
+  });
+  domainModulesPromise = DOMAIN_SCRIPT_PATHS.reduce(
+    (chain, src) => chain.then(() => loadDomainScript(src)),
+    Promise.resolve()
+  ).then((value) => {
+    traceAsyncResolved('ensureDomainModulesLoaded', 'domain-script-chain', {
+      scripts: DOMAIN_SCRIPT_PATHS.length
+    });
+    return value;
+  }).catch((error) => {
+    traceAsyncRejected('ensureDomainModulesLoaded', 'domain-script-chain', error);
+    throw error;
+  }).finally(() => {
+    delete window.__CRIOS_REGISTER_DOMAIN_MODULE__;
+  });
+
+  return domainModulesPromise;
+}
+
+function getDomainContract(ownerKey, contractKey) {
+  const domain = window.CRIOS_DOMAIN || {};
+  const owner = domain[ownerKey];
+  const contract = owner && owner[contractKey];
+  return typeof contract === 'function' ? contract : null;
+}
+
+function buildCampaignDraftForRelease(campaign) {
+  return {
+    id: null,
+    nombre: String(campaign.titulo || '').trim(),
+    descripcion: String(campaign.descripcion || '').trim(),
+    escenario: 'antartida',
+    estado: 'draft',
+    version: 1,
+    misiones: runtimeCampaignMode === 'published'
+      ? misionesActivas.slice()
+      : REGISTRO_MISIONES.obtenerPorCampana(campaign)
+  };
+}
+
+function rebuildDomainStateForActiveCampaign() {
+  if (!domainReady || !campanaActiva) {
+    traceReturnEarly('rebuildDomainStateForActiveCampaign', 'domain-not-ready-or-no-campaign', {
+      domainReady: domainReady,
+      hasCampaign: Boolean(campanaActiva)
+    });
+    return false;
+  }
+
+  if (runtimeCampaignMode === 'published' && !preparedRuntimeCampaign) {
+    traceReturnEarly('rebuildDomainStateForActiveCampaign', 'published-campaign-not-prepared', {
+      hasPreparedRuntimeCampaign: false,
+      activeMissionCount: Array.isArray(misionesActivas) ? misionesActivas.length : null,
+      activeMissionIdCount: Array.isArray(missionIds) ? missionIds.length : null
+    });
+    return false;
+  }
+
+  const createCampaignRelease = getDomainContract('releaseFactory', 'createCampaignRelease');
+  const createStudentSession = getDomainContract('sessionFactory', 'createStudentSession');
+  const createRuntime = getDomainContract('runtimeCore', 'createRuntime');
+  const createNavigation = getDomainContract('navigationCore', 'createNavigation');
+  const safeClone = getDomainContract('releaseModel', 'safeClone');
+
+  if (!createCampaignRelease || !createStudentSession || !createRuntime || !createNavigation || !safeClone) {
+    traceReturnEarly('rebuildDomainStateForActiveCampaign', 'domain-contract-missing', null);
+    return false;
+  }
+
+  try {
+    const draftSnapshot = buildCampaignDraftForRelease(campanaActiva);
+    domainRelease = createCampaignRelease(draftSnapshot);
+    const frozenSession = createStudentSession(domainRelease);
+    domainSession = safeClone(frozenSession);
+    domainRuntime = createRuntime(domainRelease, domainSession);
+    domainNavigation = createNavigation(domainRuntime, domainRelease);
+    return true;
+  } catch (error) {
+    traceEvent('error:caught', {
+      scope: 'rebuildDomainStateForActiveCampaign',
+      error: traceErrorData(error)
+    });
+    console.warn('[CRIOS] No se pudo reconstruir el dominio de campaña:', error);
+    domainRelease = null;
+    domainSession = null;
+    domainRuntime = null;
+    domainNavigation = null;
+    return false;
+  }
+}
+
+function syncDomainMissionById(missionId) {
+  if (!domainSession || !Array.isArray(missionIds)) {
+    traceReturnEarly('syncDomainMissionById', 'domain-session-or-mission-list-missing', {
+      missionId: missionId
+    });
+    return missionId;
+  }
+
+  const index = missionIds.indexOf(missionId);
+  if (index < 0) {
+    traceReturnEarly('syncDomainMissionById', 'mission-id-not-found', {
+      missionId: missionId
+    });
+    return missionId;
+  }
+
+  const before = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  traceEvent('domain:mission-sync:before', () => ({
+    missionId: missionId,
+    currentMissionIndexBefore: before.sessionMissionIndex,
+    currentMissionIdBefore: before.sessionMissionId,
+    metadata: before
+  }));
+  domainSession.currentMissionIndex = index;
+  domainSession.progress.currentMissionId = missionIds[index];
+  const after = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  traceEvent('domain:mission-sync:after', () => ({
+    missionId: missionIds[index],
+    currentMissionIndexBefore: before.sessionMissionIndex,
+    currentMissionIndexAfter: after.sessionMissionIndex,
+    currentMissionIdBefore: before.sessionMissionId,
+    currentMissionIdAfter: after.sessionMissionId,
+    metadata: after
+  }));
+  return missionIds[index];
+}
+
+function refreshDomainRuntimeAndNavigation() {
+  if (!domainReady || !domainRelease || !domainSession) {
+    traceReturnEarly('refreshDomainRuntimeAndNavigation', 'domain-state-incomplete', {
+      domainReady: domainReady,
+      hasRelease: Boolean(domainRelease),
+      hasSession: Boolean(domainSession)
+    });
+    return false;
+  }
+
+  const createRuntime = getDomainContract('runtimeCore', 'createRuntime');
+  const createNavigation = getDomainContract('navigationCore', 'createNavigation');
+  if (!createRuntime || !createNavigation) {
+    traceReturnEarly('refreshDomainRuntimeAndNavigation', 'runtime-or-navigation-contract-missing', null);
+    return false;
+  }
+
+  const before = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  traceEvent('domain:runtime-navigation-refresh:before', () => ({
+    missionId: before.sessionMissionId,
+    currentMissionIndexBefore: before.sessionMissionIndex,
+    currentMissionIdBefore: before.sessionMissionId,
+    metadata: before
+  }));
+  domainRuntime = createRuntime(domainRelease, domainSession);
+  domainNavigation = createNavigation(domainRuntime, domainRelease);
+  const after = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  traceEvent('domain:runtime-navigation-refresh:after', () => ({
+    missionId: after.sessionMissionId,
+    currentMissionIndexBefore: before.sessionMissionIndex,
+    currentMissionIndexAfter: after.sessionMissionIndex,
+    currentMissionIdBefore: before.sessionMissionId,
+    currentMissionIdAfter: after.sessionMissionId,
+    metadata: after
+  }));
+  return true;
+}
+
+function resolveMissionIdUsingDomain(missionId) {
+  if (!domainReady || !domainSession) {
+    traceReturnEarly('resolveMissionIdUsingDomain', 'domain-not-ready-or-no-session', {
+      missionId: missionId
+    });
+    return missionId;
+  }
+
+  try {
+    const normalizedMissionId = syncDomainMissionById(missionId);
+    const refreshed = refreshDomainRuntimeAndNavigation();
+    if (!refreshed || !domainNavigation) return normalizedMissionId;
+    return domainNavigation.currentMissionId || normalizedMissionId;
+  } catch (error) {
+    traceEvent('error:caught', {
+      scope: 'resolveMissionIdUsingDomain',
+      error: traceErrorData(error)
+    });
+    console.warn('[CRIOS] No se pudo resolver misión con NavigationCore:', error);
+    return missionId;
+  }
+}
+
+function applyDomainEvaluationForMission(missionId, isCorrect) {
+  if (!domainReady || !domainSession) {
+    traceReturnEarly('applyDomainEvaluationForMission', 'domain-not-ready-or-no-session', {
+      missionId: missionId,
+      isCorrect: Boolean(isCorrect)
+    });
+    return;
+  }
+
+  const playerStateService = (window.CRIOS_DOMAIN || {}).playerStateService;
+  if (!playerStateService) {
+    traceReturnEarly('applyDomainEvaluationForMission', 'player-state-service-missing', {
+      missionId: missionId
+    });
+    return;
+  }
+
+  try {
+    const coherentMissionId = syncDomainMissionById(missionId);
+    const statusBefore = domainSession.status;
+    const livesBefore = domainSession.lives;
+    const gameOverBefore = statusBefore === 'gameOver';
+    const missionBefore = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+    const visibleBefore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+    traceEvent('player-state:evaluation:before', {
+      missionId: coherentMissionId,
+      evaluationBefore: { status: statusBefore, lives: livesBefore },
+      gameOverBefore: gameOverBefore,
+      currentMissionIndexBefore: missionBefore ? missionBefore.sessionMissionIndex : null,
+      currentMissionIdBefore: missionBefore ? missionBefore.sessionMissionId : null,
+      screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
+      visibleEffect: visibleBefore,
+      metadata: {
+        requestedMissionId: missionId,
+        isCorrect: Boolean(isCorrect),
+        statusBefore: statusBefore,
+        livesBefore: livesBefore,
+        runtimeMissionId: missionBefore ? missionBefore.runtimeMissionId : null,
+        navigationMissionId: missionBefore ? missionBefore.navigationMissionId : null
+      }
+    });
+    traceEvent('domain:evaluation:apply:before', {
+      missionId: coherentMissionId,
+      evaluationBefore: { status: statusBefore, lives: livesBefore },
+      gameOverBefore: gameOverBefore,
+      metadata: { isCorrect: Boolean(isCorrect) }
+    });
+    traceEvent('domain:integration:before', {
+      missionId: coherentMissionId,
+      evaluationBefore: { status: statusBefore, lives: livesBefore },
+      gameOverBefore: gameOverBefore,
+      currentMissionIndexBefore: missionBefore ? missionBefore.sessionMissionIndex : null,
+      currentMissionIdBefore: missionBefore ? missionBefore.sessionMissionId : null,
+      screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
+      metadata: missionBefore
+    });
+
+    playerStateService.applyEvaluation(domainSession, {
+      missionId: coherentMissionId,
+      isCorrect: Boolean(isCorrect)
+    });
+
+    const statusAfterEvaluation = domainSession.status;
+    const livesAfterEvaluation = domainSession.lives;
+    const gameOverAfterEvaluation = statusAfterEvaluation === 'gameOver';
+    traceEvent('domain:evaluation:apply:after', {
+      missionId: coherentMissionId,
+      evaluationBefore: { status: statusBefore, lives: livesBefore },
+      evaluationAfter: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
+      gameOverBefore: gameOverBefore,
+      gameOverAfter: gameOverAfterEvaluation,
+      metadata: { isCorrect: Boolean(isCorrect) }
+    });
+
+    if (domainSession.status === 'gameOver') {
+      traceEvent('gameOver:entered', {
+        missionId: coherentMissionId,
+        evaluationBefore: { status: statusBefore, lives: livesBefore },
+        evaluationAfter: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
+        gameOverBefore: gameOverBefore,
+        gameOverAfter: gameOverAfterEvaluation,
+        screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
+        screenAfter: visibleBefore ? visibleBefore.currentScreen : null,
+        visibleEffect: visibleBefore,
+        metadata: { statusAfter: statusAfterEvaluation, livesAfter: livesAfterEvaluation }
+      });
+    }
+
+    if (!playerStateService.canContinue(domainSession)) {
+      playerStateService.restorePlayerState(domainSession);
+      const visibleAfterRestore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+      traceEvent('gameOver:restored', {
+        missionId: coherentMissionId,
+        evaluationBefore: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
+        evaluationAfter: { status: domainSession.status, lives: domainSession.lives },
+        gameOverBefore: gameOverAfterEvaluation,
+        gameOverAfter: domainSession.status === 'gameOver',
+        screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
+        screenAfter: visibleAfterRestore ? visibleAfterRestore.currentScreen : null,
+        visibleEffect: visibleAfterRestore,
+        metadata: { restoredStatus: domainSession.status, restoredLives: domainSession.lives }
+      });
+    }
+
+    const refreshed = refreshDomainRuntimeAndNavigation();
+    const missionAfter = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+    const visibleAfter = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+    traceEvent('domain:integration:after', {
+      missionId: coherentMissionId,
+      evaluationBefore: { status: statusBefore, lives: livesBefore },
+      evaluationAfter: { status: domainSession.status, lives: domainSession.lives },
+      gameOverBefore: gameOverBefore,
+      gameOverAfter: domainSession.status === 'gameOver',
+      currentMissionIndexBefore: missionBefore ? missionBefore.sessionMissionIndex : null,
+      currentMissionIndexAfter: missionAfter ? missionAfter.sessionMissionIndex : null,
+      currentMissionIdBefore: missionBefore ? missionBefore.sessionMissionId : null,
+      currentMissionIdAfter: missionAfter ? missionAfter.sessionMissionId : null,
+      screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
+      screenAfter: visibleAfter ? visibleAfter.currentScreen : null,
+      visibleEffect: visibleAfter,
+      metadata: {
+        refreshed: refreshed,
+        statusAfter: domainSession.status,
+        livesAfter: domainSession.lives,
+        runtimeMissionId: missionAfter ? missionAfter.runtimeMissionId : null,
+        navigationMissionId: missionAfter ? missionAfter.navigationMissionId : null
+      }
+    });
+  } catch (error) {
+    traceEvent('error:caught', {
+      scope: 'applyDomainEvaluationForMission',
+      error: traceErrorData(error)
+    });
+    console.warn('[CRIOS] No se pudo aplicar PlayerState:', error);
+  }
+}
 
 function readJson(storage, key, fallback) {
   try {
@@ -25,10 +525,31 @@ function readJson(storage, key, fallback) {
 }
 
 function writeJson(storage, key, value) {
+  const storageName = storage === localStorage ? 'localStorage' : (storage === sessionStorage ? 'sessionStorage' : 'unknown');
+  traceEvent('persistence:before', {
+    storage: storageName,
+    key: key,
+    hasValue: value !== undefined
+  });
   try {
     storage.setItem(key, JSON.stringify(value));
+    traceEvent('persistence:after', {
+      storage: storageName,
+      key: key,
+      success: true
+    });
     return true;
   } catch (error) {
+    traceEvent('persistence:after', {
+      storage: storageName,
+      key: key,
+      success: false,
+      error: traceErrorData(error)
+    });
+    traceEvent('error:caught', {
+      scope: 'writeJson',
+      error: traceErrorData(error)
+    });
     console.warn('[CRIOS] No se pudo guardar el almacenamiento:', key, error);
     return false;
   }
@@ -40,7 +561,19 @@ const progresoAnterior = readJson(sessionStorage, STORAGE.progress, {});
 let progress = {};
 let missionData = {};
 
+function activeProgressKey() {
+  if (runtimeCampaignMode !== 'published') return campanaActiva.id;
+  const sessionId = sessionData && typeof sessionData.idSesion === 'string'
+    ? sessionData.idSesion.trim()
+    : '';
+  if (!preparedRuntimeCampaign || !sessionId) {
+    throw new Error('La sesión published no tiene una identidad opaca válida para el progreso.');
+  }
+  return `${preparedRuntimeCampaign.data.progressKey}@${sessionId}`;
+}
+
 function establecerCampanaActiva(id, { navegar = false } = {}) {
+  if (runtimeCampaignMode === 'published') return false;
   const campana = obtenerCampanaPorId(id);
   if (!campana || campana.estado !== 'publicada') return false;
 
@@ -77,6 +610,7 @@ function establecerCampanaActiva(id, { navegar = false } = {}) {
   }
 
   setupMissionUI();
+  rebuildDomainStateForActiveCampaign();
   actualizarCabeceraCampana();
   updateMap();
   renderCampaignSelector();
@@ -90,6 +624,15 @@ function inicializarCampana() {
     ? solicitada
     : obtenerCampanaPorId(CAMPANA_INICIAL_ID) || listarCampanas().find((c) => c.estado === 'publicada');
   if (!inicial) throw new Error('CRIOS no tiene campañas publicadas.');
+
+  if (runtimeCampaignMode !== 'legacy') {
+    campanaActiva = inicial;
+    campanaActivaId = inicial.id;
+    misionesActivas = [];
+    missionIds = [];
+    progress = {};
+    return;
+  }
 
   if (!progresosCampanas[inicial.id] && Object.keys(progresoAnterior).length) {
     progresosCampanas[inicial.id] = { ...progresoAnterior };
@@ -122,22 +665,61 @@ function persistSession(){
   if(sessionData) writeJson(sessionStorage, STORAGE.sessionData, sessionData);
 }
 function startSession(realName,characterName,groupName){
+  traceEvent('session:create:before', {
+    hasSessionData: Boolean(sessionData),
+    missionCount: missionIds.length,
+    campaignId: campanaActiva ? campanaActiva.id : null
+  });
+  const campaignIdentity=runtimeCampaignMode==='published'
+    ? {...preparedRuntimeCampaign.data.campaign}
+    : {id:campanaActiva.id,titulo:campanaActiva.titulo,clasificacion:campanaActiva.clasificacion};
   sessionData={
     idSesion:createSessionId(),nombre:realName,personaje:characterName,grupo:groupName,version:CRIOS_VERSION,
     inicioISO:new Date().toISOString(),inicioMs:Date.now(),finISO:null,
     variante:variantIdFor(characterName),pantallas:[],misiones:{},final:{procedureAttempts:0,attempts:0},
     enviada:false,
-    campana:{id:campanaActiva.id,titulo:campanaActiva.titulo,clasificacion:campanaActiva.clasificacion}
+    campana:campaignIdentity
   };
-  missionIds.forEach(id=>sessionData.misiones[id]={procedure:'',answer:'',procedureCorrect:false,answerCorrect:false});
+  missionIds.forEach((id,index)=>{
+    const trace=runtimeCampaignMode==='published'?preparedRuntimeCampaign.data.missions[index]:null;
+    sessionData.misiones[id]={procedure:'',answer:'',procedureCorrect:false,answerCorrect:false};
+    if(trace) Object.assign(sessionData.misiones[id],{missionId:id,position:index,handlerId:trace.handlerId,handlerVersion:trace.handlerVersion,publicationId:trace.publicationId,contentHash:trace.contentHash});
+  });
   sessionStats={};progress={};hintRegistered={};missionOpenedAt={};
+  rebuildDomainStateForActiveCampaign();
+  if(runtimeCampaignMode==='published'){
+    progresosCampanas[activeProgressKey()]={};
+    writeJson(sessionStorage, STORAGE.campaignProgress, progresosCampanas);
+  }
   writeJson(sessionStorage, STORAGE.progress, {});
   persistStats();persistSession();
+  if(runtimeCampaignMode==='published'){
+    traceEvent('bootstrap-runtime:session-pinned',{mode:'published',campaignId:campaignIdentity.campaignId,publicationId:campaignIdentity.publicationId,publicationVersion:campaignIdentity.publicationVersion,contentHash:campaignIdentity.contentHash,result:'pinned'});
+  }
+  traceEvent('session:create:after', {
+    hasSessionData: Boolean(sessionData),
+    sessionId: sessionData ? sessionData.idSesion : null,
+    missionCount: missionIds.length,
+    campaignId: sessionData && sessionData.campana ? sessionData.campana.id : null
+  });
 }
 function recordScreen(id){
   if(!sessionData) return;
   sessionData.pantallas.push({id,at:new Date().toISOString()});
-  if(sessionData.pantallas.length>80) sessionData.pantallas.shift();
+  if(sessionData.pantallas.length>80){
+    const removed = sessionData.pantallas[0] || null;
+    traceEvent('screen:history-trim:before', {
+      screenId: id,
+      lengthBeforeTrim: sessionData.pantallas.length,
+      removedCandidate: removed
+    });
+    const shifted = sessionData.pantallas.shift() || null;
+    traceEvent('screen:history-trim:after', {
+      screenId: id,
+      lengthAfterTrim: sessionData.pantallas.length,
+      removed: shifted
+    });
+  }
   persistSession();
   queueSessionUpdate();
 }
@@ -199,16 +781,37 @@ function buildPayload(finalized=false){
 }
 
 async function sendSessionUpdate(finalized=false){
-  if(!sessionData) return;
-  if(transmissionBusy){transmissionQueued=transmissionQueued||finalized;return;}
+  if(!sessionData){
+    traceReturnEarly('sendSessionUpdate', 'session-missing', { finalized: Boolean(finalized) });
+    return;
+  }
+  if(transmissionBusy){
+    transmissionQueued=transmissionQueued||finalized;
+    traceReturnEarly('sendSessionUpdate', 'transmission-busy', {
+      finalized: Boolean(finalized),
+      queued: Boolean(transmissionQueued)
+    });
+    return;
+  }
   transmissionBusy=true;
   const payload=buildPayload(finalized);
   const status=document.getElementById('sendStatus');
+  traceEvent('transmission:before', {
+    channel: 'fetch-update',
+    finalized: Boolean(finalized),
+    payloadState: payload && payload.respuestas ? payload.respuestas.estado : null
+  });
+  traceAsyncScheduled('sendSessionUpdate', 'fetch-update', {
+    finalized: Boolean(finalized)
+  });
   try{
     await fetch(RESULTS_ENDPOINT,{
       method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify(payload),keepalive:true
+    });
+    traceAsyncResolved('sendSessionUpdate', 'fetch-update', {
+      finalized: Boolean(finalized)
     });
     if(finalized){
       sessionData.finISO=payload.horaFin;
@@ -217,19 +820,49 @@ async function sendSessionUpdate(finalized=false){
       localStorage.removeItem(STORAGE.pendingResult);
       if(status) status.textContent='Registro transmitido.';
     }
+    traceEvent('transmission:after', {
+      channel: 'fetch-update',
+      finalized: Boolean(finalized),
+      outcome: 'resolved'
+    });
     persistSession();
   }catch(error){
+    traceAsyncRejected('sendSessionUpdate', 'fetch-update', error);
+    traceEvent('error:caught', {
+      scope: 'sendSessionUpdate',
+      error: traceErrorData(error)
+    });
     writeJson(localStorage, STORAGE.pendingResult, payload);
+    traceEvent('transmission:after', {
+      channel: 'fetch-update',
+      finalized: Boolean(finalized),
+      outcome: 'rejected'
+    });
     if(status) status.textContent='Transmisión pendiente. CRIOS volverá a intentarlo.';
   }finally{
     transmissionBusy=false;
-    if(transmissionQueued){const queuedFinal=transmissionQueued;transmissionQueued=false;sendSessionUpdate(queuedFinal);}
+    if(transmissionQueued){
+      const queuedFinal=transmissionQueued;
+      transmissionQueued=false;
+      traceAsyncScheduled('sendSessionUpdate', 'queued-flush', {
+        queuedFinal: Boolean(queuedFinal)
+      });
+      sendSessionUpdate(queuedFinal);
+    }
   }
 }
 
 function queueSessionUpdate(){
   clearTimeout(progressSendTimer);
-  progressSendTimer=setTimeout(() => sendSessionUpdate(false), CRIOS_CONFIG.progressSendDelayMs);
+  traceAsyncScheduled('queueSessionUpdate', 'setTimeout', {
+    delayMs: CRIOS_CONFIG.progressSendDelayMs
+  });
+  progressSendTimer=setTimeout(() => {
+    traceAsyncResolved('queueSessionUpdate', 'setTimeout', {
+      delayMs: CRIOS_CONFIG.progressSendDelayMs
+    });
+    sendSessionUpdate(false);
+  }, CRIOS_CONFIG.progressSendDelayMs);
 }
 
 async function transmitResults(){
@@ -241,29 +874,100 @@ async function transmitResults(){
 }
 
 function sendExitSnapshot(){
-  if(!sessionData||!RESULTS_ENDPOINT) return;
+  if(!sessionData||!RESULTS_ENDPOINT){
+    traceReturnEarly('sendExitSnapshot', 'session-or-endpoint-missing', {
+      hasSession: Boolean(sessionData),
+      hasEndpoint: Boolean(RESULTS_ENDPOINT)
+    });
+    return;
+  }
   const payload=buildPayload(Boolean(sessionData.finISO||sessionData.enviada));
   const raw=JSON.stringify(payload);
+  traceEvent('transmission:before', {
+    channel: 'exit-snapshot',
+    finalized: Boolean(sessionData.finISO||sessionData.enviada)
+  });
   try{
     if(navigator.sendBeacon){
       const blob=new Blob([raw],{type:'text/plain;charset=UTF-8'});
-      if(navigator.sendBeacon(RESULTS_ENDPOINT,blob)) return;
+      if(navigator.sendBeacon(RESULTS_ENDPOINT,blob)){
+        traceEvent('transmission:after', {
+          channel: 'exit-snapshot',
+          outcome: 'sendBeacon-accepted'
+        });
+        return;
+      }
     }
-  }catch(error){}
-  try{
-    fetch(RESULTS_ENDPOINT,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:raw,keepalive:true});
   }catch(error){
+    traceEvent('error:caught', {
+      scope: 'sendExitSnapshot.sendBeacon',
+      error: traceErrorData(error)
+    });
+  }
+  try{
+    traceAsyncScheduled('sendExitSnapshot', 'fetch-keepalive', null);
+    fetch(RESULTS_ENDPOINT,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:raw,keepalive:true});
+    traceEvent('transmission:after', {
+      channel: 'exit-snapshot',
+      outcome: 'fetch-dispatched'
+    });
+  }catch(error){
+    traceAsyncRejected('sendExitSnapshot', 'fetch-keepalive', error);
+    traceEvent('error:caught', {
+      scope: 'sendExitSnapshot.fetch',
+      error: traceErrorData(error)
+    });
+    traceEvent('persistence:before', {
+      storage: 'localStorage',
+      key: STORAGE.pendingResult,
+      hasValue: true
+    });
     localStorage.setItem(STORAGE.pendingResult, raw);
+    traceEvent('persistence:after', {
+      storage: 'localStorage',
+      key: STORAGE.pendingResult,
+      success: true
+    });
+    traceEvent('transmission:after', {
+      channel: 'exit-snapshot',
+      outcome: 'fetch-failed-persisted'
+    });
   }
 }
 
 async function retryPendingResult(){
   const raw = localStorage.getItem(STORAGE.pendingResult);
-  if(!raw||!navigator.onLine) return;
+  if(!raw||!navigator.onLine){
+    traceReturnEarly('retryPendingResult', 'no-pending-or-offline', {
+      hasPending: Boolean(raw),
+      online: Boolean(navigator.onLine)
+    });
+    return;
+  }
+  traceEvent('transmission:before', {
+    channel: 'retry-pending',
+    online: Boolean(navigator.onLine)
+  });
+  traceAsyncScheduled('retryPendingResult', 'fetch-retry', null);
   try{
     await fetch(RESULTS_ENDPOINT,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:raw,keepalive:true});
+    traceAsyncResolved('retryPendingResult', 'fetch-retry', null);
     localStorage.removeItem(STORAGE.pendingResult);
-  }catch(error){}
+    traceEvent('transmission:after', {
+      channel: 'retry-pending',
+      outcome: 'resolved'
+    });
+  }catch(error){
+    traceAsyncRejected('retryPendingResult', 'fetch-retry', error);
+    traceEvent('error:caught', {
+      scope: 'retryPendingResult',
+      error: traceErrorData(error)
+    });
+    traceEvent('transmission:after', {
+      channel: 'retry-pending',
+      outcome: 'rejected'
+    });
+  }
 }
 function renderEvaluationSummary(){
   if(!sessionData) return;
@@ -273,6 +977,14 @@ function renderEvaluationSummary(){
 }
 
 function go(id){
+  const screenBefore = currentScreen;
+  const visibleBefore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+  traceEvent('screen:render:before', {
+    screenBefore: screenBefore,
+    screenAfter: id,
+    visibleEffect: visibleBefore,
+    metadata: { requestedScreen: id }
+  });
   currentScreen=id;recordScreen(id);
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   const el=document.getElementById(id);
@@ -293,15 +1005,75 @@ function go(id){
     document.getElementById('missionLogin')?.classList.toggle('hidden',!!saved);
     document.getElementById('missionWelcome')?.classList.toggle('hidden',!saved);
   }
+  const active=document.querySelector('.screen.active');
+  const visibleAfter = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+  traceEvent('screen:render:after', {
+    screenBefore: screenBefore,
+    screenAfter: currentScreen,
+    visibleEffect: visibleAfter,
+    metadata: {
+      requestedScreen: id,
+      foundElement: Boolean(el),
+      activeScreen: active ? active.id : null
+    }
+  });
 }
 function openMission(id){
-  renderMission(id);
-  missionOpenedAt[id]=Date.now();
-  go('mission-'+id);
+  const missionBefore = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  const screenBefore = currentScreen;
+  traceEvent('mission:select:before', {
+    missionId: id,
+    currentMissionIndexBefore: missionBefore ? missionBefore.sessionMissionIndex : null,
+    currentMissionIdBefore: missionBefore ? missionBefore.sessionMissionId : null,
+    screenBefore: screenBefore,
+    metadata: missionBefore
+  });
+  const resolvedMissionId=resolveMissionIdUsingDomain(id);
+  const missionAfterSelection = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  traceEvent('mission:select:after', {
+    missionId: resolvedMissionId,
+    currentMissionIndexBefore: missionBefore ? missionBefore.sessionMissionIndex : null,
+    currentMissionIndexAfter: missionAfterSelection ? missionAfterSelection.sessionMissionIndex : null,
+    currentMissionIdBefore: missionBefore ? missionBefore.sessionMissionId : null,
+    currentMissionIdAfter: missionAfterSelection ? missionAfterSelection.sessionMissionId : null,
+    screenBefore: screenBefore,
+    screenAfter: currentScreen,
+    metadata: {
+      requestedMissionId: id,
+      runtimeMissionId: missionAfterSelection ? missionAfterSelection.runtimeMissionId : null,
+      navigationMissionId: missionAfterSelection ? missionAfterSelection.navigationMissionId : null
+    }
+  });
+  traceEvent('mission:open:before', {
+    missionId: resolvedMissionId,
+    currentMissionIndexBefore: missionAfterSelection ? missionAfterSelection.sessionMissionIndex : null,
+    currentMissionIdBefore: missionAfterSelection ? missionAfterSelection.sessionMissionId : null,
+    screenBefore: screenBefore,
+    metadata: missionAfterSelection
+  });
+  renderMission(resolvedMissionId);
+  missionOpenedAt[resolvedMissionId]=Date.now();
+  go('mission-'+resolvedMissionId);
+  const missionAfterOpen = isTraceRecording() ? captureMissionTraceSnapshot() : null;
+  const visibleAfterOpen = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+  traceEvent('mission:open:after', {
+    missionId: resolvedMissionId,
+    currentMissionIndexAfter: missionAfterOpen ? missionAfterOpen.sessionMissionIndex : null,
+    currentMissionIdAfter: missionAfterOpen ? missionAfterOpen.sessionMissionId : null,
+    screenBefore: screenBefore,
+    screenAfter: currentScreen,
+    visibleEffect: visibleAfterOpen,
+    metadata: {
+      missionOpenedAt: missionOpenedAt[resolvedMissionId],
+      runtimeMissionId: missionAfterOpen ? missionAfterOpen.runtimeMissionId : null,
+      navigationMissionId: missionAfterOpen ? missionAfterOpen.navigationMissionId : null,
+      targetScreen: 'mission-'+resolvedMissionId
+    }
+  });
 }
 function normalize(v){return Number(String(v).replace(',','.').replace(/[^\d.-]/g,''))}
 
-function save(){progresosCampanas[campanaActiva.id]={...progress};writeJson(sessionStorage, STORAGE.campaignProgress, progresosCampanas);writeJson(sessionStorage, STORAGE.progress, progress);updateMap();renderCampaignSelector();persistSession()}
+function save(){progresosCampanas[activeProgressKey()]={...progress};writeJson(sessionStorage, STORAGE.campaignProgress, progresosCampanas);writeJson(sessionStorage, STORAGE.progress, progress);updateMap();renderCampaignSelector();persistSession()}
 function updateMap(){
   let done=0;
   missionIds.forEach(id=>{
@@ -334,19 +1106,50 @@ function validateFinal(){
   const value=normalize(document.getElementById('finalAnswer').value);
   const fb=document.getElementById('finalFeedback');
   const expected=getFinalExpected();
+  traceEvent('evaluation:submit:before', {
+    scope: 'final',
+    expected: expected,
+    answerRaw: document.getElementById('finalAnswer').value
+  });
   if(sessionData){sessionData.final=sessionData.final||{};sessionData.final.attempts=(sessionData.final.attempts||0)+1;sessionData.final.answer=document.getElementById('finalAnswer').value;sessionData.final.expected=expected;}
   if(Math.abs(value-expected)<1e-9){
+    traceEvent('finalization:local:before', {
+      expected: expected,
+      answerValue: value
+    });
     if(sessionData) sessionData.final.answerCorrect=true;
     persistSession();
     fb.className='feedback show ok';
     fb.textContent='Coincidencia confirmada. Activando secuencia final…';
     document.getElementById('finalStatus').innerHTML='<div class="result">100 %</div><h2 style="color:var(--ok)">COMPLEJO ESTABLE</h2><p>Superficie controlada: '+expected+' m²</p>';
     document.getElementById('creditsTotal').textContent=expected;
+    traceEvent('persistence:before', {
+      storage: 'sessionStorage',
+      key: STORAGE.complete,
+      hasValue: true
+    });
     sessionStorage.setItem(STORAGE.complete, 'true');
+    traceEvent('persistence:after', {
+      storage: 'sessionStorage',
+      key: STORAGE.complete,
+      success: true
+    });
     renderEvaluationSummary();
     transmitResults();
     if(soundOn) successSound();
+    traceAsyncScheduled('validateFinal', 'setTimeout-credits', {
+      delayMs: CRIOS_CONFIG.finalTransitionDelayMs
+    });
     setTimeout(() => go('credits'), CRIOS_CONFIG.finalTransitionDelayMs);
+    traceEvent('finalization:local:after', {
+      expected: expected,
+      transmitted: true,
+      transitionScheduled: true
+    });
+    traceEvent('evaluation:submit:after', {
+      scope: 'final',
+      isCorrect: true
+    });
   }else{
     if(sessionData) sessionData.final.answerCorrect=false;
     persistSession();
@@ -354,6 +1157,10 @@ function validateFinal(){
     fb.textContent='La red permanece inestable. Revisá la expresión final y el resultado.';
     if(soundOn) beep(150,.16);
     queueSessionUpdate();
+    traceEvent('evaluation:submit:after', {
+      scope: 'final',
+      isCorrect: false
+    });
   }
 }
 function resetProgress(){
@@ -431,6 +1238,7 @@ async function loadGroups(){
   if(status) status.textContent='Consultando la configuración del curso…';
 
   try{
+    traceAsyncScheduled('loadGroups', 'fetch-groups', null);
     const separator=RESULTS_ENDPOINT.includes('?')?'&':'?';
     const response=await fetch(RESULTS_ENDPOINT+separator+'accion=grupos&_='+Date.now(),{
       method:'GET',
@@ -439,6 +1247,9 @@ async function loadGroups(){
     if(!response.ok) throw new Error('Respuesta '+response.status);
 
     const data=await response.json();
+    traceAsyncResolved('loadGroups', 'fetch-groups', {
+      ok: Boolean(response.ok)
+    });
     const groups=Array.isArray(data.grupos)
       ? data.grupos.map(cleanIdentity).filter(Boolean)
       : [];
@@ -462,6 +1273,11 @@ async function loadGroups(){
     button.disabled=false;
     if(status) status.textContent='Grupos cargados desde Google Sheets.';
   }catch(error){
+    traceAsyncRejected('loadGroups', 'fetch-groups', error);
+    traceEvent('error:caught', {
+      scope: 'loadGroups',
+      error: traceErrorData(error)
+    });
     select.innerHTML='<option value="">No se pudieron cargar los grupos</option>';
     if(status){
       status.innerHTML='No fue posible leer la hoja CONFIG. <button type="button" class="btn secondary" style="padding:6px 10px;margin-left:8px" onclick="loadGroups()">Reintentar</button>';
@@ -469,7 +1285,42 @@ async function loadGroups(){
   }
 }
 
-function identifyUser(){
+function emitBootstrapRuntime(eventType,payload){
+  traceEvent(eventType,payload);
+}
+
+function neutralPublishedBlock(feedback){
+  feedback.className='feedback show bad';
+  feedback.textContent='La campaña no está disponible en este momento. Solicitá asistencia docente.';
+}
+
+function applyPreparedPublishedCampaign(prepared){
+  preparedRuntimeCampaign=prepared;
+  const metadata=prepared.data.campaign;
+  campanaActiva={id:metadata.campaignId,titulo:metadata.titulo,descripcion:metadata.descripcion,escenario:metadata.escenario,estado:'publicada',clasificacion:metadata.clasificacion,misiones:prepared.data.missionOrder.slice()};
+  campanaActivaId=metadata.campaignId;
+  misionesActivas=prepared.bridge.missions.slice();
+  missionIds=prepared.data.missionOrder.slice();
+  progress=sessionData&&sessionData.idSesion
+    ? {...(progresosCampanas[activeProgressKey()]||{})}
+    : {};
+  missionData={};
+  hintRegistered={};
+  missionOpenedAt={};
+}
+
+async function preparePublishedForIdentity(realName,characterName,groupName,recoverPinned){
+  await ensureDomainModulesLoaded();
+  const adapter=(window.CRIOS_DOMAIN||{}).runtimeBootstrapAdapter;
+  if(!adapter) return {success:false,error:{code:'BOOTSTRAP_DEPENDENCY_MISSING'}};
+  const options={mode:runtimeCampaignMode,campaignId:campanaActivaId,identity:[realName,characterName,groupName].join('|'),runtimePublicationApi:window.CRIOS_RUNTIME_EXECUTABLE_PUBLICATION,publicationCore:window.CRIOS_PUBLICATION_CORE,missionHandlersApi:window.CRIOS_RUNTIME_MISSION_HANDLERS,persistenceApi:window.CRIOS_PUBLICATION_PERSISTENCE,telemetry:emitBootstrapRuntime};
+  const pinned=recoverPinned&&sessionData&&sessionData.campana&&sessionData.campana.sourceMode==='published'?sessionData.campana:null;
+  return pinned
+    ? adapter.recoverPublishedCampaign({...options,pinnedPublication:pinned})
+    : adapter.preparePublishedCampaign(options);
+}
+
+async function identifyUser(){
   const realInput=document.getElementById('userNameInput');
   const characterInput=document.getElementById('characterNameInput');
   const groupInput=document.getElementById('groupInput');
@@ -489,10 +1340,34 @@ function identifyUser(){
     return;
   }
 
+  if(!runtimeCampaignModeValid){
+    traceEvent('bootstrap-runtime:blocked',{mode:runtimeCampaignMode,phase:'mode',code:'INVALID_RUNTIME_CAMPAIGN_MODE',result:'blocked'});
+    neutralPublishedBlock(fb);
+    return;
+  }
+
+  let recoveredSession=false;
+  if(runtimeCampaignMode==='published'){
+    const existingSession=sessionData;
+    const existingIdentity=existingSession&&existingSession.nombre===realName&&existingSession.personaje===characterName&&existingSession.grupo===groupName;
+    const prepared=await preparePublishedForIdentity(realName,characterName,groupName,existingIdentity);
+    if(!prepared.success){
+      neutralPublishedBlock(fb);
+      return;
+    }
+    applyPreparedPublishedCampaign(prepared.campaign);
+    recoveredSession=Boolean(existingIdentity&&existingSession&&existingSession.campana&&existingSession.campana.publicationId===prepared.campaign.data.campaign.publicationId&&existingSession.campana.contentHash===prepared.campaign.data.campaign.contentHash);
+    if(!recoveredSession) sessionData=null;
+  }
+
   sessionStorage.setItem(STORAGE.realName, realName);
   sessionStorage.setItem(STORAGE.groupName, groupName);
   setCharacterName(characterName);
-  startSession(realName,characterName,groupName);
+  if(!recoveredSession) startSession(realName,characterName,groupName);
+  else{
+    progress={...(progresosCampanas[activeProgressKey()]||{})};
+    rebuildDomainStateForActiveCampaign();
+  }
   sendSessionUpdate(false);
 
   audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
@@ -505,6 +1380,10 @@ function identifyUser(){
   const confirmedGroup=document.getElementById('confirmedGroup');
   if(confirmedGroup) confirmedGroup.textContent=groupName;
   ensureMissionData();
+  setupMissionUI();
+  actualizarCabeceraCampana();
+  updateMap();
+  traceEvent('bootstrap-runtime:completed',{mode:runtimeCampaignMode,campaignId:campanaActiva.id,publicationId:sessionData&&sessionData.campana&&sessionData.campana.publicationId||null,result:'completed'});
   document.getElementById('missionWelcome').classList.remove('hidden');
 }
 
@@ -701,6 +1580,14 @@ function seeded(seed){let x=seed>>>0;return function(){x+=0x6D2B79F5;let t=x;t=M
 function pick(arr,r){return arr[Math.floor(r()*arr.length)]}
 function variantIdFor(name){return (hashString(name)%VARIANT_COUNT)+1}
 function generateMissionData(name){
+  if(runtimeCampaignMode==='published'){
+    if(!preparedRuntimeCampaign) throw new Error('La campaña publicada no fue preparada.');
+    const generated={variant:variantIdFor(name)};
+    missionIds.forEach(id=>{generated[id]=obtenerMision(id).generar();});
+    generated.adjustMinus=preparedRuntimeCampaign.bridge.finalEvaluation.adjustMinus;
+    generated.adjustPlus=preparedRuntimeCampaign.bridge.finalEvaluation.adjustPlus;
+    return generated;
+  }
   const seed=hashString(name),r=seeded(seed),variant=variantIdFor(name);
   const generated={variant};
   missionIds.forEach(id=>{generated[id]=obtenerMision(id).generar(r,variant);});
@@ -766,16 +1653,39 @@ function validateProcedure(id){
 }
 function validateMissionResult(id){
   ensureMissionData();const input=document.getElementById('answer-'+id),value=normalize(input.value),fb=document.getElementById('feedback-'+id),expected=missionData[id].expected;
+  traceEvent('evaluation:submit:before', {
+    scope: 'mission',
+    missionId: id,
+    expected: expected,
+    answerRaw: input.value
+  });
   sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].attempts++;
   const rec=missionRecord(id);if(rec){rec.answer=input.value;rec.answerAttempts=sessionStats[id].attempts;rec.expected=expected;}
   persistStats();
   if(Math.abs(value-expected)<1e-9){
+    applyDomainEvaluationForMission(id,true);
     fb.className='feedback show ok';fb.textContent='Resultado compatible. Módulo recuperado. Regresando al mapa…';progress[id]=true;sessionStats[id].completed=true;
     sessionStats[id].timeMs=(sessionStats[id].timeMs||0)+(Date.now()-(missionOpenedAt[id]||Date.now()));
     if(rec){rec.answerCorrect=true;rec.timeMs=sessionStats[id].timeMs;}
-    persistStats();save();if(soundOn)successSound();setTimeout(() => go('map'), CRIOS_CONFIG.missionReturnDelayMs)
+    persistStats();save();if(soundOn)successSound();
+    traceAsyncScheduled('validateMissionResult', 'setTimeout-map', {
+      delayMs: CRIOS_CONFIG.missionReturnDelayMs,
+      missionId: id
+    });
+    setTimeout(() => go('map'), CRIOS_CONFIG.missionReturnDelayMs)
+    traceEvent('evaluation:submit:after', {
+      scope: 'mission',
+      missionId: id,
+      isCorrect: true
+    });
   }else{
+    applyDomainEvaluationForMission(id,false);
     if(rec) rec.answerCorrect=false;persistSession();fb.className='feedback show bad';fb.textContent='El resultado no coincide con la simulación. Revisá el procedimiento antes de volver a intentarlo.'
+    traceEvent('evaluation:submit:after', {
+      scope: 'mission',
+      missionId: id,
+      isCorrect: false
+    });
   }
   queueSessionUpdate();
 }
@@ -864,6 +1774,15 @@ document.getElementById('intro').setAttribute('tabindex','0');
 document.getElementById('intro').setAttribute('role','button');
 document.getElementById('intro').setAttribute('aria-label','Tocar para establecer la conexión');
 
+ensureDomainModulesLoaded()
+  .then(() => {
+    domainReady = true;
+    rebuildDomainStateForActiveCampaign();
+  })
+  .catch((error) => {
+    console.warn('[CRIOS] Módulos de dominio no disponibles:', error);
+  });
+
 setupMissionUI();
 actualizarCabeceraCampana();
 renderCampaignSelector();
@@ -871,7 +1790,22 @@ updateMap();
 loadUserName();
 loadGroups();
 retryPendingResult();
-window.addEventListener('online',retryPendingResult);
+window.addEventListener('online',()=>{
+  traceAsyncScheduled('online-listener', 'retry-pending-result', {
+    online: Boolean(navigator.onLine)
+  });
+  retryPendingResult()
+    .then(() => {
+      traceAsyncResolved('online-listener', 'retry-pending-result', null);
+    })
+    .catch((error) => {
+      traceAsyncRejected('online-listener', 'retry-pending-result', error);
+      traceEvent('error:caught', {
+        scope: 'online-listener',
+        error: traceErrorData(error)
+      });
+    });
+});
 window.addEventListener('pagehide',sendExitSnapshot);
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden') sendExitSnapshot();
@@ -917,6 +1851,7 @@ const publicApi = Object.freeze({
 Object.assign(window, publicApi);
 window.CRIOS = Object.freeze({
   version: CRIOS_VERSION,
+  runtimeCampaignMode,
   obtenerCampanaActiva: () => campanaActiva,
   obtenerMisionesActivas: () => Object.freeze([...missionIds]),
   listarCampanas: () => Object.freeze([...listarCampanas()]),

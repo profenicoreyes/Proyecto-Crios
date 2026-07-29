@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIOS Runtime Degraded Availability</title>
+</head>
+<body>
+  <h1>CRIOS Runtime Degraded Availability</h1>
+  <div id="harnesses"></div>
+  <pre id="results">Running...</pre>
+  <script>
+    window.__CRIOS_A2_006J_TELEMETRY__ = { pageerrors: [], consoleErrors: [], warnings: [], expectedScenarioWarnings: [] };
+    window.addEventListener('error', function(event){
+      window.__CRIOS_A2_006J_TELEMETRY__.pageerrors.push(String(event.message || event.error || 'error'));
+    });
+    window.addEventListener('unhandledrejection', function(event){
+      window.__CRIOS_A2_006J_TELEMETRY__.pageerrors.push(String(event.reason || 'rejection'));
+    });
+    (function(){
+      var originalError = console.error;
+      var originalWarn = console.warn;
+      function expectedWarning(text){
+        return text.indexOf('No se pudo reconstruir el dominio de campaña') >= 0 ||
+          text.indexOf('Módulos de dominio no disponibles') >= 0 ||
+          text.indexOf('No se pudo leer el almacenamiento') >= 0;
+      }
+      console.error = function(){
+        window.__CRIOS_A2_006J_TELEMETRY__.consoleErrors.push(Array.prototype.join.call(arguments, ' '));
+        return originalError.apply(console, arguments);
+      };
+      console.warn = function(){
+        var text = Array.prototype.join.call(arguments, ' ');
+        if (expectedWarning(text)) window.__CRIOS_A2_006J_TELEMETRY__.expectedScenarioWarnings.push(text);
+        else window.__CRIOS_A2_006J_TELEMETRY__.warnings.push(text);
+        return originalWarn.apply(console, arguments);
+      };
+    })();
+  </script>
+  <script src="./fixtures/publishable-mission-spec-fixtures.js"></script>
+  <script src="./fixtures/runtime-degraded-availability-fixtures.js"></script>
+  <script src="./runtime-degraded-availability.test.js"></script>
+</body>
+</html>

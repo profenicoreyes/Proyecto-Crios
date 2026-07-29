@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIOS Runtime Async Ordering</title>
+</head>
+<body>
+  <h1>CRIOS Runtime Async Ordering</h1>
+  <div id="harnesses"></div>
+  <pre id="results">Running...</pre>
+  <script>
+    window.__CRIOS_A2_006I_TELEMETRY__={pageerrors:[],consoleErrors:[],warnings:[]};
+    window.addEventListener('error',function(event){window.__CRIOS_A2_006I_TELEMETRY__.pageerrors.push(String(event.message||event.error||'error'));});
+    window.addEventListener('unhandledrejection',function(event){window.__CRIOS_A2_006I_TELEMETRY__.pageerrors.push(String(event.reason||'rejection'));});
+    (function(){
+      var originalError=console.error;
+      var originalWarn=console.warn;
+      console.error=function(){window.__CRIOS_A2_006I_TELEMETRY__.consoleErrors.push(Array.prototype.join.call(arguments,' '));return originalError.apply(console,arguments);};
+      console.warn=function(){window.__CRIOS_A2_006I_TELEMETRY__.warnings.push(Array.prototype.join.call(arguments,' '));return originalWarn.apply(console,arguments);};
+    })();
+  </script>
+  <script src="./fixtures/publishable-mission-spec-fixtures.js"></script>
+  <script src="./fixtures/runtime-async-ordering-fixtures.js"></script>
+  <script src="./runtime-async-ordering.test.js"></script>
+</body>
+</html>

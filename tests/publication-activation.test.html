@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRIOS Publication Activation Tests</title>
+<link rel="stylesheet" href="../css/crios.css">
+<link rel="stylesheet" href="../css/studio.css">
+<link rel="stylesheet" href="../css/studio-publication.css?v=20260724a2004b">
+</head>
+<body>
+<div class="app"><main class="studio-grid">
+  <section id="missionBank" class="panel"><h2>Banco de misiones</h2><div id="missionBankContent"></div></section>
+  <section id="campaignBuilder" class="panel"><h2>Campaña en construcción</h2><div id="campaignBuilderContent"></div></section>
+  <section id="campaignSummary" class="panel"><h2>Resumen de campaña</h2><div id="campaignSummaryContent"></div></section>
+</main></div>
+<script src="../js/nucleo/registro-misiones.js"></script>
+<script src="../js/datos/taxonomia.js"></script>
+<script src="../js/datos/campanas.js"></script>
+<script src="../js/misiones/matematica/geometria/areas/centro-energia.js"></script>
+<script src="../js/misiones/matematica/geometria/areas/invernadero.js"></script>
+<script src="../js/misiones/matematica/geometria/areas/banco-hielo.js"></script>
+<script src="../js/misiones/matematica/geometria/areas/hangar-perforacion.js"></script>
+<script src="../js/escenarios/registro-escenarios.js"></script>
+<script src="../js/escenarios/antartida.js"></script>
+<script src="../js/escenarios/registro-carga.js"></script>
+<script src="../js/publication/publication-model.js"></script>
+<script src="../js/publication/publication-normalizer.js"></script>
+<script src="../js/publication/publication-validator.js"></script>
+<script src="../js/publication/publication-canonicalizer.js"></script>
+<script src="../js/publication/publication-hash.js"></script>
+<script src="../js/publication/publication-memory-store.js"></script>
+<script src="../js/publication/publication-service.js"></script>
+<script src="../js/publication/publication-api.js"></script>
+<script src="../js/publication/activation/activation-model.js"></script>
+<script src="../js/publication/activation/activation-store.js"></script>
+<script src="../js/publication/activation/activation-service.js"></script>
+<script src="../js/publication/activation/activation-api.js"></script>
+<script src="../js/studio/adapter.js"></script>
+<script src="../js/studio/modelo/campaign-draft.js"></script>
+<script src="../js/studio/acciones/campaign-actions.js"></script>
+<script src="../js/servicios/campaign-validator.js"></script>
+<script src="../js/studio/render/studio-renderer.js?v=20260724a2004c"></script>
+<script src="../js/studio/publication/studio-publication-adapter.js?v=20260724a2004b"></script>
+<script src="../js/studio/publication/studio-publication-controller.js?v=20260724a2004b"></script>
+<script src="../js/studio/publication/studio-activation-controller.js?v=20260724a2004b"></script>
+<script src="../js/studio/studio.js?v=20260724a2004b"></script>
+<script src="./publication-activation.test.js?v=20260724a2004b"></script>
+</body>
+</html>

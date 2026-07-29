@@ -1,0 +1,1011 @@
+﻿/* CRIOS Studio — renderer */
+(function(){
+  'use strict';
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  let searchQuery = '';
+
+  function normalizeText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function renderMissionBank(options) {
+    const target = el('missionBankContent');
+    if (!target) return;
+    target.innerHTML = '';
+
+    const missions = Array.isArray(options.missions) ? options.missions : [];
+    const isInDraft = typeof options.isInDraft === 'function' ? options.isInDraft : () => false;
+    const getCampaignLabel = typeof options.getCampaignLabel === 'function' ? options.getCampaignLabel : () => 'Sin categoría';
+    const onAdd = typeof options.onAdd === 'function' ? options.onAdd : () => {};
+
+    const searchContainer = document.createElement('div');
+    searchContainer.className = 'mission-search';
+    const searchInputId = 'mission-search-input';
+
+    const searchLabel = document.createElement('label');
+    searchLabel.setAttribute('for', searchInputId);
+    searchLabel.className = 'sr-only';
+    searchLabel.textContent = 'Buscar misiones';
+
+    const searchInput = document.createElement('input');
+    searchInput.id = searchInputId;
+    searchInput.type = 'search';
+    searchInput.placeholder = 'Buscar por nombre...';
+    searchInput.value = searchQuery;
+    searchInput.autocomplete = 'off';
+    searchInput.addEventListener('input', event => {
+      searchQuery = event.target.value;
+      renderMissionBank(options);
+    });
+
+    searchContainer.appendChild(searchLabel);
+    searchContainer.appendChild(searchInput);
+    target.appendChild(searchContainer);
+
+    const filteredMissions = missions
+      .slice()
+      .sort((a, b) => {
+        const nameA = normalizeText(a.nombreCorto || a.titulo || a.id || '');
+        const nameB = normalizeText(b.nombreCorto || b.titulo || b.id || '');
+        return nameA.localeCompare(nameB, undefined, { numeric: true });
+      })
+      .filter(m => {
+        if (!searchQuery) return true;
+        const name = normalizeText(m.nombreCorto || m.titulo || m.id || '');
+        return name.indexOf(normalizeText(searchQuery)) !== -1;
+      });
+
+    const bankSection = document.getElementById('missionBank');
+    if (bankSection) {
+      const header = bankSection.querySelector('h2');
+      if (header) header.textContent = 'Banco de misiones (' + filteredMissions.length + ')';
+    }
+
+    if (!filteredMissions.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No se encontraron misiones.';
+      target.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'mini-list';
+
+    filteredMissions.forEach(mission => {
+      const item = document.createElement('li');
+      item.className = 'mini mission-item';
+
+      const content = document.createElement('div');
+      content.className = 'mission-card';
+
+      const title = document.createElement('div');
+      title.className = 'mission-title';
+      title.textContent = mission.nombreCorto || mission.titulo || mission.id;
+
+      const badge = document.createElement('div');
+      badge.className = 'mission-badge';
+      badge.textContent = getCampaignLabel(mission.id);
+
+      content.appendChild(title);
+      content.appendChild(badge);
+
+      const action = document.createElement('button');
+      action.className = 'btn studio-btn';
+      action.textContent = isInDraft(mission.id) ? 'Agregado' : 'Agregar';
+      action.disabled = isInDraft(mission.id);
+      action.addEventListener('click', () => onAdd(mission));
+
+      item.appendChild(content);
+      item.appendChild(action);
+      list.appendChild(item);
+    });
+
+    target.appendChild(list);
+  }
+
+  function renderMetadata(options) {
+    const section = document.getElementById('campaignBuilder');
+    if (!section) return;
+
+    let meta = section.querySelector('.campaign-meta');
+    let nameInput = null;
+    let descInput = null;
+    let scenario = null;
+
+    if (!meta) {
+      meta = document.createElement('div');
+      meta.className = 'campaign-meta';
+
+      const title = document.createElement('h3');
+      title.textContent = 'Campaña';
+      meta.appendChild(title);
+
+      const nameLabel = document.createElement('label');
+      nameLabel.textContent = 'Nombre de la campaña';
+      nameLabel.htmlFor = 'campaign-name-input';
+      meta.appendChild(nameLabel);
+
+      nameInput = document.createElement('input');
+      nameInput.id = 'campaign-name-input';
+      nameInput.type = 'text';
+      nameInput.placeholder = 'Escribí un nombre para la campaña';
+      nameInput.addEventListener('input', (e) => {
+        if (typeof options.alCambiarNombre === 'function') options.alCambiarNombre(e.target.value);
+      });
+      meta.appendChild(nameInput);
+
+      const descLabel = document.createElement('label');
+      descLabel.textContent = 'Descripción';
+      descLabel.htmlFor = 'campaign-desc-input';
+      meta.appendChild(descLabel);
+
+      descInput = document.createElement('textarea');
+      descInput.id = 'campaign-desc-input';
+      descInput.rows = 3;
+      descInput.placeholder = 'Describí brevemente el recorrido de aprendizaje';
+      descInput.addEventListener('input', (e) => {
+        if (typeof options.alCambiarDescripcion === 'function') options.alCambiarDescripcion(e.target.value);
+      });
+      meta.appendChild(descInput);
+
+      const scenarioLabel = document.createElement('label');
+      scenarioLabel.textContent = 'Escenario';
+      meta.appendChild(scenarioLabel);
+
+      scenario = document.createElement('div');
+      scenario.className = 'campaign-scenario-selector';
+      meta.appendChild(scenario);
+
+      section.insertBefore(meta, section.firstChild);
+    } else {
+      nameInput = meta.querySelector('#campaign-name-input');
+      descInput = meta.querySelector('#campaign-desc-input');
+      scenario = meta.querySelector('.campaign-scenario-selector');
+    }
+
+    if (nameInput && nameInput.value !== (options.campaignName || '')) {
+      nameInput.value = options.campaignName || '';
+    }
+
+    if (descInput && descInput.value !== (options.campaignDescription || '')) {
+      descInput.value = options.campaignDescription || '';
+    }
+
+    if (scenario) {
+      scenario.innerHTML = '';
+      const escenarios = Array.isArray(options.escenarios) ? options.escenarios : [];
+      const escenarioActual = String(options.campaignScenarioId || 'antartida');
+      const alCambiar = typeof options.alCambiarEscenario === 'function' ? options.alCambiarEscenario : () => {};
+
+      if (escenarios.length === 0) {
+        const empty = document.createElement('p');
+        empty.textContent = 'No hay escenarios disponibles.';
+        scenario.appendChild(empty);
+      } else {
+        const container = document.createElement('div');
+        container.className = 'scenario-buttons';
+
+        escenarios.forEach(esc => {
+          if (!esc || !esc.id) return;
+
+          const btn = document.createElement('button');
+          btn.className = 'btn scenario-option';
+          if (String(esc.id) === escenarioActual) {
+            btn.classList.add('scenario-active');
+          }
+          btn.setAttribute('data-scenario-id', String(esc.id));
+          btn.textContent = esc.nombre || esc.id;
+          if (esc.descripcion) {
+            btn.title = esc.descripcion;
+          }
+
+          btn.addEventListener('click', () => {
+            alCambiar(String(esc.id));
+          });
+
+          container.appendChild(btn);
+        });
+
+        scenario.appendChild(container);
+      }
+    }
+  }
+
+  function renderConfiguracion(options) {
+    const section = document.getElementById('campaignBuilder');
+    if (!section) return;
+
+    let config = section.querySelector('.campaign-config');
+    if (!config) {
+      config = document.createElement('div');
+      config.className = 'campaign-config';
+
+      const title = document.createElement('label');
+      title.className = 'config-title';
+      title.textContent = 'Configuración';
+      config.appendChild(title);
+
+      const dificultadLabel = document.createElement('label');
+      dificultadLabel.textContent = 'Dificultad';
+      config.appendChild(dificultadLabel);
+
+      const dificultadSelect = document.createElement('select');
+      dificultadSelect.id = 'campaign-dificultad-input';
+      dificultadSelect.className = 'config-select';
+      ['baja', 'media', 'alta'].forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val.charAt(0).toUpperCase() + val.slice(1);
+        dificultadSelect.appendChild(opt);
+      });
+      dificultadSelect.addEventListener('change', (e) => {
+        if (typeof options.alCambiarDificultad === 'function') options.alCambiarDificultad(e.target.value);
+      });
+      config.appendChild(dificultadSelect);
+
+      const duracionLabel = document.createElement('label');
+      duracionLabel.textContent = 'Duración estimada (minutos)';
+      config.appendChild(duracionLabel);
+
+      const duracionInput = document.createElement('input');
+      duracionInput.id = 'campaign-duracion-input';
+      duracionInput.type = 'number';
+      duracionInput.className = 'config-input';
+      duracionInput.min = '0';
+      duracionInput.step = '1';
+      duracionInput.addEventListener('input', (e) => {
+        if (typeof options.alCambiarDuracion === 'function') options.alCambiarDuracion(e.target.value);
+      });
+      config.appendChild(duracionInput);
+
+      const nivelLabel = document.createElement('label');
+      nivelLabel.textContent = 'Nivel';
+      config.appendChild(nivelLabel);
+
+      const nivelSelect = document.createElement('select');
+      nivelSelect.id = 'campaign-nivel-input';
+      nivelSelect.className = 'config-select';
+      const nivelOpt = document.createElement('option');
+      nivelOpt.value = '';
+      nivelOpt.textContent = 'Seleccionar nivel';
+      nivelSelect.appendChild(nivelOpt);
+      ['7° EBI', '8° EBI', '9° EBI', '1° EMS', 'Otro'].forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        nivelSelect.appendChild(opt);
+      });
+      nivelSelect.addEventListener('change', (e) => {
+        if (typeof options.alCambiarNivel === 'function') options.alCambiarNivel(e.target.value);
+      });
+      config.appendChild(nivelSelect);
+
+      const modalidadLabel = document.createElement('label');
+      modalidadLabel.textContent = 'Modalidad';
+      config.appendChild(modalidadLabel);
+
+      const modalidadSelect = document.createElement('select');
+      modalidadSelect.id = 'campaign-modalidad-input';
+      modalidadSelect.className = 'config-select';
+      ['Individual', 'Parejas', 'Equipos'].forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = val;
+        modalidadSelect.appendChild(opt);
+      });
+      modalidadSelect.addEventListener('change', (e) => {
+        if (typeof options.alCambiarModalidad === 'function') options.alCambiarModalidad(e.target.value);
+      });
+      config.appendChild(modalidadSelect);
+
+      section.appendChild(config);
+    } else {
+      const dificultadSelect = config.querySelector('#campaign-dificultad-input');
+      const duracionInput = config.querySelector('#campaign-duracion-input');
+      const nivelSelect = config.querySelector('#campaign-nivel-input');
+      const modalidadSelect = config.querySelector('#campaign-modalidad-input');
+
+      if (dificultadSelect && dificultadSelect.value !== (options.campaignDificultad || 'media')) {
+        dificultadSelect.value = options.campaignDificultad || 'media';
+      }
+
+      if (duracionInput && duracionInput.value !== String(options.campaignDuracion || 0)) {
+        duracionInput.value = options.campaignDuracion || 0;
+      }
+
+      if (nivelSelect && nivelSelect.value !== (options.campaignNivel || '')) {
+        nivelSelect.value = options.campaignNivel || '';
+      }
+
+      if (modalidadSelect && modalidadSelect.value !== (options.campaignModalidad || 'Individual')) {
+        modalidadSelect.value = options.campaignModalidad || 'Individual';
+      }
+    }
+  }
+
+  function renderDraft(options) {
+    const target = el('campaignBuilderContent');
+    if (!target) return;
+    target.innerHTML = '';
+
+    const draftMissions = Array.isArray(options.draftMissions) ? options.draftMissions : [];
+    const onMove = typeof options.onMove === 'function' ? options.onMove : () => {};
+    const onRemove = typeof options.onRemove === 'function' ? options.onRemove : () => {};
+
+    const header = document.createElement('div');
+    header.className = 'draft-header';
+    header.innerHTML = '<strong>Campaña temporal</strong>';
+    target.appendChild(header);
+
+    if (!draftMissions.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Arrastra las misiones aquí desde el banco o usa el botón Agregar.';
+      target.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'mini-list';
+
+    draftMissions.forEach((mission, index) => {
+      const item = document.createElement('li');
+      item.className = 'mini draft-item';
+
+      const title = document.createElement('div');
+      title.className = 'mission-title';
+      title.textContent = mission.nombreCorto || mission.titulo || mission.id;
+
+      const controls = document.createElement('div');
+      controls.className = 'draft-controls';
+
+      const up = document.createElement('button');
+      up.className = 'btn studio-btn small';
+      up.textContent = '↑';
+      up.disabled = index === 0;
+      up.addEventListener('click', () => onMove(index, -1));
+
+      const down = document.createElement('button');
+      down.className = 'btn studio-btn small';
+      down.textContent = '↓';
+      down.disabled = index === draftMissions.length - 1;
+      down.addEventListener('click', () => onMove(index, 1));
+
+      const remove = document.createElement('button');
+      remove.className = 'btn studio-btn danger small';
+      remove.textContent = 'Quitar';
+      remove.addEventListener('click', () => onRemove(mission.id));
+
+      controls.appendChild(up);
+      controls.appendChild(down);
+      controls.appendChild(remove);
+
+      item.appendChild(title);
+      item.appendChild(controls);
+      list.appendChild(item);
+    });
+
+    target.appendChild(list);
+  }
+
+  function renderSummary(options) {
+    const target = el('campaignSummaryContent');
+    if (!target) return;
+    target.innerHTML = '';
+
+    const draftMissions = Array.isArray(options.draftMissions) ? options.draftMissions : [];
+    const name = String(options.campaignName || '').trim();
+    const scenario = String(options.campaignScenario || 'Sin seleccionar').trim();
+    const dificultad = String(options.campaignDificultad || 'media');
+    const duracion = Number(options.campaignDuracion) || 0;
+    const nivel = String(options.campaignNivel || '');
+    const modalidad = String(options.campaignModalidad || 'Individual');
+    const validacion = options.validacion || { estado: 'correcto', errores: [], advertencias: [] };
+    const tieneErrores = validacion.estado === 'con errores';
+
+    const title = document.createElement('div');
+    title.className = 'summary-title';
+    title.textContent = 'Campaña temporal';
+
+    const nameItem = document.createElement('div');
+    nameItem.className = 'summary-item';
+    nameItem.textContent = 'Nombre: ' + (name || '(sin nombre)');
+
+    const scenarioItem = document.createElement('div');
+    scenarioItem.className = 'summary-item';
+    scenarioItem.textContent = 'Escenario: ' + scenario;
+
+    const dificultadItem = document.createElement('div');
+    dificultadItem.className = 'summary-item';
+    dificultadItem.textContent = 'Dificultad: ' + dificultad;
+
+    const duracionItem = document.createElement('div');
+    duracionItem.className = 'summary-item';
+    duracionItem.textContent = 'Duración: ' + (duracion > 0 ? duracion + ' min' : '(sin definir)');
+
+    const nivelItem = document.createElement('div');
+    nivelItem.className = 'summary-item';
+    nivelItem.textContent = 'Nivel: ' + (nivel || '(sin seleccionar)');
+
+    const modalidadItem = document.createElement('div');
+    modalidadItem.className = 'summary-item';
+    modalidadItem.textContent = 'Modalidad: ' + modalidad;
+
+    const items = document.createElement('div');
+    items.className = 'summary-item';
+    items.textContent = 'Misiones: ' + draftMissions.length;
+
+    const status = document.createElement('div');
+    status.className = 'summary-status';
+    status.textContent = 'Estado: No publicada';
+
+    target.appendChild(title);
+    target.appendChild(nameItem);
+    target.appendChild(scenarioItem);
+    target.appendChild(dificultadItem);
+    target.appendChild(duracionItem);
+    target.appendChild(nivelItem);
+    target.appendChild(modalidadItem);
+    target.appendChild(items);
+    target.appendChild(status);
+
+    const statusSection = document.createElement('div');
+    statusSection.className = 'campaign-status-section';
+    statusSection.style.marginTop = '1.5em';
+    statusSection.style.paddingTop = '1.5em';
+    statusSection.style.borderTop = '1px solid #ddd';
+
+    const statusHeader = document.createElement('div');
+    statusHeader.className = 'status-header';
+    statusHeader.style.display = 'flex';
+    statusHeader.style.alignItems = 'center';
+    statusHeader.style.gap = '0.5em';
+    statusHeader.style.fontWeight = 'bold';
+    statusHeader.style.marginBottom = '1em';
+
+    const indicador = document.createElement('span');
+    indicador.textContent = tieneErrores ? '🔴' : '🟢';
+
+    const titulo = document.createElement('span');
+    titulo.textContent = tieneErrores ? 'Requiere atención' : 'Lista para continuar';
+
+    statusHeader.appendChild(indicador);
+    statusHeader.appendChild(titulo);
+    statusSection.appendChild(statusHeader);
+
+    if (Array.isArray(validacion.errores) && validacion.errores.length > 0) {
+      const erroresDiv = document.createElement('div');
+      erroresDiv.style.marginBottom = '1em';
+
+      const erroresTitle = document.createElement('div');
+      erroresTitle.style.fontWeight = 'bold';
+      erroresTitle.style.color = '#d32f2f';
+      erroresTitle.style.marginBottom = '0.5em';
+      erroresTitle.textContent = 'Errores';
+      erroresDiv.appendChild(erroresTitle);
+
+      const erroresList = document.createElement('ul');
+      erroresList.style.margin = '0 0 0 1.5em';
+      erroresList.style.color = '#d32f2f';
+      validacion.errores.forEach(error => {
+        const li = document.createElement('li');
+        li.textContent = error;
+        erroresList.appendChild(li);
+      });
+      erroresDiv.appendChild(erroresList);
+      statusSection.appendChild(erroresDiv);
+    }
+
+    if (Array.isArray(validacion.advertencias) && validacion.advertencias.length > 0) {
+      const advertenciasDiv = document.createElement('div');
+
+      const advertenciasTitle = document.createElement('div');
+      advertenciasTitle.style.fontWeight = 'bold';
+      advertenciasTitle.style.color = '#f57f17';
+      advertenciasTitle.style.marginBottom = '0.5em';
+      advertenciasTitle.textContent = 'Advertencias';
+      advertenciasDiv.appendChild(advertenciasTitle);
+
+      const advertenciasList = document.createElement('ul');
+      advertenciasList.style.margin = '0 0 0 1.5em';
+      advertenciasList.style.color = '#f57f17';
+      validacion.advertencias.forEach(adv => {
+        const li = document.createElement('li');
+        li.textContent = adv;
+        advertenciasList.appendChild(li);
+      });
+      advertenciasDiv.appendChild(advertenciasList);
+      statusSection.appendChild(advertenciasDiv);
+    }
+
+    target.appendChild(statusSection);
+  }
+  function ensurePublicationPanel() {
+    const summarySection = document.getElementById('campaignSummary');
+    if (!summarySection) return null;
+
+    let panel = summarySection.querySelector('#studioPublicationPanel');
+    if (panel) return panel;
+
+    panel = document.createElement('section');
+    panel.id = 'studioPublicationPanel';
+    panel.className = 'studio-publication-panel';
+
+    const title = document.createElement('h3');
+    title.className = 'studio-publication-title';
+    title.textContent = 'Publicación';
+
+    const status = document.createElement('div');
+    status.id = 'studioPublicationStatus';
+    status.className = 'studio-publication-status';
+
+    const revision = document.createElement('div');
+    revision.id = 'studioPublicationRevision';
+    revision.className = 'studio-publication-revision';
+
+    const actions = document.createElement('div');
+    actions.className = 'studio-publication-actions';
+
+    const validateButton = document.createElement('button');
+    validateButton.id = 'studioPublicationValidateButton';
+    validateButton.className = 'btn studio-btn';
+    validateButton.type = 'button';
+    validateButton.textContent = 'Validar borrador';
+
+    const publishButton = document.createElement('button');
+    publishButton.id = 'studioPublicationPublishButton';
+    publishButton.className = 'btn studio-btn';
+    publishButton.type = 'button';
+    publishButton.textContent = 'Publicar versión';
+
+    actions.appendChild(validateButton);
+    actions.appendChild(publishButton);
+
+    const summary = document.createElement('div');
+    summary.id = 'studioPublicationValidationSummary';
+    summary.className = 'studio-publication-validation-summary';
+
+    const issues = document.createElement('ul');
+    issues.id = 'studioPublicationIssues';
+    issues.className = 'studio-publication-issues';
+
+    const result = document.createElement('div');
+    result.id = 'studioPublicationLastResult';
+    result.className = 'studio-publication-result';
+
+    const compatibilityTitle = document.createElement('h4');
+    compatibilityTitle.className = 'studio-publication-history-title';
+    compatibilityTitle.textContent = 'Compatibilidad de ejecución';
+
+    const compatibilitySummary = document.createElement('div');
+    compatibilitySummary.id = 'studioExecutionCompatibilitySummary';
+    compatibilitySummary.className = 'studio-publication-result';
+
+    const compatibilityMissions = document.createElement('ul');
+    compatibilityMissions.id = 'studioExecutionCompatibilityMissions';
+    compatibilityMissions.className = 'studio-publication-issues';
+
+    const compatibilityIssues = document.createElement('ul');
+    compatibilityIssues.id = 'studioExecutionCompatibilityIssues';
+    compatibilityIssues.className = 'studio-publication-issues';
+
+    const runtimeLimit = document.createElement('p');
+    runtimeLimit.className = 'studio-publication-memory-notice';
+    runtimeLimit.textContent = 'Las publicaciones actuales todavía no son consumidas por Runtime';
+
+    const activationTitle = document.createElement('h4');
+    activationTitle.className = 'studio-publication-history-title';
+    activationTitle.textContent = 'Activación';
+
+    const activationNotice = document.createElement('p');
+    activationNotice.className = 'studio-publication-memory-notice';
+    activationNotice.textContent = 'Activación en memoria. Se pierde al recargar.';
+
+    const activationStatus = document.createElement('div');
+    activationStatus.id = 'studioActivationStatus';
+    activationStatus.className = 'studio-publication-status';
+
+    const activeDetails = document.createElement('div');
+    activeDetails.id = 'studioActivationActiveDetails';
+    activeDetails.className = 'studio-publication-result';
+
+    const deactivateButton = document.createElement('button');
+    deactivateButton.id = 'studioActivationDeactivateButton';
+    deactivateButton.className = 'btn studio-btn danger';
+    deactivateButton.type = 'button';
+    deactivateButton.textContent = 'Desactivar';
+
+    const activationHistoryTitle = document.createElement('h4');
+    activationHistoryTitle.className = 'studio-publication-history-title';
+    activationHistoryTitle.textContent = 'Historial de activaciones';
+
+    const activationHistory = document.createElement('ul');
+    activationHistory.id = 'studioActivationHistory';
+    activationHistory.className = 'studio-publication-activation-history';
+
+    const historyTitle = document.createElement('h4');
+    historyTitle.className = 'studio-publication-history-title';
+    historyTitle.textContent = 'Historial de publicaciones';
+
+    const notice = document.createElement('p');
+    notice.id = 'studioPublicationPersistenceNotice';
+    notice.className = 'studio-publication-memory-notice';
+    notice.textContent = 'En memoria. Se pierde al recargar.';
+
+    const persistenceTitle = document.createElement('h4');
+    persistenceTitle.className = 'studio-publication-history-title';
+    persistenceTitle.textContent = 'Persistencia local';
+
+    const persistenceNotice = document.createElement('p');
+    persistenceNotice.id = 'studioPersistenceNotice';
+    persistenceNotice.className = 'studio-publication-memory-notice';
+
+    const persistenceDetails = document.createElement('div');
+    persistenceDetails.id = 'studioPersistenceDetails';
+    persistenceDetails.className = 'studio-publication-result';
+
+    const persistenceConsent = document.createElement('label');
+    persistenceConsent.className = 'studio-persistence-consent';
+    const persistenceCheckbox = document.createElement('input');
+    persistenceCheckbox.id = 'studioPersistenceClearConsent';
+    persistenceCheckbox.type = 'checkbox';
+    const persistenceConsentText = document.createElement('span');
+    persistenceConsentText.textContent = 'Acepto borrar publicaciones, activaciones e historial local.';
+    persistenceConsent.appendChild(persistenceCheckbox);
+    persistenceConsent.appendChild(persistenceConsentText);
+
+    const clearPersistenceButton = document.createElement('button');
+    clearPersistenceButton.id = 'studioPersistenceClearButton';
+    clearPersistenceButton.className = 'btn studio-btn danger';
+    clearPersistenceButton.type = 'button';
+    clearPersistenceButton.textContent = 'Borrar datos locales';
+    clearPersistenceButton.disabled = true;
+
+    const history = document.createElement('ul');
+    history.id = 'studioPublicationHistory';
+    history.className = 'studio-publication-history';
+
+    panel.appendChild(title);
+    panel.appendChild(status);
+    panel.appendChild(revision);
+    panel.appendChild(actions);
+    panel.appendChild(summary);
+    panel.appendChild(issues);
+    panel.appendChild(result);
+    panel.appendChild(compatibilityTitle);
+    panel.appendChild(compatibilitySummary);
+    panel.appendChild(compatibilityMissions);
+    panel.appendChild(compatibilityIssues);
+    panel.appendChild(runtimeLimit);
+    panel.appendChild(activationTitle);
+    panel.appendChild(activationNotice);
+    panel.appendChild(activationStatus);
+    panel.appendChild(activeDetails);
+    panel.appendChild(deactivateButton);
+    panel.appendChild(activationHistoryTitle);
+    panel.appendChild(activationHistory);
+    panel.appendChild(historyTitle);
+    panel.appendChild(notice);
+    panel.appendChild(history);
+    panel.appendChild(persistenceTitle);
+    panel.appendChild(persistenceNotice);
+    panel.appendChild(persistenceDetails);
+    panel.appendChild(persistenceConsent);
+    panel.appendChild(clearPersistenceButton);
+
+    summarySection.appendChild(panel);
+    return panel;
+  }
+
+  function createPublicationRow(label, value) {
+    const row = document.createElement('div');
+    row.className = 'studio-publication-row';
+
+    const key = document.createElement('span');
+    key.className = 'studio-publication-key';
+    key.textContent = label;
+
+    const val = document.createElement('span');
+    val.className = 'studio-publication-value';
+    val.textContent = value;
+
+    row.appendChild(key);
+    row.appendChild(val);
+    return row;
+  }
+
+  function renderPublicationPanel(config) {
+    const panel = ensurePublicationPanel();
+    if (!panel) return;
+
+    const publication = config && config.publication ? config.publication : {};
+    const state = publication.state || { status: 'IDLE', busy: false, currentDraftRevision: '' };
+    const validation = state.lastValidation;
+    const issues = validation && Array.isArray(validation.issues) ? validation.issues : [];
+    const history = Array.isArray(publication.history) ? publication.history : [];
+    const actions = publication.actions || {};
+    const activation = config && config.activation ? config.activation : {};
+    const activationState = activation.state || { status: 'IDLE', busy: false, activeReference: null };
+    const activationRecords = Array.isArray(activation.history) ? activation.history : [];
+    const activationActions = activation.actions || {};
+    const persistence = config && config.persistence ? config.persistence : {};
+    const persistenceState = persistence.state || { status: 'UNAVAILABLE', busy: false };
+    const persistenceActions = persistence.actions || {};
+    const missionSpecs = config && config.missionSpecs ? config.missionSpecs : {};
+    const missionSpecState = missionSpecs.state || { status: 'IDLE', missionCount: 0, validSpecCount: 0, invalidSpecCount: 0, requiredHandlers: [], manifest: null, issues: [], lastValidation: null };
+
+    const statusNode = panel.querySelector('#studioPublicationStatus');
+    const revisionNode = panel.querySelector('#studioPublicationRevision');
+    const validateButton = panel.querySelector('#studioPublicationValidateButton');
+    const publishButton = panel.querySelector('#studioPublicationPublishButton');
+    const summaryNode = panel.querySelector('#studioPublicationValidationSummary');
+    const issuesNode = panel.querySelector('#studioPublicationIssues');
+    const resultNode = panel.querySelector('#studioPublicationLastResult');
+    const historyNode = panel.querySelector('#studioPublicationHistory');
+    const activationStatusNode = panel.querySelector('#studioActivationStatus');
+    const activeDetailsNode = panel.querySelector('#studioActivationActiveDetails');
+    const deactivateButton = panel.querySelector('#studioActivationDeactivateButton');
+    const activationHistoryNode = panel.querySelector('#studioActivationHistory');
+    const activationNoticeNode = panel.querySelector('.studio-publication-memory-notice');
+    const publicationNoticeNode = panel.querySelector('#studioPublicationPersistenceNotice');
+    const persistenceNoticeNode = panel.querySelector('#studioPersistenceNotice');
+    const persistenceDetailsNode = panel.querySelector('#studioPersistenceDetails');
+    const persistenceCheckbox = panel.querySelector('#studioPersistenceClearConsent');
+    const clearPersistenceButton = panel.querySelector('#studioPersistenceClearButton');
+    const compatibilitySummaryNode = panel.querySelector('#studioExecutionCompatibilitySummary');
+    const compatibilityMissionsNode = panel.querySelector('#studioExecutionCompatibilityMissions');
+    const compatibilityIssuesNode = panel.querySelector('#studioExecutionCompatibilityIssues');
+
+    compatibilitySummaryNode.replaceChildren();
+    compatibilitySummaryNode.appendChild(createPublicationRow('Estado', missionSpecState.status === 'READY' ? 'Lista para publicación ejecutable' : 'La campaña no puede ejecutarse desde una publicación'));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Misiones', String(missionSpecState.missionCount || 0)));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Specs válidas', String(missionSpecState.validSpecCount || 0)));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Specs inválidas', String(missionSpecState.invalidSpecCount || 0)));
+    compatibilitySummaryNode.appendChild(createPublicationRow('runtimeContractVersion', String(missionSpecState.manifest && missionSpecState.manifest.runtimeContractVersion || 'Sin validar')));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Handlers requeridos', (missionSpecState.requiredHandlers || []).map(function(handler){return handler.handlerId + '@' + handler.handlerVersion;}).join(', ') || 'Sin validar'));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Manifiesto', missionSpecState.manifest ? 'Válido' : 'Sin validar'));
+    compatibilitySummaryNode.appendChild(createPublicationRow('Evaluación final', missionSpecState.lastValidation && missionSpecState.lastValidation.finalEvaluation ? 'Válida' : 'Sin validar'));
+
+    compatibilityMissionsNode.replaceChildren();
+    const currentSpecs = missionSpecState.lastValidation && Array.isArray(missionSpecState.lastValidation.specs) ? missionSpecState.lastValidation.specs : [];
+    currentSpecs.forEach(function(spec){
+      const item = document.createElement('li');
+      item.textContent = spec.missionId + ' · ' + spec.handlerId + '@' + spec.handlerVersion + ' · válida';
+      compatibilityMissionsNode.appendChild(item);
+    });
+    compatibilityIssuesNode.replaceChildren();
+    const compatibilityIssueList = Array.isArray(missionSpecState.issues) ? missionSpecState.issues : [];
+    compatibilityIssueList.forEach(function(item){
+      const node = document.createElement('li');
+      node.textContent = String(item.code || 'MISSION_SPEC_INVALID') + ': ' + String(item.message || 'Incidencia de compatibilidad.');
+      compatibilityIssuesNode.appendChild(node);
+    });
+
+    const persistenceReady = persistenceState.status === 'READY' || persistenceState.status === 'EMPTY';
+    const persistenceMessage = persistenceReady
+      ? 'Guardado solo en este navegador. No se sincroniza con la nube.'
+      : 'Persistencia no disponible. Studio continúa en memoria y los cambios se pierden al recargar.';
+    activationNoticeNode.textContent = persistenceMessage;
+    publicationNoticeNode.textContent = persistenceMessage;
+    persistenceNoticeNode.textContent = persistenceMessage;
+    persistenceNoticeNode.className = 'studio-publication-memory-notice' + (persistenceReady ? '' : ' studio-persistence-warning');
+    persistenceDetailsNode.innerHTML = '';
+    persistenceDetailsNode.appendChild(createPublicationRow('Estado', String(persistenceState.status || 'UNAVAILABLE')));
+    persistenceDetailsNode.appendChild(createPublicationRow('Última actualización', String(persistenceState.updatedAt || 'Sin datos')));
+    persistenceDetailsNode.appendChild(createPublicationRow('Tamaño', String(persistenceState.serializedBytes || 0) + ' bytes'));
+    persistenceDetailsNode.appendChild(createPublicationRow('Publicaciones', String(persistenceState.publicationCount || 0)));
+    persistenceDetailsNode.appendChild(createPublicationRow('Referencias activas', String(persistenceState.activeReferenceCount || 0)));
+    persistenceDetailsNode.appendChild(createPublicationRow('Activaciones', String(persistenceState.activationRecordCount || 0)));
+    if (persistenceState.lastError) {
+      persistenceDetailsNode.appendChild(createPublicationRow('Error', String(persistenceState.lastError.code || 'PERSISTENCE_ERROR') + ': ' + String(persistenceState.lastError.message || 'Error de persistencia.')));
+    }
+    persistenceCheckbox.disabled = Boolean(persistenceState.busy);
+    persistenceCheckbox.checked = false;
+    clearPersistenceButton.disabled = true;
+    persistenceCheckbox.onchange = function(){
+      clearPersistenceButton.disabled = Boolean(persistenceState.busy) || !persistenceCheckbox.checked;
+    };
+    clearPersistenceButton.onclick = function(){
+      if (persistenceCheckbox.checked && typeof persistenceActions.onClear === 'function') persistenceActions.onClear();
+    };
+
+    statusNode.textContent = 'Estado: ' + String(state.status || 'IDLE');
+    revisionNode.textContent = 'Revisión del borrador: ' + String(state.currentDraftRevision || '');
+
+    validateButton.disabled = Boolean(state.busy);
+    publishButton.disabled = Boolean(state.busy);
+    activationStatusNode.textContent = 'Estado de activación: ' + String(activationState.status || 'IDLE');
+
+    activeDetailsNode.innerHTML = '';
+    if (activationState.activeReference) {
+      activeDetailsNode.appendChild(createPublicationRow('Publicación activa', 'v' + String(activationState.activeReference.version || '')));
+      activeDetailsNode.appendChild(createPublicationRow('publicationId', String(activationState.activeReference.publicationId || '')));
+      activeDetailsNode.appendChild(createPublicationRow('contentHash', String(activationState.activeReference.contentHash || '').slice(0, 12)));
+    } else {
+      activeDetailsNode.textContent = 'Ninguna publicación activa.';
+    }
+
+    deactivateButton.hidden = !activationState.activeReference;
+    deactivateButton.disabled = Boolean(activationState.busy);
+    deactivateButton.onclick = function(){
+      if (activationState.activeReference && typeof activationActions.onDeactivate === 'function') {
+        activationActions.onDeactivate(activationState.activeReference.campaignId);
+      }
+    };
+
+    activationHistoryNode.innerHTML = '';
+    if (activationRecords.length === 0) {
+      const emptyActivation = document.createElement('li');
+      emptyActivation.className = 'studio-publication-history-empty';
+      emptyActivation.textContent = 'Sin activaciones en esta sesión.';
+      activationHistoryNode.appendChild(emptyActivation);
+    } else {
+      activationRecords.forEach(record => {
+        const activationItem = document.createElement('li');
+        activationItem.className = 'studio-publication-history-item';
+        activationItem.textContent = String(record.action || '') + ' · ' +
+          String(record.previousPublicationId || 'sin activa') + ' → ' +
+          String(record.nextPublicationId || 'sin activa') + ' · ' +
+          String(record.occurredAt || '');
+        activationHistoryNode.appendChild(activationItem);
+      });
+    }
+    validateButton.onclick = function(){ if (typeof actions.onValidate === 'function') actions.onValidate(); };
+    publishButton.onclick = function(){ if (typeof actions.onPublish === 'function') actions.onPublish(); };
+
+    const errorCount = issues.filter(issue => issue && issue.severity === 'ERROR').length;
+    const warningCount = issues.filter(issue => issue && issue.severity === 'WARNING').length;
+    const infoCount = issues.filter(issue => issue && issue.severity === 'INFO').length;
+
+    summaryNode.innerHTML = '';
+    summaryNode.appendChild(createPublicationRow('Errores', String(errorCount)));
+    summaryNode.appendChild(createPublicationRow('Advertencias', String(warningCount)));
+    summaryNode.appendChild(createPublicationRow('Info', String(infoCount)));
+
+    issuesNode.innerHTML = '';
+    if (issues.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'studio-publication-issue studio-publication-issue-info';
+      empty.textContent = 'Sin incidencias para mostrar.';
+      issuesNode.appendChild(empty);
+    } else {
+      issues.forEach(issue => {
+        const li = document.createElement('li');
+        const severity = String(issue && issue.severity || 'INFO').toLowerCase();
+        li.className = 'studio-publication-issue studio-publication-issue-' + severity;
+        li.textContent = '[' + String(issue.code || 'UNKNOWN') + '] ' + String(issue.message || 'Incidencia sin detalle.');
+        issuesNode.appendChild(li);
+      });
+    }
+
+    resultNode.innerHTML = '';
+    const lastResult = state.lastResult;
+    if (!lastResult) {
+      resultNode.textContent = 'Sin resultados de publicación en esta sesión.';
+    } else if (lastResult.success) {
+      resultNode.appendChild(createPublicationRow('campaignId', String(lastResult.publication && lastResult.publication.campaignId || '')));
+      resultNode.appendChild(createPublicationRow('publicationId', String(lastResult.publication && lastResult.publication.publicationId || '')));
+      resultNode.appendChild(createPublicationRow('version', String(lastResult.publication && lastResult.publication.version || '')));
+      resultNode.appendChild(createPublicationRow('schemaVersion', String(lastResult.publication && lastResult.publication.schemaVersion || '')));
+      resultNode.appendChild(createPublicationRow('contentHash', String(lastResult.publication && lastResult.publication.contentHash || '')));
+      resultNode.appendChild(createPublicationRow('createdAt', String(lastResult.record && lastResult.record.createdAt || '')));
+      resultNode.appendChild(createPublicationRow('sourceDraftRevision', String(lastResult.record && lastResult.record.sourceDraftRevision || '')));
+    } else {
+      resultNode.appendChild(createPublicationRow('error.code', String(lastResult.error && lastResult.error.code || 'ERROR')));
+      resultNode.appendChild(createPublicationRow('error.message', String(lastResult.error && lastResult.error.message || 'Publicación fallida.')));
+    }
+
+    historyNode.innerHTML = '';
+    if (history.length === 0) {
+      const emptyHistory = document.createElement('li');
+      emptyHistory.className = 'studio-publication-history-empty';
+      emptyHistory.textContent = 'Sin publicaciones para la campaña actual.';
+      historyNode.appendChild(emptyHistory);
+    } else {
+      history.forEach(item => {
+        const row = document.createElement('li');
+        row.className = 'studio-publication-history-item';
+        const shortHash = String(item.contentHash || '').slice(0, 12);
+        const publicationText = document.createElement('span');
+        publicationText.className = 'studio-publication-history-text';
+        publicationText.textContent = 'v' + String(item.version || '') + ' · ' + String(item.publicationId || '') + ' · ' + shortHash + ' · ' + String(item.contentHash || '') + ' · rev ' + String(item.sourceDraftRevision || '') + ' · ' + String(item.createdAt || '');
+        row.appendChild(publicationText);
+
+        if (item.isActive) {
+          const activeBadge = document.createElement('span');
+          activeBadge.className = 'studio-publication-active-badge';
+          activeBadge.textContent = 'Activa';
+          row.appendChild(activeBadge);
+        }
+
+        const entryActions = document.createElement('div');
+        entryActions.className = 'studio-publication-entry-actions';
+        if (item.canActivate) {
+          const activateButton = document.createElement('button');
+          activateButton.type = 'button';
+          activateButton.className = 'btn studio-btn small';
+          activateButton.textContent = 'Activar';
+          activateButton.disabled = Boolean(activationState.busy);
+          activateButton.onclick = function(){
+            if (typeof activationActions.onActivate === 'function') activationActions.onActivate(item.campaignId, item.publicationId);
+          };
+          entryActions.appendChild(activateButton);
+        }
+        if (item.canRollback) {
+          const rollbackButton = document.createElement('button');
+          rollbackButton.type = 'button';
+          rollbackButton.className = 'btn studio-btn small';
+          rollbackButton.textContent = 'Volver a esta versión';
+          rollbackButton.disabled = Boolean(activationState.busy);
+          rollbackButton.onclick = function(){
+            if (typeof activationActions.onRollback === 'function') activationActions.onRollback(item.campaignId, item.publicationId);
+          };
+          entryActions.appendChild(rollbackButton);
+        }
+        if (entryActions.childNodes.length) row.appendChild(entryActions);
+        historyNode.appendChild(row);
+      });
+    }
+  }
+  function render(config) {
+    const missions = Array.isArray(config.missions) ? config.missions : [];
+
+    renderMissionBank({
+      missions,
+      isInDraft: config.isInDraft,
+      getCampaignLabel: config.getCampaignLabel,
+      onAdd: config.onAdd
+    });
+    renderMetadata({
+      campaignName: config.campaignName,
+      campaignDescription: config.campaignDescription,
+      campaignScenarioId: config.campaignScenarioId,
+      escenarios: Array.isArray(config.escenarios) ? config.escenarios : [],
+      alCambiarNombre: config.alCambiarNombre,
+      alCambiarDescripcion: config.alCambiarDescripcion,
+      alCambiarEscenario: config.alCambiarEscenario
+    });
+    renderConfiguracion({
+      campaignDificultad: config.campaignDificultad,
+      campaignDuracion: config.campaignDuracion,
+      campaignNivel: config.campaignNivel,
+      campaignModalidad: config.campaignModalidad,
+      alCambiarDificultad: config.alCambiarDificultad,
+      alCambiarDuracion: config.alCambiarDuracion,
+      alCambiarNivel: config.alCambiarNivel,
+      alCambiarModalidad: config.alCambiarModalidad
+    });
+    renderDraft({
+      draftMissions: Array.isArray(config.draftMissions) ? config.draftMissions : [],
+      onMove: config.onMove,
+      onRemove: config.onRemove
+    });
+    renderSummary({
+      campaignName: config.campaignName,
+      campaignScenario: config.campaignScenario,
+      campaignDificultad: config.campaignDificultad,
+      campaignDuracion: config.campaignDuracion,
+      campaignNivel: config.campaignNivel,
+      campaignModalidad: config.campaignModalidad,
+      draftMissions: Array.isArray(config.draftMissions) ? config.draftMissions : [],
+      validacion: config.validacion
+    });
+
+    renderPublicationPanel({
+      publication: config.publication || null,
+      activation: config.activation || null,
+      persistence: config.persistence || null
+    });
+  }
+
+  window.CRIOS_STUDIO_RENDERER = {
+    render
+  };
+})();
+

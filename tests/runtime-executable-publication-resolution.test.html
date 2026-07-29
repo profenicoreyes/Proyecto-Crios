@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CRIOS Runtime Executable Publication Resolution Tests</title></head>
+<body><h1>CRIOS Runtime Executable Publication Resolution Tests</h1><pre id="results">Running...</pre>
+<script>
+window.__CRIOS_A2_006D_TELEMETRY__={pageerrors:[],consoleErrors:[],warnings:[]};
+window.addEventListener('error',function(event){window.__CRIOS_A2_006D_TELEMETRY__.pageerrors.push(String(event.message||event.error||'error'));});
+window.addEventListener('unhandledrejection',function(event){window.__CRIOS_A2_006D_TELEMETRY__.pageerrors.push(String(event.reason||'rejection'));});
+(function(){var error=console.error,warn=console.warn;console.error=function(){window.__CRIOS_A2_006D_TELEMETRY__.consoleErrors.push(Array.prototype.join.call(arguments,' '));return error.apply(console,arguments);};console.warn=function(){window.__CRIOS_A2_006D_TELEMETRY__.warnings.push(Array.prototype.join.call(arguments,' '));return warn.apply(console,arguments);};})();
+</script>
+<script src="../js/publication/publication-model.js"></script><script src="../js/publication/publication-normalizer.js"></script><script src="../js/publication/publication-validator.js"></script><script src="../js/publication/publication-canonicalizer.js"></script><script src="../js/publication/publication-hash.js"></script><script src="../js/publication/publication-memory-store.js"></script><script src="../js/publication/publication-service.js"></script><script src="../js/publication/publication-api.js"></script>
+<script src="../js/runtime/missions/published-mission-spec.js"></script><script src="../js/runtime/missions/safe-expression.js"></script><script src="../js/runtime/missions/mission-handler-registry.js"></script><script src="../js/runtime/missions/declarative-area-handler.js"></script><script src="../js/runtime/missions/mission-materializer.js"></script><script src="../js/runtime/missions/mission-handlers-api.js"></script>
+<script src="./fixtures/publishable-mission-spec-fixtures.js"></script>
+<script>window.__CRIOS_GLOBALS_BEFORE_RUNTIME_PUBLICATION__=Object.keys(window).sort();</script>
+<script src="../js/runtime/publication/runtime-publication-model.js"></script><script src="../js/runtime/publication/runtime-publication-validator.js"></script><script src="../js/runtime/publication/runtime-publication-resolver.js"></script><script src="../js/runtime/publication/runtime-publication-api.js"></script>
+<script>window.__CRIOS_GLOBALS_AFTER_RUNTIME_PUBLICATION__=Object.keys(window).sort();</script>
+<script src="./runtime-executable-publication-resolution.test.js"></script>
+</body></html>

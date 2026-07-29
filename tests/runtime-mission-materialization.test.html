@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>CRIOS Runtime Mission Materialization Tests</title>
+</head>
+<body>
+  <h1>CRIOS Runtime Mission Materialization Tests</h1>
+  <pre id="results">RUNNING</pre>
+  <script>window.__CRIOS_GLOBALS_BEFORE_MISSIONS__=Object.keys(window);</script>
+  <script src="../js/runtime/missions/published-mission-spec.js"></script>
+  <script src="../js/runtime/missions/safe-expression.js"></script>
+  <script src="../js/runtime/missions/mission-handler-registry.js"></script>
+  <script src="../js/runtime/missions/declarative-area-handler.js"></script>
+  <script src="../js/runtime/missions/mission-materializer.js"></script>
+  <script src="../js/runtime/missions/mission-handlers-api.js"></script>
+  <script>window.__CRIOS_GLOBALS_AFTER_MISSIONS__=Object.keys(window);</script>
+  <script src="fixtures/publishable-mission-spec-fixtures.js"></script>
+  <script src="runtime-mission-materialization.test.js"></script>
+</body>
+</html>

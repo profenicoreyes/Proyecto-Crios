@@ -23,6 +23,7 @@
 <div class="system-controls">
   <button id="audioControl" class="system-control" onclick="toggleAmbientAudio(event)">SILENCIAR MÚSICA</button>
   <button id="fullscreenControl" class="system-control" onclick="toggleFullscreen(event)">PANTALLA COMPLETA</button>
+  <a id="studioLink" class="system-control" href="./studio/index.html" target="_blank" rel="noopener">CRIOS Studio</a>
 </div>
 <div class="version-mark">CRIOS OS · v1.23</div>
 <div id="toast" class="toast"></div>
@@ -369,6 +370,22 @@
 </section>
 </div>
 
+<script src="js/escenarios/registro-escenarios.js"></script>
+<script src="js/escenarios/antartida.js"></script>
+<script>
+  (function(){
+    try{
+      if(typeof REGISTRO_ESCENARIOS !== 'undefined' && typeof ESCENARIO_ANTARTIDA !== 'undefined'){
+        // Registrar escenario Antártida si aún no está registrado
+        if(!REGISTRO_ESCENARIOS.obtener(ESCENARIO_ANTARTIDA.id)){
+          REGISTRO_ESCENARIOS.registrar(ESCENARIO_ANTARTIDA);
+        }
+        // Establecer como activo por defecto
+        REGISTRO_ESCENARIOS.establecerActivo(ESCENARIO_ANTARTIDA.id);
+      }
+    }catch(e){console.warn('[escenarios] registro automático falló',e)}
+  })();
+</script>
 <script src="js/config.js"></script>
 <script src="js/datos/taxonomia.js"></script>
 <script src="js/datos/campanas.js"></script>
@@ -377,6 +394,35 @@
 <script src="js/misiones/matematica/geometria/areas/invernadero.js"></script>
 <script src="js/misiones/matematica/geometria/areas/banco-hielo.js"></script>
 <script src="js/misiones/matematica/geometria/areas/hangar-perforacion.js"></script>
+<script src="js/runtime/trace-core.js"></script>
+<script src="js/publication/publication-model.js"></script>
+<script src="js/publication/publication-normalizer.js"></script>
+<script src="js/publication/publication-validator.js"></script>
+<script src="js/publication/publication-canonicalizer.js"></script>
+<script src="js/publication/publication-hash.js"></script>
+<script src="js/publication/publication-memory-store.js"></script>
+<script src="js/publication/publication-service.js"></script>
+<script src="js/publication/publication-api.js"></script>
+<script src="js/publication/activation/activation-model.js"></script>
+<script src="js/publication/activation/activation-store.js"></script>
+<script src="js/publication/activation/activation-service.js"></script>
+<script src="js/publication/activation/activation-api.js"></script>
+<script src="js/publication/persistence/persistence-model.js"></script>
+<script src="js/publication/persistence/persistence-storage-adapter.js"></script>
+<script src="js/publication/persistence/persistent-publication-store.js"></script>
+<script src="js/publication/persistence/persistent-activation-store.js"></script>
+<script src="js/publication/persistence/persistence-coordinator.js"></script>
+<script src="js/publication/persistence/persistence-api.js"></script>
+<script src="js/runtime/missions/published-mission-spec.js"></script>
+<script src="js/runtime/missions/safe-expression.js"></script>
+<script src="js/runtime/missions/mission-handler-registry.js"></script>
+<script src="js/runtime/missions/declarative-area-handler.js"></script>
+<script src="js/runtime/missions/mission-materializer.js"></script>
+<script src="js/runtime/missions/mission-handlers-api.js"></script>
+<script src="js/runtime/publication/runtime-publication-model.js"></script>
+<script src="js/runtime/publication/runtime-publication-validator.js"></script>
+<script src="js/runtime/publication/runtime-publication-resolver.js"></script>
+<script src="js/runtime/publication/runtime-publication-api.js"></script>
 <script src="js/crios.js"></script>
 </body>
 </html>
