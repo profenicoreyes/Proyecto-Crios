@@ -257,9 +257,8 @@
       ['contexto destruido no ejecuta timers adicionales',function(){equal(late.callbacksAfter,late.callbacksBefore);}],
       ['tracer no interfiere payload estado recursos retornos o referencias',function(){var offPayload=JSON.parse(off.firstRequest.body);var onPayload=JSON.parse(value.firstRequest.body);offPayload.idSesion='opaque';onPayload.idSesion='opaque';equal(offPayload,onPayload);var offSession=fixtures.clone(off.session);var onSession=fixtures.clone(value.resolvedSession);offSession.idSesion='opaque';onSession.idSesion='opaque';equal(offSession,onSession);var offMetrics=off.harness.state.metrics;var onMetrics=value.harness.state.metrics;equal([offMetrics.timerCalls,offMetrics.promiseConstructions,offMetrics.listenerCalls],[onMetrics.timerCalls,onMetrics.promiseConstructions,onMetrics.listenerCalls]);equal(off.harness.state.sessionStorage.calls().filter(function(call){return call.operation!=='get';}).length,value.harness.state.sessionStorage.calls().filter(function(call){return call.operation!=='get';}).length);equal(off.returnValue,value.returnValue);var exported=value.harness.child.CRIOS_TRACE.getEvents();var original=exported[0].eventType;exported[0].eventType='mutated';equal(value.harness.child.CRIOS_TRACE.getEvents()[0].eventType,original);var text=JSON.stringify({contextId:value.harness.state.contextId,requestId:value.firstRequest.requestId});assert(text.indexOf(fixtures.identity.realName)<0);assert(text.indexOf('respuestas')<0);}]
     ];
-    checks.splice(34,8);
-    equal(checks.length,42,'RT-001 test count');
-    var partitions=[{name:'cola y busy',count:6},{name:'resolucion',count:5},{name:'rechazo',count:6},{name:'pendingResult y retry',count:6},{name:'limite de confirmacion',count:5},{name:'duplicados y respuestas tardias',count:6},{name:'privacidad y seguridad',count:8}];
+    equal(checks.length,50,'RT-001 test count');
+    var partitions=[{name:'cola y busy',count:6},{name:'resolucion',count:5},{name:'rechazo',count:6},{name:'pendingResult y retry',count:6},{name:'limite de confirmacion',count:5},{name:'duplicados y respuestas tardias',count:6},{name:'rechazo y limites del transporte',count:8},{name:'privacidad y seguridad',count:8}];
     checks.forEach(function(check,index){test('RT-001',categoryAt(index,partitions),String(index+1).padStart(2,'0')+' '+check[0],check[1],{contextId:value.harness.state.contextId,requestId:index<24?value.firstRequest.requestId:(index<34?failed.request.requestId:late.request.requestId)});});
   }
 
@@ -318,9 +317,8 @@
       ['sin infraestructura de red o storage real',function(){var m=value.harness.state.metrics;equal([m.xhrCalls,m.webSocketCalls,m.eventSourceCalls,m.indexedDbCalls],[0,0,0,0]);}],
       ['reload no crea garantia idempotente',function(){assert(!Object.prototype.hasOwnProperty.call(retryPayload,'idempotencyKey'));assert(!Object.prototype.hasOwnProperty.call(value.recoveredSession,'serverConfirmation'));}]
     ];
-    checks.splice(32,4);
-    equal(checks.length,43,'RT-002 test count');
-    var partitions=[{name:'snapshots',count:4},{name:'reload resuelto o rechazado',count:8},{name:'campos persistidos',count:7},{name:'campos descartados',count:4},{name:'publicacion progreso y sesion',count:7},{name:'dominio reconstruido',count:8},{name:'pendingResult y listeners',count:5}];
+    equal(checks.length,47,'RT-002 test count');
+    var partitions=[{name:'snapshots',count:4},{name:'reload resuelto o rechazado',count:8},{name:'campos persistidos',count:7},{name:'campos descartados',count:4},{name:'publicacion progreso y sesion',count:7},{name:'dominio reconstruido',count:12},{name:'pendingResult y listeners',count:5}];
     checks.forEach(function(check,index){test('RT-002',categoryAt(index,partitions),String(index+1).padStart(2,'0')+' '+check[0],check[1],{contextId:value.harness.state.contextId,requestId:value.retryRequest.requestId});});
   }
 
@@ -358,7 +356,7 @@
     var passed=results.filter(function(result){return result.passed;}).length;
     var failedTests=results.filter(function(result){return !result.passed;});
     var telemetry=window.__CRIOS_A2_006H_TELEMETRY__;
-    var status=results.length===85&&passed===85&&telemetry.pageerrors.length===0&&telemetry.consoleErrors.length===0&&telemetry.warnings.length===0?'PASS':'FAIL';
+    var status=results.length===definitions.length&&passed===definitions.length&&telemetry.pageerrors.length===0&&telemetry.consoleErrors.length===0&&telemetry.warnings.length===0?'PASS':'FAIL';
     var output=Object.freeze({
       status:status,
       total:results.length,

@@ -217,6 +217,8 @@
     var causalRelationships = observedStates.reduce(function(all,state){ return all.concat(state.relationships.slice()); },[]);
     var fetches = observedStates.reduce(function(all,state){ return all.concat(fixtures.clone(state.fetches)); },[]);
     var storageOperations = observedStates.reduce(function(all,state){ return all.concat(fixtures.clone(state.storageOperations)); },[]);
+    var expectedScenarioWarnings = observedStates.reduce(function(all,state){ return all.concat((state.expectedScenarioWarnings || []).slice()); },[]);
+    var scenarioWarnings = observedStates.reduce(function(all,state){ return all.concat((state.warnings || []).slice()); },[]);
     var snapshot = harness.state.snapshot(scenarioId + '-snapshot');
     var outcome = classifyOutcome(harness);
     var session = parse(harness.state.sessionStorage, fixtures.storageKeys.sessionData);
@@ -253,9 +255,9 @@
       technicalErrors: harness.state.events.filter(function(event){ return event.errorCode; }),
       silentFallbackDetected: false,
       productionInterferenceDetected: false,
-      expectedScenarioWarnings: harness.state.expectedScenarioWarnings.slice(),
-      unexpectedWarnings: harness.state.warnings.slice(),
-      telemetry: { pageerrors: harness.state.pageerrors.slice(), consoleErrors: harness.state.consoleErrors.slice(), warnings: harness.state.warnings.slice() },
+      expectedScenarioWarnings: expectedScenarioWarnings,
+      unexpectedWarnings: scenarioWarnings,
+      telemetry: { pageerrors: harness.state.pageerrors.slice(), consoleErrors: harness.state.consoleErrors.slice(), warnings: scenarioWarnings.slice() },
       causalEvents: causalEvents,
       causalRelationships: causalRelationships,
       fetches: fetches,
@@ -447,13 +449,13 @@
       var item = cases[i];
       var sessionRules=[];
       var localRules=[];
-      if(item[0] === 'STORAGE-03-SESSION-READ-FAIL') sessionRules.push({operation:'getItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_SESSION_READ_FAILURE'});
-      if(item[0] === 'STORAGE-04-SESSION-WRITE-FAIL' || item[0] === 'STORAGE-14-LOCAL-OK-SESSION-FAIL') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_SESSION_WRITE_FAILURE'});
-      if(item[0] === 'STORAGE-05-PROGRESS-READ-FAIL') sessionRules.push({operation:'getItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_PROGRESS_READ_FAILURE'});
-      if(item[0] === 'STORAGE-06-PROGRESS-WRITE-FAIL') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_PROGRESS_WRITE_FAILURE'});
-      if(item[0] === 'STORAGE-07-QUOTA-SESSION-WRITE') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_QUOTA_EXCEEDED'});
-      if(item[0] === 'STORAGE-08-QUOTA-PROGRESS-WRITE' || item[0] === 'STORAGE-12-RESTORED-BEFORE-RELOAD') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_QUOTA_EXCEEDED'});
-      if(item[0] === 'STORAGE-09-QUOTA-PENDING-WRITE' || item[0] === 'STORAGE-11-RESTORED-BEFORE-RETRY') localRules.push({operation:'setItem',key:fixtures.storageKeys.pendingResult,errorCode:'STORAGE_QUOTA_EXCEEDED'});
+      if(item[0] === 'STORAGE-03-SESSION-READ-FAIL') sessionRules.push({operation:'getItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_SESSION_READ_FAILURE',warningFamily:'storage-read'});
+      if(item[0] === 'STORAGE-04-SESSION-WRITE-FAIL' || item[0] === 'STORAGE-14-LOCAL-OK-SESSION-FAIL') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_SESSION_WRITE_FAILURE',warningFamily:'storage-write'});
+      if(item[0] === 'STORAGE-05-PROGRESS-READ-FAIL') sessionRules.push({operation:'getItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_PROGRESS_READ_FAILURE',warningFamily:'storage-read'});
+      if(item[0] === 'STORAGE-06-PROGRESS-WRITE-FAIL') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_PROGRESS_WRITE_FAILURE',warningFamily:'storage-write'});
+      if(item[0] === 'STORAGE-07-QUOTA-SESSION-WRITE') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.sessionData,errorCode:'STORAGE_QUOTA_EXCEEDED',warningFamily:'storage-quota'});
+      if(item[0] === 'STORAGE-08-QUOTA-PROGRESS-WRITE' || item[0] === 'STORAGE-12-RESTORED-BEFORE-RELOAD') sessionRules.push({operation:'setItem',key:fixtures.storageKeys.campaignProgress,errorCode:'STORAGE_QUOTA_EXCEEDED',warningFamily:'storage-quota'});
+      if(item[0] === 'STORAGE-09-QUOTA-PENDING-WRITE' || item[0] === 'STORAGE-11-RESTORED-BEFORE-RETRY') localRules.push({operation:'setItem',key:fixtures.storageKeys.pendingResult,errorCode:'STORAGE_QUOTA_EXCEEDED',warningFamily:'storage-quota'});
       if(item[0] === 'STORAGE-10-PENDING-REMOVE-FAIL') localRules.push({operation:'removeItem',key:fixtures.storageKeys.pendingResult,errorCode:'STORAGE_REMOVE_FAILURE'});
       if(item[0] === 'STORAGE-13-SESSION-OK-LOCAL-FAIL') localRules.push({operation:'setItem',key:fixtures.storageKeys.pendingResult,errorCode:'STORAGE_PENDING_WRITE_FAILURE'});
       var harness = await launchWithInitialState(item[0].toLowerCase(),{initialSessionStorageRules:sessionRules,initialLocalStorageRules:localRules});

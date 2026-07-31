@@ -9,6 +9,13 @@
     return freeze({ code: String(code), operation: String(operation), phase: String(phase), storage: String(storageName || 'unknown'), key: key === undefined ? null : String(key) });
   }
 
+  var controlledWarningFamilies = freeze({
+    domain: { family: 'domain', prefix: 'No se pudo reconstruir el dominio de campaña', alternatePrefix: 'Módulos de dominio no disponibles' },
+    storageRead: { family: 'storage-read', prefix: 'No se pudo leer el almacenamiento', operation: 'getItem' },
+    storageWrite: { family: 'storage-write', prefix: 'No se pudo guardar el almacenamiento', operation: 'setItem' },
+    storageQuota: { family: 'storage-quota', prefix: 'No se pudo guardar el almacenamiento', operation: 'setItem', errorCode: 'STORAGE_QUOTA_EXCEEDED' }
+  });
+
   function createDeferred(NativePromise){
     var resolveValue;
     var rejectValue;
@@ -90,12 +97,13 @@
       key: function(index){return Object.keys(values)[index] || null;},
       snapshot: function(){return clone(values);},
       calls: function(){return clone(calls);},
-      setFailure: function(operation, key, errorCode){ rules.push({ operation: operation, key: String(key), errorCode: String(errorCode) }); },
+      activeRules: function(){return clone(rules);},
+      setFailure: function(operation, key, errorCode, warningFamily){ rules.push({ operation: operation, key: String(key), errorCode: String(errorCode), warningFamily: warningFamily ? String(warningFamily) : null }); },
       clearFailure: function(operation, key){ rules = rules.filter(function(rule){ return !(rule.operation === operation && String(rule.key) === String(key)); }); },
       setAvailable: function(){rules=[];},
-      setReadFailure: function(){rules=[{operation:'getItem',key:'*',errorCode:'STORAGE_READ_FAILURE'}];},
-      setWriteFailure: function(){rules=[{operation:'setItem',key:'*',errorCode:'STORAGE_WRITE_FAILURE'}];},
-      setQuotaExceeded: function(){rules=[{operation:'setItem',key:'*',errorCode:'STORAGE_QUOTA_EXCEEDED'}];},
+      setReadFailure: function(){rules=[{operation:'getItem',key:'*',errorCode:'STORAGE_READ_FAILURE',warningFamily:'storage-read'}];},
+      setWriteFailure: function(){rules=[{operation:'setItem',key:'*',errorCode:'STORAGE_WRITE_FAILURE',warningFamily:'storage-write'}];},
+      setQuotaExceeded: function(){rules=[{operation:'setItem',key:'*',errorCode:'STORAGE_QUOTA_EXCEEDED',warningFamily:'storage-quota'}];},
       setRemoveFailure: function(){rules=[{operation:'removeItem',key:'*',errorCode:'STORAGE_REMOVE_FAILURE'}];},
       restore: function(){rules=[];}
     };
@@ -270,10 +278,26 @@
 
     var originalWarn = console.warn;
     var originalError = console.error;
+    function matchesActiveStorageWarning(descriptor, text){
+      var rules = sessionStorageControl.activeRules().concat(localStorageControl.activeRules());
+      return text.indexOf(descriptor.prefix) >= 0 && rules.some(function(rule){
+        if(rule.warningFamily !== descriptor.family || rule.operation !== descriptor.operation || text.indexOf(rule.errorCode) < 0) return false;
+        return descriptor.errorCode ? rule.errorCode === descriptor.errorCode : true;
+      });
+    }
+    function expectedWarningFamily(text){
+      var domain = controlledWarningFamilies.domain;
+      var domainActive = controller.domainScriptsFail || controller.domainState === 'unavailable' || controller.domainState === 'lost';
+      if(domainActive && (text.indexOf(domain.prefix) >= 0 || text.indexOf(domain.alternatePrefix) >= 0)) return domain.family;
+      if(matchesActiveStorageWarning(controlledWarningFamilies.storageRead, text)) return controlledWarningFamilies.storageRead.family;
+      if(matchesActiveStorageWarning(controlledWarningFamilies.storageQuota, text)) return controlledWarningFamilies.storageQuota.family;
+      if(matchesActiveStorageWarning(controlledWarningFamilies.storageWrite, text)) return controlledWarningFamilies.storageWrite.family;
+      return null;
+    }
     console.warn = function(){
       var text = Array.prototype.join.call(arguments, ' ');
-      var expected = text.indexOf('No se pudo reconstruir el dominio de campaña') >= 0 || text.indexOf('Módulos de dominio no disponibles') >= 0 || text.indexOf('No se pudo leer el almacenamiento') >= 0;
-      if(expected) expectedScenarioWarnings.push(freeze({ operation: 'product-warning', warning: text }));
+      var expectedFamily = expectedWarningFamily(text);
+      if(expectedFamily) expectedScenarioWarnings.push(freeze({ operation: 'product-warning', warning: text }));
       else warnings.push(text);
       return originalWarn.apply(console, arguments);
     };
