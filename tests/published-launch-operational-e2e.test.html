@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRIOS Published Launch Operational E2E</title>
+<link rel="icon" href="data:,">
+</head>
+<body>
+<h1>CRIOS Published Launch Operational E2E</h1>
+<pre id="results">RUNNING</pre>
+<script>
+(function(){
+  'use strict';
+  if (new URLSearchParams(window.location.search).get('shell') === '1') {
+    document.getElementById('results').textContent = 'SHELL';
+    return;
+  }
+  var script = document.createElement('script');
+  script.src = './published-launch-operational-e2e.test.js';
+  document.body.appendChild(script);
+})();
+</script>
+</body>
+</html>
