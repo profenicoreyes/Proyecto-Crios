@@ -321,6 +321,7 @@
   async function readSourceContract(){
     var response=await fetch('../js/crios.js?source-contract=a2-011',{cache:'no-store'});
     var source=await response.text();
+    source=source.replace(/\r\n?/g,'\n');
     var validate=(source.match(/function validateMissionResult\(id\)\{[\s\S]*?\n\}\nfunction registerHint/)||[''])[0];
     var finalProcedure=(source.match(/function validateFinalProcedure\(\)[\s\S]*?\n\}/)||[''])[0];
     var finalFlow=(source.match(/function validateFinal\(\)[\s\S]*?\n\}/)||[''])[0];
