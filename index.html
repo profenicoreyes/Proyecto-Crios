@@ -250,9 +250,9 @@
     <div id="missionWelcome" class="hidden">
       <h3 style="margin-top:24px;color:var(--ok)">Identidad confirmada: <span data-user-name>equipo</span></h3>
       <p class="subtitle">Grupo: <strong id="confirmedGroup">—</strong></p>
-      <p class="subtitle">Seleccioná el recorrido operativo que querés iniciar.</p>
+      <p class="subtitle" id="campaignEntryPrompt">Seleccioná el recorrido operativo que querés iniciar.</p>
       <div class="actions">
-        <button class="btn" onclick="abrirSelectorCampanas()">Seleccionar campaña</button>
+        <button class="btn" id="campaignEntryButton" onclick="abrirSelectorCampanas()">Seleccionar campaña</button>
         <button class="btn secondary" onclick="resetProgress()">Nueva sesión / cambiar identidad</button>
       </div>
     </div>
@@ -387,6 +387,8 @@
   })();
 </script>
 <script src="js/config.js"></script>
+<script src="js/runtime/launch/runtime-launch-contract.js"></script>
+<script src="js/runtime/launch/runtime-launch-selection.js"></script>
 <script src="js/datos/taxonomia.js"></script>
 <script src="js/datos/campanas.js"></script>
 <script src="js/nucleo/registro-misiones.js"></script>

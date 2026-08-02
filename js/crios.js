@@ -4,8 +4,25 @@
 let campanaActiva = null;
 let misionesActivas = [];
 let missionIds = [];
-const runtimeCampaignMode = CRIOS_CONFIG.runtimeCampaignMode;
-const runtimeCampaignModeValid = runtimeCampaignMode === 'legacy' || runtimeCampaignMode === 'published';
+const runtimeLaunchApi = window.CRIOS_RUNTIME_LAUNCH || null;
+const runtimeLaunchSelectionApi = window.CRIOS_RUNTIME_LAUNCH_SELECTION || null;
+const runtimeLaunchSearch = window.location && typeof window.location.search === 'string'
+  ? window.location.search
+  : '';
+const runtimeLaunchState = runtimeLaunchSelectionApi && typeof runtimeLaunchSelectionApi.selectRuntimeLaunch === 'function'
+  ? runtimeLaunchSelectionApi.selectRuntimeLaunch(CRIOS_CONFIG.runtimeCampaignMode, runtimeLaunchSearch, runtimeLaunchApi)
+  : Object.freeze({
+    explicit: false,
+    blocked: true,
+    sourceMode: null,
+    campaignId: null,
+    error: Object.freeze({ code: 'LAUNCH_SELECTION_UNAVAILABLE', message: 'Launch selection is unavailable.', parameter: null })
+  });
+const runtimeLaunchBlocked = runtimeLaunchState.blocked;
+const runtimeLaunchError = runtimeLaunchState.error;
+const runtimeCampaignMode = runtimeLaunchState.sourceMode;
+const requestedPublishedCampaignId = runtimeLaunchState.campaignId;
+const runtimeCampaignModeValid = !runtimeLaunchBlocked && (runtimeCampaignMode === 'legacy' || runtimeCampaignMode === 'published');
 let preparedRuntimeCampaign = null;
 
 function obtenerMision(id) {
@@ -708,7 +725,7 @@ function writeJson(storage, key, value) {
   }
 }
 
-let campanaActivaId = sessionStorage.getItem(STORAGE.campaignId) || CAMPANA_INICIAL_ID;
+let campanaActivaId = requestedPublishedCampaignId || sessionStorage.getItem(STORAGE.campaignId) || CAMPANA_INICIAL_ID;
 let progresosCampanas = readJson(sessionStorage, STORAGE.campaignProgress, {});
 const progresoAnterior = readJson(sessionStorage, STORAGE.progress, {});
 let progress = {};
@@ -780,7 +797,7 @@ function inicializarCampana() {
 
   if (runtimeCampaignMode !== 'legacy') {
     campanaActiva = inicial;
-    campanaActivaId = inicial.id;
+    campanaActivaId = requestedPublishedCampaignId || inicial.id;
     misionesActivas = [];
     missionIds = [];
     progress = {};
@@ -1155,8 +1172,11 @@ function go(id){
   if(id==='reveal'){
     loadUserName();
     const saved=sessionStorage.getItem(STORAGE.characterName);
-    document.getElementById('missionLogin')?.classList.toggle('hidden',!!saved);
-    document.getElementById('missionWelcome')?.classList.toggle('hidden',!saved);
+    const savedCampaignId=sessionData&&sessionData.campana&&(sessionData.campana.campaignId||sessionData.campana.id);
+    const resumablePublishedSession=runtimeCampaignMode==='published'&&sessionData&&sessionData.campana&&sessionData.campana.sourceMode==='published'&&savedCampaignId===campanaActivaId;
+    const resumeSavedSession=!runtimeLaunchBlocked&&Boolean(saved)&&(runtimeCampaignMode==='legacy'||resumablePublishedSession);
+    document.getElementById('missionLogin')?.classList.toggle('hidden',resumeSavedSession);
+    document.getElementById('missionWelcome')?.classList.toggle('hidden',!resumeSavedSession);
   }
   const active=document.querySelector('.screen.active');
   const visibleAfter = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
@@ -1336,7 +1356,7 @@ function resetProgress(){
     sessionStorage.removeItem(STORAGE.campaignId);
     sessionStorage.removeItem(STORAGE.campaignProgress);
     progresosCampanas={};
-    campanaActivaId=CAMPANA_INICIAL_ID;
+    campanaActivaId=requestedPublishedCampaignId||CAMPANA_INICIAL_ID;
     inicializarCampana();
 
     document.querySelectorAll('input').forEach(i=>i.value='');
@@ -1384,6 +1404,16 @@ async function loadGroups(){
   const status=document.getElementById('groupLoadStatus');
   const button=document.getElementById('identifyButton');
   if(!select||!button) return;
+
+  if(runtimeLaunchBlocked){
+    select.disabled=true;
+    button.disabled=true;
+    select.innerHTML='<option value="">Enlace de campaña no válido</option>';
+    if(status) status.textContent='Abrí el modo estable o solicitá un nuevo enlace docente.';
+    neutralPublishedBlock(document.getElementById('nameFeedback'),'El enlace de acceso a la campaña no es válido.');
+    traceEvent('bootstrap-runtime:blocked',{mode:null,phase:'launch-request',code:runtimeLaunchError&&runtimeLaunchError.code||'INVALID_LAUNCH_REQUEST',result:'blocked'});
+    return;
+  }
 
   select.disabled=true;
   button.disabled=true;
@@ -1442,9 +1472,29 @@ function emitBootstrapRuntime(eventType,payload){
   traceEvent(eventType,payload);
 }
 
-function neutralPublishedBlock(feedback){
+function buildLegacyLaunchHref(){
+  const search=runtimeLaunchApi&&typeof runtimeLaunchApi.buildLegacyLaunchSearch==='function'
+    ? runtimeLaunchApi.buildLegacyLaunchSearch()
+    : '?source=legacy';
+  return `${window.location.pathname}${search}${window.location.hash||''}`;
+}
+
+function neutralPublishedBlock(feedback,message){
+  if(!feedback) return;
   feedback.className='feedback show bad';
-  feedback.textContent='La campaña no está disponible en este momento. Solicitá asistencia docente.';
+  feedback.replaceChildren();
+  const text=document.createElement('span');
+  text.textContent=message||'La campaña no está disponible en este momento. Solicitá asistencia docente.';
+  feedback.appendChild(text);
+  const actions=document.createElement('div');
+  actions.className='actions';
+  const fallback=document.createElement('a');
+  fallback.id='legacyLaunchFallback';
+  fallback.className='btn secondary';
+  fallback.href=buildLegacyLaunchHref();
+  fallback.textContent='Abrir modo estable';
+  actions.appendChild(fallback);
+  feedback.appendChild(actions);
 }
 
 function applyPreparedPublishedCampaign(prepared){
@@ -1452,6 +1502,7 @@ function applyPreparedPublishedCampaign(prepared){
   const metadata=prepared.data.campaign;
   campanaActiva={id:metadata.campaignId,titulo:metadata.titulo,descripcion:metadata.descripcion,escenario:metadata.escenario,estado:'publicada',clasificacion:metadata.clasificacion,misiones:prepared.data.missionOrder.slice()};
   campanaActivaId=metadata.campaignId;
+  sessionStorage.setItem(STORAGE.campaignId, metadata.campaignId);
   misionesActivas=prepared.bridge.missions.slice();
   missionIds=prepared.data.missionOrder.slice();
   progress=sessionData&&sessionData.idSesion
@@ -1493,9 +1544,15 @@ async function identifyUser(){
     return;
   }
 
+  if(runtimeLaunchBlocked){
+    traceEvent('bootstrap-runtime:blocked',{mode:null,phase:'launch-request',code:runtimeLaunchError&&runtimeLaunchError.code||'INVALID_LAUNCH_REQUEST',result:'blocked'});
+    neutralPublishedBlock(fb,'El enlace de acceso a la campaña no es válido.');
+    return;
+  }
+
   if(!runtimeCampaignModeValid){
     traceEvent('bootstrap-runtime:blocked',{mode:runtimeCampaignMode,phase:'mode',code:'INVALID_RUNTIME_CAMPAIGN_MODE',result:'blocked'});
-    neutralPublishedBlock(fb);
+    neutralPublishedBlock(fb,'El modo solicitado no está disponible.');
     return;
   }
 
@@ -1503,13 +1560,15 @@ async function identifyUser(){
   if(runtimeCampaignMode==='published'){
     const existingSession=sessionData;
     const existingIdentity=existingSession&&existingSession.nombre===realName&&existingSession.personaje===characterName&&existingSession.grupo===groupName;
-    const prepared=await preparePublishedForIdentity(realName,characterName,groupName,existingIdentity);
+    const existingCampaignId=existingSession&&existingSession.campana&&(existingSession.campana.campaignId||existingSession.campana.id);
+    const recoverPinned=Boolean(existingIdentity&&existingSession.campana&&existingSession.campana.sourceMode==='published'&&existingCampaignId===campanaActivaId);
+    const prepared=await preparePublishedForIdentity(realName,characterName,groupName,recoverPinned);
     if(!prepared.success){
       neutralPublishedBlock(fb);
       return;
     }
     applyPreparedPublishedCampaign(prepared.campaign);
-    recoveredSession=Boolean(existingIdentity&&existingSession&&existingSession.campana&&existingSession.campana.publicationId===prepared.campaign.data.campaign.publicationId&&existingSession.campana.contentHash===prepared.campaign.data.campaign.contentHash);
+    recoveredSession=Boolean(recoverPinned&&existingSession&&existingSession.campana&&existingSession.campana.publicationId===prepared.campaign.data.campaign.publicationId&&existingSession.campana.contentHash===prepared.campaign.data.campaign.contentHash);
     if(!recoveredSession) sessionData=null;
   }
 
@@ -1535,6 +1594,7 @@ async function identifyUser(){
   ensureMissionData();
   setupMissionUI();
   actualizarCabeceraCampana();
+  configureCampaignEntry();
   updateMap();
   traceEvent('bootstrap-runtime:completed',{mode:runtimeCampaignMode,campaignId:campanaActiva.id,publicationId:sessionData&&sessionData.campana&&sessionData.campana.publicationId||null,result:'completed'});
   document.getElementById('missionWelcome').classList.remove('hidden');
@@ -1558,6 +1618,18 @@ function actualizarCabeceraCampana() {
   const clasificacion = document.getElementById('mapCampaignClass');
   if (titulo) titulo.textContent = campanaActiva.titulo;
   if (clasificacion) clasificacion.textContent = `${etiquetas.materia} · ${etiquetas.tema} · ${etiquetas.subtema}`;
+}
+
+function configureCampaignEntry(){
+  const prompt=document.getElementById('campaignEntryPrompt');
+  const button=document.getElementById('campaignEntryButton');
+  if(runtimeCampaignMode==='published'){
+    if(prompt) prompt.textContent='La campaña publicada está preparada para continuar.';
+    if(button) button.textContent='Continuar campaña';
+    return;
+  }
+  if(prompt) prompt.textContent='Seleccioná el recorrido operativo que querés iniciar.';
+  if(button) button.textContent='Seleccionar campaña';
 }
 
 function detalleCampana(id) {
@@ -1609,6 +1681,12 @@ function renderCampaignSelector() {
 }
 
 function abrirSelectorCampanas() {
+  if(runtimeCampaignMode==='published'){
+    actualizarCabeceraCampana();
+    updateMap();
+    go('map');
+    return;
+  }
   renderCampaignSelector();
   go('campanas');
 }
@@ -2009,7 +2087,8 @@ const publicApi = Object.freeze({
 Object.assign(window, publicApi);
 window.CRIOS = Object.freeze({
   version: CRIOS_VERSION,
-  runtimeCampaignMode,
+  runtimeCampaignMode: runtimeLaunchState.sourceMode,
+  runtimeLaunch: runtimeLaunchState,
   obtenerCampanaActiva: () => campanaActiva,
   obtenerMisionesActivas: () => Object.freeze([...missionIds]),
   listarCampanas: () => Object.freeze([...listarCampanas()]),
