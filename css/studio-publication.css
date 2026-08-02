@@ -171,3 +171,14 @@
     flex-direction: column;
   }
 }
+
+#studioPublicationPanel .studio-runtime-launch-link {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 0.55rem;
+  text-decoration: none;
+}
+
+#studioPublicationPanel .studio-runtime-launch-link[hidden] {
+  display: none;
+}

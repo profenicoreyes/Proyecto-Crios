@@ -597,13 +597,14 @@
 
     const runtimeLimit = document.createElement('p');
     runtimeLimit.className = 'studio-publication-memory-notice';
-    runtimeLimit.textContent = 'Las publicaciones actuales todavía no son consumidas por Runtime';
+    runtimeLimit.textContent = 'Runtime puede abrir una publicación activa guardada en este mismo navegador.';
 
     const activationTitle = document.createElement('h4');
     activationTitle.className = 'studio-publication-history-title';
     activationTitle.textContent = 'Activación';
 
     const activationNotice = document.createElement('p');
+    activationNotice.id = 'studioActivationPersistenceNotice';
     activationNotice.className = 'studio-publication-memory-notice';
     activationNotice.textContent = 'Activación en memoria. Se pierde al recargar.';
 
@@ -614,6 +615,20 @@
     const activeDetails = document.createElement('div');
     activeDetails.id = 'studioActivationActiveDetails';
     activeDetails.className = 'studio-publication-result';
+
+    const runtimeLaunchTitle = document.createElement('h4');
+    runtimeLaunchTitle.className = 'studio-publication-history-title';
+    runtimeLaunchTitle.textContent = 'Acceso para estudiantes';
+
+    const runtimeLaunchStatus = document.createElement('p');
+    runtimeLaunchStatus.id = 'studioRuntimeLaunchStatus';
+    runtimeLaunchStatus.className = 'studio-publication-memory-notice';
+
+    const runtimeLaunchLink = document.createElement('a');
+    runtimeLaunchLink.id = 'studioRuntimeLaunchLink';
+    runtimeLaunchLink.className = 'btn studio-btn studio-runtime-launch-link';
+    runtimeLaunchLink.textContent = 'Abrir campaña en CRIOS';
+    runtimeLaunchLink.hidden = true;
 
     const deactivateButton = document.createElement('button');
     deactivateButton.id = 'studioActivationDeactivateButton';
@@ -687,6 +702,9 @@
     panel.appendChild(activationNotice);
     panel.appendChild(activationStatus);
     panel.appendChild(activeDetails);
+    panel.appendChild(runtimeLaunchTitle);
+    panel.appendChild(runtimeLaunchStatus);
+    panel.appendChild(runtimeLaunchLink);
     panel.appendChild(deactivateButton);
     panel.appendChild(activationHistoryTitle);
     panel.appendChild(activationHistory);
@@ -733,6 +751,8 @@
     const activation = config && config.activation ? config.activation : {};
     const activationState = activation.state || { status: 'IDLE', busy: false, activeReference: null };
     const activationRecords = Array.isArray(activation.history) ? activation.history : [];
+    const runtimeLaunch = config && config.runtimeLaunch ? config.runtimeLaunch : {};
+    const runtimeLaunchState = runtimeLaunch.state || { available: false, status: 'NO_ACTIVE_PUBLICATION', message: 'Activá una publicación para habilitar su acceso en CRIOS.', href: null, target: null, rel: null };
     const activationActions = activation.actions || {};
     const persistence = config && config.persistence ? config.persistence : {};
     const persistenceState = persistence.state || { status: 'UNAVAILABLE', busy: false };
@@ -750,9 +770,11 @@
     const historyNode = panel.querySelector('#studioPublicationHistory');
     const activationStatusNode = panel.querySelector('#studioActivationStatus');
     const activeDetailsNode = panel.querySelector('#studioActivationActiveDetails');
+    const runtimeLaunchStatusNode = panel.querySelector('#studioRuntimeLaunchStatus');
+    const runtimeLaunchLinkNode = panel.querySelector('#studioRuntimeLaunchLink');
     const deactivateButton = panel.querySelector('#studioActivationDeactivateButton');
     const activationHistoryNode = panel.querySelector('#studioActivationHistory');
-    const activationNoticeNode = panel.querySelector('.studio-publication-memory-notice');
+    const activationNoticeNode = panel.querySelector('#studioActivationPersistenceNotice');
     const publicationNoticeNode = panel.querySelector('#studioPublicationPersistenceNotice');
     const persistenceNoticeNode = panel.querySelector('#studioPersistenceNotice');
     const persistenceDetailsNode = panel.querySelector('#studioPersistenceDetails');
@@ -829,6 +851,23 @@
       activeDetailsNode.appendChild(createPublicationRow('contentHash', String(activationState.activeReference.contentHash || '').slice(0, 12)));
     } else {
       activeDetailsNode.textContent = 'Ninguna publicación activa.';
+    }
+
+    runtimeLaunchStatusNode.textContent = String(runtimeLaunchState.message || '');
+    runtimeLaunchStatusNode.dataset.status = String(runtimeLaunchState.status || '');
+    runtimeLaunchLinkNode.hidden = !runtimeLaunchState.available;
+    if (runtimeLaunchState.available) {
+      runtimeLaunchLinkNode.href = String(runtimeLaunchState.href || '');
+      runtimeLaunchLinkNode.target = String(runtimeLaunchState.target || '_blank');
+      runtimeLaunchLinkNode.rel = String(runtimeLaunchState.rel || 'noopener');
+      runtimeLaunchLinkNode.dataset.campaignId = String(runtimeLaunchState.campaignId || '');
+      runtimeLaunchLinkNode.dataset.publicationId = String(runtimeLaunchState.publicationId || '');
+    } else {
+      runtimeLaunchLinkNode.removeAttribute('href');
+      runtimeLaunchLinkNode.removeAttribute('target');
+      runtimeLaunchLinkNode.removeAttribute('rel');
+      delete runtimeLaunchLinkNode.dataset.campaignId;
+      delete runtimeLaunchLinkNode.dataset.publicationId;
     }
 
     deactivateButton.hidden = !activationState.activeReference;
@@ -1000,6 +1039,7 @@
     renderPublicationPanel({
       publication: config.publication || null,
       activation: config.activation || null,
+      runtimeLaunch: config.runtimeLaunch || null,
       persistence: config.persistence || null
     });
   }

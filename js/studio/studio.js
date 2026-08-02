@@ -8,6 +8,7 @@
   var studioActivationController = null;
   var studioPersistenceController = null;
   var studioMissionSpecController = null;
+  var studioRuntimeLaunchApi = null;
 
   function safeText(element, text){
     if (!element) return;
@@ -366,6 +367,29 @@
     };
   }
 
+  function buildStudioRuntimeLaunchState(activationState, persistenceState) {
+    var factory = window.CRIOS_STUDIO_RUNTIME_LAUNCH;
+    if (!factory || typeof factory.buildDescriptor !== 'function') {
+      return Object.freeze({
+        available: false,
+        status: 'PERSISTENCE_UNAVAILABLE',
+        message: 'El acceso a Runtime no está disponible.',
+        campaignId: null,
+        publicationId: null,
+        href: null,
+        target: null,
+        rel: null
+      });
+    }
+
+    return factory.buildDescriptor({
+      activeReference: activationState && activationState.activeReference,
+      activationBusy: Boolean(activationState && activationState.busy),
+      persistenceState: persistenceState,
+      runtimePath: '../index.html'
+    });
+  }
+
   function createReloadSafeActivationStore(store) {
     return Object.freeze({
       commit: function(reference, record, options){
@@ -435,6 +459,7 @@
     const missionSpecState = studioMissionSpecController
       ? studioMissionSpecController.getState()
       : { status: 'IDLE', busy: false, missionCount: 0, validSpecCount: 0, invalidSpecCount: 0, requiredHandlers: [], manifest: null, issues: [], lastValidation: null };
+    const runtimeLaunchState = buildStudioRuntimeLaunchState(activationState, persistenceState);
     const publicationActivationHistory = publicationHistory.map(function(publication){
       return Object.assign({}, publication, {
         isActive: Boolean(activationState.activeReference && activationState.activeReference.publicationId === publication.publicationId),
@@ -491,6 +516,9 @@
               });
             }
           }
+        },
+        runtimeLaunch: {
+          state: runtimeLaunchState
         },
         persistence: {
           state: persistenceState,
@@ -744,6 +772,16 @@
       });
     }
 
+    studioRuntimeLaunchApi = Object.freeze({
+      version: '1.0.0',
+      getState: function(){
+        return buildStudioRuntimeLaunchState(
+          studioActivationController ? studioActivationController.getState() : null,
+          studioPersistenceController ? studioPersistenceController.getStatus() : null
+        );
+      }
+    });
+
     render(missions, campaigns, taxonomy);
 
     const shareService = createShareService();
@@ -762,8 +800,9 @@
       publishCampaign,
       publication: studioPublicationApi,
       activation: studioActivationApi,
-      persistence: studioPersistenceApi
-      ,missionSpecs: studioMissionSpecsApi
+      persistence: studioPersistenceApi,
+      runtimeLaunch: studioRuntimeLaunchApi,
+      missionSpecs: studioMissionSpecsApi
     }));
 
     try { delete window.CRIOS_STUDIO_PUBLICATION_ADAPTER; } catch (ignoreA) {}
