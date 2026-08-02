@@ -42,6 +42,9 @@ let domainRelease = null;
 let domainSession = null;
 let domainRuntime = null;
 let domainNavigation = null;
+let gameFlowLegacyAdapterPromise = null;
+let createLegacyGameFlowAdapter = null;
+let missionGameFlowAdapter = null;
 
 function getTracer() {
   try {
@@ -205,6 +208,21 @@ function ensureDomainModulesLoaded() {
   });
 
   return domainModulesPromise;
+}
+
+function ensureGameFlowLegacyAdapterLoaded() {
+  if (gameFlowLegacyAdapterPromise) return gameFlowLegacyAdapterPromise;
+
+  gameFlowLegacyAdapterPromise = import('./game-flow/game-flow-legacy-adapter.js')
+    .then((module) => {
+      if (!module || typeof module.createLegacyGameFlowAdapter !== 'function') {
+        throw new Error('No se pudo cargar Game Flow Legacy Adapter: fábrica no disponible.');
+      }
+      createLegacyGameFlowAdapter = module.createLegacyGameFlowAdapter;
+      return createLegacyGameFlowAdapter;
+    });
+
+  return gameFlowLegacyAdapterPromise;
 }
 
 function getDomainContract(ownerKey, contractKey) {
@@ -377,30 +395,136 @@ function resolveMissionIdUsingDomain(missionId) {
   }
 }
 
-function applyDomainEvaluationForMission(missionId, isCorrect) {
-  if (!domainReady || !domainSession) {
-    traceReturnEarly('applyDomainEvaluationForMission', 'domain-not-ready-or-no-session', {
-      missionId: missionId,
-      isCorrect: Boolean(isCorrect)
-    });
-    return;
-  }
-
+function applyPlayerEvaluation({ evaluation, session, mission, campaign }) {
   const playerStateService = (window.CRIOS_DOMAIN || {}).playerStateService;
-  if (!playerStateService) {
-    traceReturnEarly('applyDomainEvaluationForMission', 'player-state-service-missing', {
-      missionId: missionId
+  if (!playerStateService || typeof playerStateService.applyEvaluation !== 'function') {
+    throw new Error('PlayerStateService no disponible.');
+  }
+  return playerStateService.applyEvaluation(session, {
+    missionId: mission.id,
+    isCorrect: evaluation.success
+  });
+}
+
+function updateProgress({ evaluation, playerState, session, mission, campaign }) {
+  const id = mission.id;
+  const rec = missionRecord(id);
+  if (evaluation.success) {
+    progress[id] = true;
+    sessionStats[id].completed = true;
+    sessionStats[id].timeMs = (sessionStats[id].timeMs || 0)
+      + (Date.now() - (missionOpenedAt[id] || Date.now()));
+    if (rec) {
+      rec.answerCorrect = true;
+      rec.timeMs = sessionStats[id].timeMs;
+    }
+  } else if (rec) {
+    rec.answerCorrect = false;
+  }
+  return {
+    progress: { ...progress },
+    campaignCompleted: false
+  };
+}
+
+function rebuildRuntime({ evaluation, playerState, progress, session, mission, campaign }) {
+  const createRuntime = getDomainContract('runtimeCore', 'createRuntime');
+  if (!createRuntime) throw new Error('RuntimeCore no disponible.');
+  domainRuntime = createRuntime(domainRelease, session);
+  return domainRuntime;
+}
+
+function resolveNavigation({ evaluation, playerState, progress, runtime, session, mission, campaign }) {
+  const createNavigation = getDomainContract('navigationCore', 'createNavigation');
+  if (!createNavigation) throw new Error('NavigationCore no disponible.');
+  domainNavigation = createNavigation(runtime.runtime, domainRelease);
+  return evaluation.success
+    ? { action: 'RETURN_TO_MAP', target: 'map' }
+    : { action: 'RETRY_MISSION', target: null };
+}
+
+function getMissionGameFlowAdapter() {
+  if (missionGameFlowAdapter) return missionGameFlowAdapter;
+  if (typeof createLegacyGameFlowAdapter !== 'function') return null;
+  missionGameFlowAdapter = createLegacyGameFlowAdapter({
+    applyPlayerEvaluation,
+    updateProgress,
+    rebuildRuntime,
+    resolveNavigation
+  });
+  return missionGameFlowAdapter;
+}
+
+function cloneMissionGameFlowState(value) {
+  if (value === null || value === undefined) return value;
+  const safeClone = getDomainContract('releaseModel', 'safeClone');
+  if (safeClone) return safeClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function captureMissionGameFlowTransaction() {
+  return {
+    domainSession: cloneMissionGameFlowState(domainSession),
+    domainRuntime: domainRuntime,
+    domainNavigation: domainNavigation,
+    progress: cloneMissionGameFlowState(progress),
+    sessionStats: cloneMissionGameFlowState(sessionStats),
+    sessionData: cloneMissionGameFlowState(sessionData)
+  };
+}
+
+function rollbackMissionGameFlowTransaction(snapshot) {
+  if (!snapshot) return false;
+  domainSession = snapshot.domainSession;
+  domainRuntime = snapshot.domainRuntime;
+  domainNavigation = snapshot.domainNavigation;
+  progress = snapshot.progress;
+  sessionStats = snapshot.sessionStats;
+  sessionData = snapshot.sessionData;
+  return true;
+}
+
+function missionGameFlowResultCommits(result) {
+  return Boolean(result && (
+    result.status === 'FLOW_COMPLETED'
+    || result.status === 'GAME_OVER'
+    || result.status === 'CAMPAIGN_COMPLETED'
+  ));
+}
+
+function applyDomainEvaluationForMission(missionId, isCorrect) {
+  getMissionGameFlowAdapter();
+  if (!domainReady || !domainSession || !domainRelease || !missionGameFlowAdapter) {
+    traceReturnEarly('applyDomainEvaluationForMission', 'domain-or-adapter-not-ready', {
+      missionId: missionId,
+      isCorrect: Boolean(isCorrect),
+      domainReady: domainReady,
+      hasSession: Boolean(domainSession),
+      hasRelease: Boolean(domainRelease),
+      hasAdapter: Boolean(missionGameFlowAdapter)
     });
-    return;
+    return null;
   }
 
+  let transactionSnapshot = null;
+  let transactionRolledBack = false;
   try {
+    transactionSnapshot = captureMissionGameFlowTransaction();
     const coherentMissionId = syncDomainMissionById(missionId);
+    const mission = domainRelease.missions.find((item) => item && item.id === coherentMissionId);
+    if (!mission) throw new Error('La misión no existe en el Campaign Release activo.');
     const statusBefore = domainSession.status;
     const livesBefore = domainSession.lives;
     const gameOverBefore = statusBefore === 'gameOver';
     const missionBefore = isTraceRecording() ? captureMissionTraceSnapshot() : null;
     const visibleBefore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
+    const evaluation = {
+      status: isCorrect ? 'CORRECT' : 'INCORRECT',
+      success: Boolean(isCorrect),
+      score: isCorrect ? 1 : 0,
+      completed: Boolean(isCorrect)
+    };
+
     traceEvent('player-state:evaluation:before', {
       missionId: coherentMissionId,
       evaluationBefore: { status: statusBefore, lives: livesBefore },
@@ -434,14 +558,19 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       metadata: missionBefore
     });
 
-    playerStateService.applyEvaluation(domainSession, {
-      missionId: coherentMissionId,
-      isCorrect: Boolean(isCorrect)
-    });
-
-    const statusAfterEvaluation = domainSession.status;
-    const livesAfterEvaluation = domainSession.lives;
-    const gameOverAfterEvaluation = statusAfterEvaluation === 'gameOver';
+    const command = {
+      evaluation,
+      session: domainSession,
+      mission,
+      campaign: domainRelease
+    };
+    const result = missionGameFlowAdapter.execute(command);
+    const evaluatedSession = result.playerState && result.playerState.state
+      ? result.playerState.state
+      : domainSession;
+    const statusAfterEvaluation = evaluatedSession.status;
+    const livesAfterEvaluation = evaluatedSession.lives;
+    const gameOverAfterEvaluation = result.status === 'GAME_OVER';
     traceEvent('domain:evaluation:apply:after', {
       missionId: coherentMissionId,
       evaluationBefore: { status: statusBefore, lives: livesBefore },
@@ -451,29 +580,44 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       metadata: { isCorrect: Boolean(isCorrect) }
     });
 
-    if (domainSession.status === 'gameOver') {
+    if (!missionGameFlowResultCommits(result)) {
+      transactionRolledBack = rollbackMissionGameFlowTransaction(transactionSnapshot);
+      traceEvent('domain:integration:rollback', {
+        missionId: coherentMissionId,
+        evaluationBefore: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
+        evaluationAfter: { status: domainSession.status, lives: domainSession.lives },
+        error: result.error,
+        metadata: {
+          status: result.status,
+          stage: result.stage,
+          rolledBack: transactionRolledBack
+        }
+      });
+    }
+
+    let refreshed = result.status === 'FLOW_COMPLETED';
+    if (result.status === 'GAME_OVER') {
+      const playerStateService = (window.CRIOS_DOMAIN || {}).playerStateService;
       traceEvent('gameOver:entered', {
         missionId: coherentMissionId,
         evaluationBefore: { status: statusBefore, lives: livesBefore },
         evaluationAfter: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
         gameOverBefore: gameOverBefore,
-        gameOverAfter: gameOverAfterEvaluation,
+        gameOverAfter: true,
         screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
         screenAfter: visibleBefore ? visibleBefore.currentScreen : null,
         visibleEffect: visibleBefore,
         metadata: { statusAfter: statusAfterEvaluation, livesAfter: livesAfterEvaluation }
       });
-    }
-
-    if (!playerStateService.canContinue(domainSession)) {
-      playerStateService.restorePlayerState(domainSession);
+      domainSession = playerStateService.restorePlayerState(domainSession);
+      refreshed = refreshDomainRuntimeAndNavigation();
       const visibleAfterRestore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
       traceEvent('gameOver:restored', {
         missionId: coherentMissionId,
         evaluationBefore: { status: statusAfterEvaluation, lives: livesAfterEvaluation },
         evaluationAfter: { status: domainSession.status, lives: domainSession.lives },
-        gameOverBefore: gameOverAfterEvaluation,
-        gameOverAfter: domainSession.status === 'gameOver',
+        gameOverBefore: true,
+        gameOverAfter: false,
         screenBefore: visibleBefore ? visibleBefore.currentScreen : null,
         screenAfter: visibleAfterRestore ? visibleAfterRestore.currentScreen : null,
         visibleEffect: visibleAfterRestore,
@@ -481,7 +625,6 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       });
     }
 
-    const refreshed = refreshDomainRuntimeAndNavigation();
     const missionAfter = isTraceRecording() ? captureMissionTraceSnapshot() : null;
     const visibleAfter = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
     traceEvent('domain:integration:after', {
@@ -499,18 +642,28 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       visibleEffect: visibleAfter,
       metadata: {
         refreshed: refreshed,
+        rolledBack: transactionRolledBack,
+        status: result.status,
+        stage: result.stage,
         statusAfter: domainSession.status,
         livesAfter: domainSession.lives,
         runtimeMissionId: missionAfter ? missionAfter.runtimeMissionId : null,
         navigationMissionId: missionAfter ? missionAfter.navigationMissionId : null
       }
     });
+    return result;
   } catch (error) {
+    if (!transactionRolledBack) {
+      transactionRolledBack = rollbackMissionGameFlowTransaction(transactionSnapshot);
+    }
     traceEvent('error:caught', {
       scope: 'applyDomainEvaluationForMission',
+      status: 'PORT_FAILURE',
+      stage: 'VALIDATION',
       error: traceErrorData(error)
     });
-    console.warn('[CRIOS] No se pudo aplicar PlayerState:', error);
+    console.warn('[CRIOS] No se pudo aplicar Game Flow:', error);
+    return null;
   }
 }
 
@@ -1662,31 +1815,36 @@ function validateMissionResult(id){
   sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].attempts++;
   const rec=missionRecord(id);if(rec){rec.answer=input.value;rec.answerAttempts=sessionStats[id].attempts;rec.expected=expected;}
   persistStats();
-  if(Math.abs(value-expected)<1e-9){
-    applyDomainEvaluationForMission(id,true);
-    fb.className='feedback show ok';fb.textContent='Resultado compatible. Módulo recuperado. Regresando al mapa…';progress[id]=true;sessionStats[id].completed=true;
-    sessionStats[id].timeMs=(sessionStats[id].timeMs||0)+(Date.now()-(missionOpenedAt[id]||Date.now()));
-    if(rec){rec.answerCorrect=true;rec.timeMs=sessionStats[id].timeMs;}
+  const isCorrect=Math.abs(value-expected)<1e-9;
+  const gameFlowResult=applyDomainEvaluationForMission(id,isCorrect);
+  if(isCorrect&&gameFlowResult&&gameFlowResult.status==='FLOW_COMPLETED'&&gameFlowResult.action==='RETURN_TO_MAP'&&gameFlowResult.target==='map'){
+    fb.className='feedback show ok';fb.textContent='Resultado compatible. Módulo recuperado. Regresando al mapa…';
     persistStats();save();if(soundOn)successSound();
     traceAsyncScheduled('validateMissionResult', 'setTimeout-map', {
       delayMs: CRIOS_CONFIG.missionReturnDelayMs,
       missionId: id
     });
     setTimeout(() => go('map'), CRIOS_CONFIG.missionReturnDelayMs)
-    traceEvent('evaluation:submit:after', {
-      scope: 'mission',
-      missionId: id,
-      isCorrect: true
-    });
+  }else if(!isCorrect&&gameFlowResult&&gameFlowResult.status==='FLOW_COMPLETED'&&gameFlowResult.action==='RETRY_MISSION'&&gameFlowResult.target===null){
+    persistSession();fb.className='feedback show bad';fb.textContent='El resultado no coincide con la simulación. Revisá el procedimiento antes de volver a intentarlo.'
+  }else if(gameFlowResult&&gameFlowResult.status==='GAME_OVER'){
+    if(rec) rec.answerCorrect=false;
+    persistSession();fb.className='feedback show bad';fb.textContent='El resultado no coincide con la simulación. Revisá el procedimiento antes de volver a intentarlo.'
   }else{
-    applyDomainEvaluationForMission(id,false);
-    if(rec) rec.answerCorrect=false;persistSession();fb.className='feedback show bad';fb.textContent='El resultado no coincide con la simulación. Revisá el procedimiento antes de volver a intentarlo.'
-    traceEvent('evaluation:submit:after', {
-      scope: 'mission',
-      missionId: id,
-      isCorrect: false
+    fb.className='feedback show bad';fb.textContent='No fue posible actualizar el estado de la misión. Solicitá asistencia docente.';
+    traceEvent('error:caught', {
+      scope: 'applyDomainEvaluationForMission',
+      status: gameFlowResult ? gameFlowResult.status : null,
+      stage: gameFlowResult ? gameFlowResult.stage : null,
+      error: gameFlowResult ? gameFlowResult.error : 'Game Flow no disponible.'
     });
   }
+  traceEvent('evaluation:submit:after', {
+    scope: 'mission',
+    missionId: id,
+    isCorrect: isCorrect,
+    status: gameFlowResult ? gameFlowResult.status : null
+  });
   queueSessionUpdate();
 }
 function registerHint(id){if(hintRegistered[id])return;hintRegistered[id]=true;sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].hints++;const rec=missionRecord(id);if(rec) rec.hintUsed=true;persistStats();persistSession();queueSessionUpdate()}
@@ -1774,7 +1932,7 @@ document.getElementById('intro').setAttribute('tabindex','0');
 document.getElementById('intro').setAttribute('role','button');
 document.getElementById('intro').setAttribute('aria-label','Tocar para establecer la conexión');
 
-ensureDomainModulesLoaded()
+Promise.all([ensureDomainModulesLoaded(), ensureGameFlowLegacyAdapterLoaded()])
   .then(() => {
     domainReady = true;
     rebuildDomainStateForActiveCampaign();

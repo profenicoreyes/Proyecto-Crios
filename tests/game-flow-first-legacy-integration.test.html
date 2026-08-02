@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIOS Game Flow First Legacy Integration</title>
+</head>
+<body>
+  <h1>CRIOS Game Flow First Legacy Integration</h1>
+  <div id="harnesses" hidden></div>
+  <pre id="results">Running...</pre>
+  <script>
+    (function(){
+      var telemetry={pageerrors:[],consoleErrors:[],warnings:[]};
+      var originalError=console.error;
+      var originalWarn=console.warn;
+      document.getElementById('results').__criosTelemetry=telemetry;
+      window.addEventListener('error',function(event){telemetry.pageerrors.push(String(event.message||event.error||'error'));});
+      window.addEventListener('unhandledrejection',function(event){telemetry.pageerrors.push(String(event.reason||'rejection'));});
+      console.error=function(){telemetry.consoleErrors.push(Array.prototype.join.call(arguments,' '));return originalError.apply(console,arguments);};
+      console.warn=function(){telemetry.warnings.push(Array.prototype.join.call(arguments,' '));return originalWarn.apply(console,arguments);};
+    })();
+  </script>
+  <script src="./game-flow-first-legacy-integration.test.js"></script>
+</body>
+</html>
