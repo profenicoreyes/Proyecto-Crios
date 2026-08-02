@@ -472,4 +472,4 @@
 .campaign-detail .detail-grid{display:grid;gap:12px;margin:20px 0}
 .campaign-detail .detail-row{padding:12px;border-left:2px solid rgba(86,201,239,.45);background:rgba(7,27,42,.58)}
 .campaign-detail .detail-row span{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
-@media(max-width:900px){.campaign-layout{grid-template-columns:1fr}.campaign-detail{display:none}}
+@media(max-width:900px){.campaign-layout{grid-template-columns:1fr}.campaign-detail{display:block}}
