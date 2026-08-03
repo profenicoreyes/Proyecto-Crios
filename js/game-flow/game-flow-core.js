@@ -1,6 +1,7 @@
 /* CRIOS Game Flow - pure orchestration core */
 
 import { isEvaluationModel } from '../evaluation/evaluation-model.js';
+import { isProgressModel } from '../progress/progress-model.js';
 
 const STAGES = Object.freeze({
   VALIDATION: 'VALIDATION',
@@ -45,9 +46,7 @@ function validPlayerState(value) {
 }
 
 function validProgress(value) {
-  return isObject(value) && nonEmptyString(value.status)
-    && typeof value.campaignCompleted === 'boolean'
-    && has(value, 'progress') && isObject(value.progress);
+  return isProgressModel(value);
 }
 
 function validRuntime(value) {

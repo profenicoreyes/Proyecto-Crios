@@ -63,6 +63,8 @@ let gameFlowLegacyAdapterPromise = null;
 let createLegacyGameFlowAdapter = null;
 let evaluationModelPromise = null;
 let createMissionEvaluation = null;
+let progressModelPromise = null;
+let createMissionProgressUpdate = null;
 let missionGameFlowAdapter = null;
 
 function getTracer() {
@@ -259,6 +261,21 @@ function ensureEvaluationModelLoaded() {
   return evaluationModelPromise;
 }
 
+function ensureProgressModelLoaded() {
+  if (progressModelPromise) return progressModelPromise;
+
+  progressModelPromise = import('./progress/progress-model.js')
+    .then((module) => {
+      if (!module || typeof module.createMissionProgressUpdate !== 'function') {
+        throw new Error('No se pudo cargar Progress Model: fábrica no disponible.');
+      }
+      createMissionProgressUpdate = module.createMissionProgressUpdate;
+      return createMissionProgressUpdate;
+    });
+
+  return progressModelPromise;
+}
+
 function getDomainContract(ownerKey, contractKey) {
   const domain = window.CRIOS_DOMAIN || {};
   const owner = domain[ownerKey];
@@ -441,23 +458,31 @@ function applyPlayerEvaluation({ evaluation, session, mission, campaign }) {
 }
 
 function updateProgress({ evaluation, playerState, session, mission, campaign }) {
+  if (typeof createMissionProgressUpdate !== 'function') {
+    throw new Error('Progress Model no disponible.');
+  }
+
   const id = mission.id;
   const rec = missionRecord(id);
-  if (evaluation.success) {
-    progress[id] = true;
-    sessionStats[id].completed = true;
-    sessionStats[id].timeMs = (sessionStats[id].timeMs || 0)
-      + (Date.now() - (missionOpenedAt[id] || Date.now()));
-    if (rec) {
-      rec.answerCorrect = true;
-      rec.timeMs = sessionStats[id].timeMs;
-    }
-  } else if (rec) {
-    rec.answerCorrect = false;
+  const result = createMissionProgressUpdate({
+    evaluation,
+    missionId: id,
+    progress,
+    sessionStats,
+    missionRecord: rec,
+    openedAt: missionOpenedAt[id],
+    now: Date.now()
+  });
+
+  progress = result.progress;
+  sessionStats = result.sessionStats;
+  if (sessionData && result.missionRecord) {
+    sessionData.misiones[id] = result.missionRecord;
   }
+
   return {
     progress: { ...progress },
-    campaignCompleted: false
+    campaignCompleted: result.campaignCompleted
   };
 }
 
@@ -529,7 +554,8 @@ function missionGameFlowResultCommits(result) {
 function applyDomainEvaluationForMission(missionId, isCorrect) {
   getMissionGameFlowAdapter();
   if (!domainReady || !domainSession || !domainRelease || !missionGameFlowAdapter
-    || typeof createMissionEvaluation !== 'function') {
+    || typeof createMissionEvaluation !== 'function'
+    || typeof createMissionProgressUpdate !== 'function') {
     traceReturnEarly('applyDomainEvaluationForMission', 'domain-or-adapter-not-ready', {
       missionId: missionId,
       isCorrect: Boolean(isCorrect),
@@ -537,7 +563,8 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       hasSession: Boolean(domainSession),
       hasRelease: Boolean(domainRelease),
       hasAdapter: Boolean(missionGameFlowAdapter),
-      hasEvaluationFactory: typeof createMissionEvaluation === 'function'
+      hasEvaluationFactory: typeof createMissionEvaluation === 'function',
+      hasProgressFactory: typeof createMissionProgressUpdate === 'function'
     });
     return null;
   }
@@ -2027,7 +2054,8 @@ document.getElementById('intro').setAttribute('aria-label','Tocar para establece
 Promise.all([
   ensureDomainModulesLoaded(),
   ensureGameFlowLegacyAdapterLoaded(),
-  ensureEvaluationModelLoaded()
+  ensureEvaluationModelLoaded(),
+  ensureProgressModelLoaded()
 ])
   .then(() => {
     domainReady = true;
