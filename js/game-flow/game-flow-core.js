@@ -1,5 +1,7 @@
 /* CRIOS Game Flow - pure orchestration core */
 
+import { isEvaluationModel } from '../evaluation/evaluation-model.js';
+
 const STAGES = Object.freeze({
   VALIDATION: 'VALIDATION',
   PLAYER_STATE: 'PLAYER_STATE',
@@ -25,11 +27,7 @@ function validCommand(command) {
   if (!isObject(command)) return false;
   const required = ['evaluation', 'session', 'mission', 'campaign'];
   if (!required.every(key => has(command, key) && isObject(command[key]))) return false;
-  const evaluation = command.evaluation;
-  return has(evaluation, 'status') && nonEmptyString(evaluation.status)
-    && has(evaluation, 'success') && typeof evaluation.success === 'boolean'
-    && has(evaluation, 'score') && Number.isFinite(evaluation.score)
-    && has(evaluation, 'completed') && typeof evaluation.completed === 'boolean';
+  return isEvaluationModel(command.evaluation);
 }
 
 function validPorts(ports) {

@@ -61,6 +61,8 @@ let domainRuntime = null;
 let domainNavigation = null;
 let gameFlowLegacyAdapterPromise = null;
 let createLegacyGameFlowAdapter = null;
+let evaluationModelPromise = null;
+let createMissionEvaluation = null;
 let missionGameFlowAdapter = null;
 
 function getTracer() {
@@ -240,6 +242,21 @@ function ensureGameFlowLegacyAdapterLoaded() {
     });
 
   return gameFlowLegacyAdapterPromise;
+}
+
+function ensureEvaluationModelLoaded() {
+  if (evaluationModelPromise) return evaluationModelPromise;
+
+  evaluationModelPromise = import('./evaluation/evaluation-model.js')
+    .then((module) => {
+      if (!module || typeof module.createMissionEvaluation !== 'function') {
+        throw new Error('No se pudo cargar Evaluation Model: fábrica no disponible.');
+      }
+      createMissionEvaluation = module.createMissionEvaluation;
+      return createMissionEvaluation;
+    });
+
+  return evaluationModelPromise;
 }
 
 function getDomainContract(ownerKey, contractKey) {
@@ -511,14 +528,16 @@ function missionGameFlowResultCommits(result) {
 
 function applyDomainEvaluationForMission(missionId, isCorrect) {
   getMissionGameFlowAdapter();
-  if (!domainReady || !domainSession || !domainRelease || !missionGameFlowAdapter) {
+  if (!domainReady || !domainSession || !domainRelease || !missionGameFlowAdapter
+    || typeof createMissionEvaluation !== 'function') {
     traceReturnEarly('applyDomainEvaluationForMission', 'domain-or-adapter-not-ready', {
       missionId: missionId,
       isCorrect: Boolean(isCorrect),
       domainReady: domainReady,
       hasSession: Boolean(domainSession),
       hasRelease: Boolean(domainRelease),
-      hasAdapter: Boolean(missionGameFlowAdapter)
+      hasAdapter: Boolean(missionGameFlowAdapter),
+      hasEvaluationFactory: typeof createMissionEvaluation === 'function'
     });
     return null;
   }
@@ -535,12 +554,7 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
     const gameOverBefore = statusBefore === 'gameOver';
     const missionBefore = isTraceRecording() ? captureMissionTraceSnapshot() : null;
     const visibleBefore = isTraceRecording() ? captureVisibleTraceSnapshot() : null;
-    const evaluation = {
-      status: isCorrect ? 'CORRECT' : 'INCORRECT',
-      success: Boolean(isCorrect),
-      score: isCorrect ? 1 : 0,
-      completed: Boolean(isCorrect)
-    };
+    const evaluation = createMissionEvaluation(isCorrect);
 
     traceEvent('player-state:evaluation:before', {
       missionId: coherentMissionId,
@@ -2010,7 +2024,11 @@ document.getElementById('intro').setAttribute('tabindex','0');
 document.getElementById('intro').setAttribute('role','button');
 document.getElementById('intro').setAttribute('aria-label','Tocar para establecer la conexión');
 
-Promise.all([ensureDomainModulesLoaded(), ensureGameFlowLegacyAdapterLoaded()])
+Promise.all([
+  ensureDomainModulesLoaded(),
+  ensureGameFlowLegacyAdapterLoaded(),
+  ensureEvaluationModelLoaded()
+])
   .then(() => {
     domainReady = true;
     rebuildDomainStateForActiveCampaign();
