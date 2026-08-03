@@ -16,6 +16,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-006K / RT-006 cerrado con síntesis, comparación y matriz de contradicciones de la evidencia RT-001 a RT-007.
 - A2-011 cerrado con núcleo puro de Game Flow, adaptador legacy, primera integración real, rollback atómico y corrección de acceso a campaña en pantallas angostas.
 - A2-012 / RT-008 cerrado con falsación de la garantía documental global `DC-030`.
+- Integración operativa inicial de `published` cerrada con selección explícita en Runtime, acceso desde Studio, runner E2E durable y correcciones de reanudación de sesión.
 
 ## Cierres recientes
 
@@ -50,24 +51,41 @@ A2-011 integra un primer borde real sin declarar completada la extracción total
 
 La conclusión es acotada: declarar completa una documentación no garantiza por sí solo el comportamiento real en todas las corridas. No implica que toda la documentación sea incorrecta ni que las coincidencias observadas carezcan de valor.
 
-## Próximo trabajo: integración operativa real de `published`
+### Integración operativa inicial de `published`
 
-RT-008 cierra la secuencia experimental previa. El siguiente trabajo confirmado es llevar `published` desde contratos y caminos controlados hacia una integración operativa real del producto.
+La integración queda cerrada en cinco commits funcionales:
 
-Antes de implementar se requiere una investigación focal y un plan técnico aprobado. Esa investigación debe determinar, sin asumir todavía una solución:
+- `5fd690318767b52c3e1251dcdf5545ec9c82927b` — `feat(runtime): add published launch contract`.
+- `55052895b3caef98d60494939ae102e16a8bb886` — `feat(runtime): integrate published launch selection`.
+- `3bbc2ace5567e14a068aa26254109a10d4a1dde1` — `feat(studio): add published runtime launch entry`.
+- `b875c862b1e4db71eff3ff10034086fcb9898b3f` — `test(runtime): add published launch operational e2e`.
+- `56ee4ec5148916dbef2dd89e098b54e1996380a6` — `fix(runtime): guard published session resume`.
 
-- dónde se selecciona actualmente la fuente `legacy` o `published`;
-- cómo se conectan publicación, activación, persistencia y bootstrap de Runtime;
-- cuál es el borde mínimo para resolver una publicación activa en una sesión real;
-- qué fallback explícito conserva el funcionamiento legacy;
-- qué estados, errores y rollbacks deben quedar definidos;
-- qué pruebas focales demuestran el camino directo y el inverso sin reabrir trabajo cerrado.
+El contrato operativo conserva estas decisiones:
 
-La integración se considerará operativa únicamente cuando exista un recorrido real y verificable desde una publicación válida hasta una misión ejecutable, con comportamiento de fallo controlado y sin romper el flujo legacy. Hasta ese cierre, `legacy` continúa como modo predeterminado.
+- `published` solo se selecciona mediante una solicitud explícita; `legacy` continúa como modo predeterminado.
+- No existe fallback silencioso desde una referencia published inválida. La recuperación legacy requiere `source=legacy`.
+- Studio muestra `Abrir campaña en CRIOS` únicamente para una publicación activa y persistida.
+- Desactivar la publicación bloquea los enlaces anteriores y limpia sus atributos y metadatos; reactivarla restaura el enlace.
+- Las referencias corruptas, publicaciones incompatibles y documentos persistentes corruptos se bloquean sin sustitución automática.
+- La selección mantiene aislamiento entre sesiones, campañas y publicaciones, y una sesión published conserva la publicación fijada.
+- Una recarga published vuelve a solicitar confirmación de identidad antes de reconstruir la publicación, mantiene el mismo `idSesion` y conserva el progreso resuelto.
+- Una entrada explícita `source=legacy` no reutiliza visualmente ni persiste como legacy una sesión published anterior; crea una sesión legacy nueva.
+
+La evidencia acumulada registra:
+
+- contrato de lanzamiento: 44/44;
+- selección en Runtime: 49/49;
+- acceso desde Studio: 49/49;
+- runner E2E operativo inicial: 112/112;
+- runner E2E ampliado tras la auditoría: 136/136;
+- cero errores de página, consola o promesas en los resultados funcionales cerrados.
+
+Las pérdidas de `pageId` del navegador integrado de VS Code y la salida vacía de `msedge --dump-dom` fueron fallos del controlador o del entorno, no fallos funcionales del producto. No se usan como evidencia negativa ni justifican nuevos cambios de producción.
 
 ## Trabajo posterior
 
-Después de la integración operativa inicial de `published`, siguen como líneas posibles, sujetas a nueva decisión de arquitectura:
+Con la integración operativa inicial de `published` cerrada, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
 
 - ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
 - completar la extracción de Evaluation y Progress respecto de la orquestación legacy;
@@ -87,7 +105,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline local el commit de A2-012 `17f70e495801ec215874871bff9749dcd48dd888`, creado el 2 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
+Esta actualización toma como baseline local el commit de corrección de auditoría `56ee4ec5148916dbef2dd89e098b54e1996380a6`, creado el 2 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
