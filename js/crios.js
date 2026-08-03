@@ -1172,9 +1172,9 @@ function go(id){
   if(id==='reveal'){
     loadUserName();
     const saved=sessionStorage.getItem(STORAGE.characterName);
-    const savedCampaignId=sessionData&&sessionData.campana&&(sessionData.campana.campaignId||sessionData.campana.id);
-    const resumablePublishedSession=runtimeCampaignMode==='published'&&sessionData&&sessionData.campana&&sessionData.campana.sourceMode==='published'&&savedCampaignId===campanaActivaId;
-    const resumeSavedSession=!runtimeLaunchBlocked&&Boolean(saved)&&(runtimeCampaignMode==='legacy'||resumablePublishedSession);
+    const savedSessionMode=sessionData&&sessionData.campana?sessionData.campana.sourceMode:null;
+    const resumableLegacySession=runtimeCampaignMode==='legacy'&&Boolean(sessionData)&&savedSessionMode!=='published';
+    const resumeSavedSession=!runtimeLaunchBlocked&&Boolean(saved)&&resumableLegacySession;
     document.getElementById('missionLogin')?.classList.toggle('hidden',resumeSavedSession);
     document.getElementById('missionWelcome')?.classList.toggle('hidden',!resumeSavedSession);
   }
