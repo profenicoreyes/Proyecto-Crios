@@ -65,6 +65,8 @@ let evaluationModelPromise = null;
 let createMissionEvaluation = null;
 let progressModelPromise = null;
 let createMissionProgressUpdate = null;
+let missionNavigationModelPromise = null;
+let createMissionNavigationDecision = null;
 let missionGameFlowAdapter = null;
 
 function getTracer() {
@@ -274,6 +276,24 @@ function ensureProgressModelLoaded() {
     });
 
   return progressModelPromise;
+}
+
+function ensureMissionNavigationModelLoaded() {
+  if (typeof createMissionNavigationDecision === 'function') {
+    return missionNavigationModelPromise;
+  }
+  if (missionNavigationModelPromise) return missionNavigationModelPromise;
+
+  missionNavigationModelPromise = import('./navigation/mission-navigation-model.js')
+    .then((module) => {
+      if (!module || typeof module.createMissionNavigationDecision !== 'function') {
+        throw new Error('No se pudo cargar Mission Navigation Model: fábrica no disponible.');
+      }
+      createMissionNavigationDecision = module.createMissionNavigationDecision;
+      return module;
+    });
+
+  return missionNavigationModelPromise;
 }
 
 function getDomainContract(ownerKey, contractKey) {
@@ -494,12 +514,13 @@ function rebuildRuntime({ evaluation, playerState, progress, session, mission, c
 }
 
 function resolveNavigation({ evaluation, playerState, progress, runtime, session, mission, campaign }) {
+  if (typeof createMissionNavigationDecision !== 'function') {
+    throw new Error('MissionNavigationModel no disponible.');
+  }
   const createNavigation = getDomainContract('navigationCore', 'createNavigation');
   if (!createNavigation) throw new Error('NavigationCore no disponible.');
   domainNavigation = createNavigation(runtime.runtime, domainRelease);
-  return evaluation.success
-    ? { action: 'RETURN_TO_MAP', target: 'map' }
-    : { action: 'RETRY_MISSION', target: null };
+  return createMissionNavigationDecision(evaluation);
 }
 
 function getMissionGameFlowAdapter() {
@@ -555,7 +576,8 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
   getMissionGameFlowAdapter();
   if (!domainReady || !domainSession || !domainRelease || !missionGameFlowAdapter
     || typeof createMissionEvaluation !== 'function'
-    || typeof createMissionProgressUpdate !== 'function') {
+    || typeof createMissionProgressUpdate !== 'function'
+    || typeof createMissionNavigationDecision !== 'function') {
     traceReturnEarly('applyDomainEvaluationForMission', 'domain-or-adapter-not-ready', {
       missionId: missionId,
       isCorrect: Boolean(isCorrect),
@@ -564,7 +586,8 @@ function applyDomainEvaluationForMission(missionId, isCorrect) {
       hasRelease: Boolean(domainRelease),
       hasAdapter: Boolean(missionGameFlowAdapter),
       hasEvaluationFactory: typeof createMissionEvaluation === 'function',
-      hasProgressFactory: typeof createMissionProgressUpdate === 'function'
+      hasProgressFactory: typeof createMissionProgressUpdate === 'function',
+      hasMissionNavigationFactory: typeof createMissionNavigationDecision === 'function'
     });
     return null;
   }
@@ -2055,7 +2078,8 @@ Promise.all([
   ensureDomainModulesLoaded(),
   ensureGameFlowLegacyAdapterLoaded(),
   ensureEvaluationModelLoaded(),
-  ensureProgressModelLoaded()
+  ensureProgressModelLoaded(),
+  ensureMissionNavigationModelLoaded()
 ])
   .then(() => {
     domainReady = true;

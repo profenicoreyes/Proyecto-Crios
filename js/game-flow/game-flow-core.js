@@ -2,6 +2,7 @@
 
 import { isEvaluationModel } from '../evaluation/evaluation-model.js';
 import { isProgressModel } from '../progress/progress-model.js';
+import { isMissionNavigationModel } from '../navigation/mission-navigation-model.js';
 
 const STAGES = Object.freeze({
   VALIDATION: 'VALIDATION',
@@ -55,8 +56,7 @@ function validRuntime(value) {
 }
 
 function validNavigation(value) {
-  return isObject(value) && nonEmptyString(value.status)
-    && nonEmptyString(value.action) && has(value, 'target') && value.target !== undefined;
+  return isMissionNavigationModel(value);
 }
 
 function errorText(error) {

@@ -333,7 +333,7 @@
       validateAsync:/async\s+function\s+validateMissionResult/.test(source),
       queueCount:count(validate,/queueSessionUpdate\(\)/g),
       saveCount:count(validate,/save\(\)/g),
-      campaignFalseCount:count(source,/campaignCompleted:\s*false/g),
+      delegatedCampaignCompletedCount:count(source,/campaignCompleted:\s*result\.campaignCompleted/g),
       finalUsesGameFlow:/GameFlow|applyDomainEvaluationForMission|missionGameFlowAdapter/.test(finalProcedure+finalFlow)
     };
   }
@@ -348,7 +348,7 @@
     test('contrato y carga','adaptador se importa una vez mediante Promise cacheada',function(){equal(sourceContract.importCount,1);equal(sourceContract.promiseCacheCount,1);});
     test('contrato y carga','Game Flow se ejecuta una vez y validateMissionResult permanece sincrona',function(){equal(sourceContract.executeCount,1);equal(sourceContract.validateAsync,false);});
     test('contrato y carga','validateMissionResult conserva una cola y un save',function(){equal(sourceContract.queueCount,1);equal(sourceContract.saveCount,1);});
-    test('contrato y carga','campana queda abierta y flujo final no usa Game Flow',function(){equal(sourceContract.campaignFalseCount,1);equal(sourceContract.finalUsesGameFlow,false);});
+    test('contrato y carga','Progress delega campaignCompleted y flujo final no usa Game Flow',function(){equal(sourceContract.delegatedCampaignCompletedCount,1);equal(sourceContract.finalUsesGameFlow,false);});
 
     test('respuesta correcta','PlayerState evalua una vez sin restauracion',function(){equal(correct.metrics.applyEvaluation,1);equal(correct.metrics.restorePlayerState,0);});
     test('respuesta correcta','Runtime y Navigation se reconstruyen una vez',function(){equal(correct.metrics.createRuntime,1);equal(correct.metrics.createNavigation,1);});
