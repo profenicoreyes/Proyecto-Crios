@@ -1,5 +1,9 @@
 /* CRIOS A2-011 - Game Flow legacy adapter focal tests */
 import { createLegacyGameFlowAdapter } from '../js/game-flow/game-flow-legacy-adapter.js';
+import {
+  isPlayerStateResultModel,
+  isGameOverPlayerStateResult
+} from '../js/player-state/player-state-result-model.js';
 
 const cases = [];
 
@@ -31,7 +35,7 @@ function createCommand() {
 function createSetup(overrides = {}) {
   const calls = [];
   const values = Object.assign({
-    state: { status: 'playing', lives: 2 },
+    state: { status: 'running', lives: 2, sessionId: 'session-state' },
     progressResult: { progress: { mission: 2 }, campaignCompleted: false },
     runtime: { mission: 'next' },
     navigation: { action: 'OPEN_MISSION', target: 'next' }
@@ -98,12 +102,19 @@ test('02 rechaza dependencias inválidas', () => {
   });
 });
 
-test('03 adapta el flujo completo', () => {
+test('03 adapta el flujo completo con snapshot inmutable de PlayerState', () => {
   const setup = createSetup();
   const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
   equal(result.status, 'FLOW_COMPLETED');
-  equal(result.playerState.status, 'PLAYER_STATE_APPLIED');
-  equal(result.playerState.state, setup.values.state);
+  assert(isPlayerStateResultModel(result.playerState));
+  sameKeys(result.playerState, ['status', 'state']);
+  sameKeys(result.playerState.state, ['status', 'lives']);
+  equal(result.playerState.state.status, 'running');
+  equal(result.playerState.state.lives, 2);
+  assert(result.playerState.state !== setup.values.state);
+  assert(Object.isFrozen(result.playerState));
+  assert(Object.isFrozen(result.playerState.state));
+  assert(!Object.prototype.hasOwnProperty.call(result.playerState, 'gameOver'));
   equal(result.progress.status, 'PROGRESS_UPDATED');
   equal(result.progress.progress, setup.values.progressResult.progress);
   equal(result.runtime.status, 'RUNTIME_REBUILT');
@@ -123,7 +134,9 @@ test('04 pasa argumentos exactos a cada dependencia', () => {
   const progressArgs = setup.calls[1].args;
   sameKeys(progressArgs, ['evaluation', 'playerState', 'session', 'mission', 'campaign']);
   assertDomainArguments(progressArgs, command);
-  equal(progressArgs.playerState.state, setup.values.state);
+  equal(progressArgs.playerState.state.status, setup.values.state.status);
+  equal(progressArgs.playerState.state.lives, setup.values.state.lives);
+  assert(progressArgs.playerState.state !== setup.values.state);
 
   const runtimeArgs = setup.calls[2].args;
   sameKeys(runtimeArgs, ['evaluation', 'playerState', 'progress', 'session', 'mission', 'campaign']);
@@ -145,13 +158,22 @@ test('05 conserva el orden de las dependencias', () => {
   );
 });
 
-test('06 GAME_OVER detiene dependencias posteriores', () => {
-  const setup = createSetup({ values: { state: { status: 'gameOver', lives: 0 } } });
+test('06 GAME_OVER usa evidencia inmutable y detiene dependencias posteriores', () => {
+  const setup = createSetup({
+    values: { state: { status: 'gameOver', lives: 0, sessionId: 'session-state' } }
+  });
+  const sourceState = setup.values.state;
   const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
   equal(result.status, 'GAME_OVER');
-  equal(result.playerState.gameOver, true);
-  equal(result.playerState.state, setup.values.state);
+  assert(isGameOverPlayerStateResult(result.playerState));
+  assert(!Object.prototype.hasOwnProperty.call(result.playerState, 'gameOver'));
+  assert(result.playerState.state !== sourceState);
   equal(setup.calls.length, 1);
+
+  sourceState.status = 'running';
+  sourceState.lives = 3;
+  equal(result.playerState.state.status, 'gameOver');
+  equal(result.playerState.state.lives, 0);
 });
 
 test('07 CAMPAIGN_COMPLETED detiene Runtime y Navigation', () => {
@@ -182,7 +204,16 @@ test('07 CAMPAIGN_COMPLETED detiene Runtime y Navigation', () => {
   });
 });
 
-test('12 admite navegación con target null', () => {
+test('12 convierte un estado incoherente de PlayerState en PORT_FAILURE', () => {
+  const setup = createSetup({ values: { state: { status: 'running', lives: 0 } } });
+  const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
+  equal(result.status, 'PORT_FAILURE');
+  equal(result.stage, 'PLAYER_STATE');
+  equal(result.error, 'session must contain a coherent PlayerState snapshot.');
+  equal(setup.calls.length, 1);
+});
+
+test('13 admite navegación con target null', () => {
   const setup = createSetup({ values: { navigation: { action: 'STAY', target: null } } });
   const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
   equal(result.status, 'FLOW_COMPLETED');
@@ -190,7 +221,7 @@ test('12 admite navegación con target null', () => {
   equal(result.target, null);
 });
 
-test('13 no muta command ni objetos recibidos', () => {
+test('14 no muta command ni objetos recibidos', () => {
   const command = createCommand();
   const setup = createSetup();
   const beforeCommand = JSON.stringify(command);
@@ -202,12 +233,12 @@ test('13 no muta command ni objetos recibidos', () => {
   assert(!Object.isFrozen(setup.values.state));
 });
 
-test('14 devuelve el adapter congelado', () => {
+test('15 devuelve el adapter congelado', () => {
   const adapter = createLegacyGameFlowAdapter(createSetup().dependencies);
   assert(Object.isFrozen(adapter));
 });
 
-test('15 no accede a fronteras prohibidas', () => {
+test('16 no accede a fronteras prohibidas', () => {
   const source = createLegacyGameFlowAdapter.toString();
   const forbidden = [
     'win' + 'dow', 'doc' + 'ument', 'global' + 'This', 'local' + 'Storage',

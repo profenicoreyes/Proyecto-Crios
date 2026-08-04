@@ -1,5 +1,6 @@
 /* CRIOS A2-011 - Game Flow pure core focal tests */
 import { executeGameFlow } from '../js/game-flow/game-flow-core.js';
+import { createPlayerStateResult } from '../js/player-state/player-state-result-model.js';
 
 const cases = [];
 
@@ -38,7 +39,7 @@ function createCommand() {
 function createSetup(overrides = {}) {
   const calls = [];
   const values = Object.assign({
-    playerState: { status: 'APPLIED', gameOver: false, state: { lives: 2 } },
+    playerState: createPlayerStateResult({ status: 'running', lives: 2 }),
     progress: { status: 'UPDATED', campaignCompleted: false, progress: { mission: 2 } },
     runtime: { status: 'REBUILT', runtime: { mission: 'next' } },
     navigation: { status: 'RESOLVED', action: 'OPEN_MISSION', target: 'next' }
@@ -181,21 +182,35 @@ test('07 rechaza ports inválidos sin ejecutar puertos', () => {
 });
 
 test('08 rechaza PlayerState inválido y corta etapas posteriores', () => {
-  const setup = createSetup({ values: { playerState: { status: 'APPLIED', gameOver: false, state: [] } } });
-  const result = executeGameFlow(createCommand(), setup.ports);
-  equal(result.status, 'INVALID_PLAYER_STATE_RESULT');
-  equal(setup.calls.length, 1);
-  assertLaterStagesNull(result, 'playerState');
+  const invalidValues = [
+    { status: 'PLAYER_STATE_APPLIED', state: { status: 'running', lives: 0 } },
+    { status: 'PLAYER_STATE_APPLIED', gameOver: false, state: { status: 'running', lives: 2 } }
+  ];
+
+  invalidValues.forEach(playerState => {
+    const setup = createSetup({ values: { playerState } });
+    const result = executeGameFlow(createCommand(), setup.ports);
+    equal(result.status, 'INVALID_PLAYER_STATE_RESULT');
+    equal(setup.calls.length, 1);
+    assertLaterStagesNull(result, 'playerState');
+  });
 });
 
-test('09 GAME_OVER corta las tres etapas posteriores', () => {
-  const setup = createSetup({ values: { playerState: { status: 'APPLIED', gameOver: true, state: {} } } });
+test('09 GAME_OVER se deriva del snapshot y corta las tres etapas posteriores', () => {
+  const setup = createSetup({
+    values: { playerState: createPlayerStateResult({ status: 'gameOver', lives: 0 }) }
+  });
   const result = executeGameFlow(createCommand(), setup.ports);
   equal(result.status, 'GAME_OVER');
   equal(result.success, false);
   equal(result.stage, 'PLAYER_STATE');
   equal(result.action, 'GAME_OVER');
   equal(result.playerState, setup.values.playerState);
+  sameKeys(result.playerState, ['status', 'state']);
+  sameKeys(result.playerState.state, ['status', 'lives']);
+  equal(result.playerState.state.status, 'gameOver');
+  equal(result.playerState.state.lives, 0);
+  assert(!Object.prototype.hasOwnProperty.call(result.playerState, 'gameOver'));
   equal(setup.calls.length, 1);
   assertLaterStagesNull(result, 'progress');
 });
@@ -291,12 +306,17 @@ test('20 no muta evaluation ni objetos de dominio', () => {
   });
 });
 
-test('21 no muta ni congela resultados ajenos de puertos', () => {
+test('21 no muta ni altera el estado de congelamiento de resultados de puertos', () => {
   const setup = createSetup();
   const before = JSON.stringify(setup.values);
+  const frozenBefore = Object.fromEntries(
+    Object.keys(setup.values).map(name => [name, Object.isFrozen(setup.values[name])])
+  );
   executeGameFlow(createCommand(), setup.ports);
   equal(JSON.stringify(setup.values), before);
-  Object.keys(setup.values).forEach(name => assert(!Object.isFrozen(setup.values[name])));
+  Object.keys(setup.values).forEach(name => {
+    equal(Object.isFrozen(setup.values[name]), frozenBefore[name]);
+  });
 });
 
 test('22 mantiene en null todas las etapas no ejecutadas', () => {

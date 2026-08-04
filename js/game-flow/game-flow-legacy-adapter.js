@@ -1,4 +1,5 @@
 import { executeGameFlow } from './game-flow-core.js';
+import { createPlayerStateResult } from '../player-state/player-state-result-model.js';
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -33,11 +34,7 @@ export function createLegacyGameFlowAdapter(dependencies) {
               campaign: args.campaign
             });
 
-            return {
-              status: 'PLAYER_STATE_APPLIED',
-              gameOver: state.status === 'gameOver',
-              state
-            };
+            return createPlayerStateResult(state);
           }
         },
         progress: {

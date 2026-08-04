@@ -1,6 +1,10 @@
 /* CRIOS Game Flow - pure orchestration core */
 
 import { isEvaluationModel } from '../evaluation/evaluation-model.js';
+import {
+  isPlayerStateResultModel,
+  isGameOverPlayerStateResult
+} from '../player-state/player-state-result-model.js';
 import { isProgressModel } from '../progress/progress-model.js';
 import { isMissionNavigationModel } from '../navigation/mission-navigation-model.js';
 
@@ -41,9 +45,7 @@ function validPorts(ports) {
 }
 
 function validPlayerState(value) {
-  return isObject(value) && nonEmptyString(value.status)
-    && typeof value.gameOver === 'boolean'
-    && has(value, 'state') && isObject(value.state);
+  return isPlayerStateResultModel(value);
 }
 
 function validProgress(value) {
@@ -125,7 +127,7 @@ export function executeGameFlow(command, ports) {
       evaluation: common.evaluation
     });
   }
-  if (playerState.gameOver === true) {
+  if (isGameOverPlayerStateResult(playerState)) {
     return result({
       status: 'GAME_OVER', success: false, action: 'GAME_OVER', stage: STAGES.PLAYER_STATE,
       evaluation: common.evaluation, playerState
