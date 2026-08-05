@@ -1700,6 +1700,53 @@ function configureCampaignEntry(){
   if(button) button.textContent='Seleccionar campaña';
 }
 
+function renderPublishedEntrySurface(){
+  const surface=document.getElementById('publishedEntrySurface');
+  const list=document.getElementById('publishedEntryList');
+  if(!surface||!list) return;
+
+  surface.addEventListener('pointerdown',(event)=>event.stopPropagation());
+  surface.addEventListener('keydown',(event)=>event.stopPropagation());
+  list.replaceChildren();
+  surface.hidden=true;
+  if(runtimeLaunchState.explicit||runtimeCampaignMode!=='legacy') return;
+
+  const persistenceApi=window.CRIOS_PUBLICATION_PERSISTENCE;
+  if(!persistenceApi||typeof persistenceApi.createPersistenceCoordinator!=='function') return;
+  if(!runtimeLaunchApi||typeof runtimeLaunchApi.buildPublishedLaunchSearch!=='function') return;
+
+  try{
+    const coordinator=persistenceApi.createPersistenceCoordinator({storage:window.localStorage});
+    const documentValue=coordinator.exportDocument();
+    const references=Array.isArray(documentValue.activeReferences)
+      ? documentValue.activeReferences.slice().sort((left,right)=>left.campaignId.localeCompare(right.campaignId))
+      : [];
+
+    references.forEach((reference)=>{
+      const publication=coordinator.publicationStore.getPublication(reference.publicationId);
+      if(!publication||publication.campaignId!==reference.campaignId||publication.version!==reference.version||publication.contentHash!==reference.contentHash) return;
+      const search=runtimeLaunchApi.buildPublishedLaunchSearch(reference.campaignId);
+      if(!search) return;
+
+      const link=document.createElement('a');
+      link.className='btn secondary';
+      link.href=search;
+      link.dataset.campaignId=reference.campaignId;
+      link.dataset.publicationId=reference.publicationId;
+      const title=publication.content&&typeof publication.content.title==='string'
+        ? publication.content.title.trim()
+        : '';
+      link.textContent=title||reference.campaignId;
+      list.appendChild(link);
+    });
+
+    surface.hidden=list.children.length===0;
+  }catch(error){
+    list.replaceChildren();
+    surface.hidden=true;
+  }
+}
+
 function detalleCampana(id) {
   const campana = obtenerCampanaPorId(id);
   const panel = document.getElementById('campaignDetail');
@@ -2139,6 +2186,7 @@ window.addEventListener('orientationchange',()=>setTimeout(fitCriosToViewport,12
 fitCriosToViewport();
 updateAudioButton();
 updateFullscreenButton();
+renderPublishedEntrySurface();
 
 const publicApi = Object.freeze({
   go,

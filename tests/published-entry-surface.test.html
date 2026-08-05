@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRIOS Published Entry Surface Characterization</title>
+<link rel="icon" href="data:,">
+</head>
+<body>
+<h1>CRIOS Published Entry Surface Characterization</h1>
+<pre id="results">RUNNING</pre>
+<script>
+(function(){
+  'use strict';
+  if (new URLSearchParams(window.location.search).get('shell') === '1') {
+    document.getElementById('results').textContent = 'SHELL';
+    return;
+  }
+  var scripts = [
+    '../js/runtime/launch/runtime-launch-contract.js',
+    '../js/publication/persistence/persistence-model.js',
+    '../js/publication/persistence/persistence-storage-adapter.js',
+    '../js/publication/persistence/persistent-publication-store.js',
+    '../js/publication/persistence/persistent-activation-store.js',
+    '../js/publication/persistence/persistence-coordinator.js',
+    '../js/publication/persistence/persistence-api.js',
+    './published-entry-surface.test.js'
+  ];
+  function loadNext(){
+    if (!scripts.length) return;
+    var script = document.createElement('script');
+    script.src = scripts.shift();
+    script.onload = loadNext;
+    document.body.appendChild(script);
+  }
+  loadNext();
+})();
+</script>
+</body>
+</html>
