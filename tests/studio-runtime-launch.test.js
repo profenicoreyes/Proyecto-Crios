@@ -124,6 +124,33 @@
     assert('AVAILABLE_REL', available.rel === 'noopener', 'Rel incorrecto.');
     assert('AVAILABLE_FROZEN', Object.isFrozen(available), 'Descriptor disponible no congelado.');
 
+    var runtimeLaunchContract = window.CRIOS_RUNTIME_LAUNCH;
+    var runtimeInvalidCampaignId = new Array(162).join('a');
+    var runtimeContractError = null;
+    try {
+      runtimeLaunchContract.buildPublishedLaunchSearch(runtimeInvalidCampaignId);
+    } catch (error) {
+      runtimeContractError = error;
+    }
+    var runtimeInvalidDescriptor = api.buildDescriptor({
+      activeReference: { campaignId: runtimeInvalidCampaignId, publicationId: 'pub-runtime-invalid' },
+      persistenceState: { status: 'READY', activeReferenceCount: 1 },
+      runtimePath: '../index.html'
+    });
+    assert(
+      'A2_014E_STUDIO_REJECTS_RUNTIME_INVALID_CAMPAIGN_ID',
+      Boolean(runtimeLaunchContract) &&
+        runtimeContractError && runtimeContractError.code === 'INVALID_CAMPAIGN_ID' &&
+        runtimeInvalidDescriptor.available === false &&
+        runtimeInvalidDescriptor.status === 'INVALID_ACTIVE_REFERENCE' &&
+        runtimeInvalidDescriptor.href === null,
+      'Studio debe bloquear el campaignId que Runtime rechaza. ' +
+        'runtimeError=' + String(runtimeContractError && runtimeContractError.code || 'none') +
+        '; observedAvailable=' + String(runtimeInvalidDescriptor.available) +
+        '; observedStatus=' + String(runtimeInvalidDescriptor.status) +
+        '; observedHref=' + String(runtimeInvalidDescriptor.href)
+    );
+
     window.CRIOS_STUDIO_RENDERER.render(baseConfig(noActive));
     var link = document.getElementById('studioRuntimeLaunchLink');
     var status = document.getElementById('studioRuntimeLaunchStatus');

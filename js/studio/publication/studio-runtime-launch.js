@@ -34,6 +34,16 @@
     });
   }
 
+  function buildPublishedLaunchSearch(campaignId) {
+    var launchContract = window.CRIOS_RUNTIME_LAUNCH;
+    if (!launchContract || typeof launchContract.buildPublishedLaunchSearch !== 'function') return null;
+    try {
+      return launchContract.buildPublishedLaunchSearch(campaignId);
+    } catch (error) {
+      return null;
+    }
+  }
+
   function buildDescriptor(options) {
     var opts = options && typeof options === 'object' ? options : {};
     var activeReference = opts.activeReference && typeof opts.activeReference === 'object'
@@ -87,13 +97,22 @@
       );
     }
 
+    var launchSearch = buildPublishedLaunchSearch(campaignId);
+    if (!launchSearch) {
+      return unavailable(
+        STATUS.INVALID_ACTIVE_REFERENCE,
+        'La referencia activa contiene un identificador de campaña inválido.',
+        activeReference
+      );
+    }
+
     return frozen({
       available: true,
       status: STATUS.AVAILABLE,
       message: 'La campaña está activa y guardada en este navegador.',
       campaignId: campaignId,
       publicationId: publicationId,
-      href: runtimePath + '?source=published&campaignId=' + encodeURIComponent(campaignId),
+      href: runtimePath + launchSearch,
       target: '_blank',
       rel: 'noopener'
     });
