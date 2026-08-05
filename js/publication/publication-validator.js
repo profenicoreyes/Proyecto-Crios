@@ -88,9 +88,29 @@
     return issues;
   }
 
+  function collectEmbeddedMissionSpecIds(content) {
+    var ids = {};
+    var specs = content && Array.isArray(content.missionSpecs) ? content.missionSpecs : null;
+    var manifest = content && content.runtimeExecutionManifest;
+    var order = manifest && Array.isArray(manifest.missionOrder) ? manifest.missionOrder : null;
+
+    if (!specs || !order || specs.length !== order.length) return ids;
+
+    for (var i = 0; i < specs.length; i += 1) {
+      var spec = specs[i];
+      var specId = spec && spec.missionId != null ? String(spec.missionId).trim() : '';
+      var orderId = order[i] != null ? String(order[i]).trim() : '';
+      if (!specId || specId !== orderId) return {};
+      ids[specId] = true;
+    }
+
+    return ids;
+  }
+
   function validateReferential(normalized) {
     var issues = [];
     var ids = collectMissionIds(normalized.content);
+    var embeddedMissionSpecIds = collectEmbeddedMissionSpecIds(normalized.content);
     var seen = {};
 
     for (var i = 0; i < ids.length; i += 1) {
@@ -100,7 +120,7 @@
       }
       seen[id] = true;
 
-      if (typeof REGISTRO_MISIONES !== 'undefined' && REGISTRO_MISIONES && typeof REGISTRO_MISIONES.obtener === 'function') {
+      if (!embeddedMissionSpecIds[id] && typeof REGISTRO_MISIONES !== 'undefined' && REGISTRO_MISIONES && typeof REGISTRO_MISIONES.obtener === 'function') {
         var mission = REGISTRO_MISIONES.obtener(id);
         if (!mission) {
           issues.push(createIssue(ERROR_CODES.MISSING_REFERENCE, SEVERITY.ERROR, 'referential', '$.content.misiones[' + i + '].id', 'mission id is not registered: ' + id));
