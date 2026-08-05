@@ -28,9 +28,12 @@
     }
 
     const missions = model.safeClone(draftSnapshot.misiones);
+    const draftId = draftSnapshot.id === null || draftSnapshot.id === undefined
+      ? ''
+      : String(draftSnapshot.id).trim();
 
     const release = {
-      id: model.createReleaseId(),
+      id: draftId || model.createReleaseId(),
       title: String(draftSnapshot.nombre).trim(),
       scenario: String(draftSnapshot.escenario).trim(),
       description: String(draftSnapshot.descripcion || '').trim(),

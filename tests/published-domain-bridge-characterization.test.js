@@ -323,16 +323,15 @@
       equal('ACTIVE_CAMPAIGN_SCENARIO', firstRuntime.CRIOS.obtenerCampanaActiva().escenario, customScenarioId);
       equal('ACTIVE_MISSION_ORDER', firstRuntime.CRIOS.obtenerMisionesActivas(), missionOrder);
 
-      equal('BRIDGE_DRAFT_ID_CURRENT', firstDraft.id, null);
+      equal('BRIDGE_DRAFT_PUBLICATION_ID', firstDraft.id, publicationId);
       equal('BRIDGE_DRAFT_STATE_CURRENT', firstDraft.estado, 'draft');
       equal('BRIDGE_DRAFT_VERSION_CURRENT', firstDraft.version, 1);
-      equal('BRIDGE_DRAFT_SCENARIO_CURRENT', firstDraft.escenario, 'antartida');
+      equal('BRIDGE_DRAFT_PUBLISHED_SCENARIO', firstDraft.escenario, customScenarioId);
       equal('BRIDGE_DRAFT_MISSION_ORDER', firstDraft.misiones.map(function(item){ return item.id; }), missionOrder);
 
-      assert('DOMAIN_RELEASE_TEMPORARY_ID', /^release-temp-\d+$/.test(firstRelease.id), 'Release no temporal: ' + firstRelease.id);
-      assert('DOMAIN_RELEASE_NOT_PUBLICATION_ID', firstRelease.id !== publicationId, 'Release reutilizó publicationId.');
+      equal('DOMAIN_RELEASE_PUBLICATION_ID', firstRelease.id, publicationId);
       assert('DOMAIN_RELEASE_NOT_CAMPAIGN_ID', firstRelease.id !== campaignId, 'Release reutilizó campaignId.');
-      equal('DOMAIN_RELEASE_SCENARIO_CURRENT', firstRelease.scenario, 'antartida');
+      equal('DOMAIN_RELEASE_PUBLISHED_SCENARIO', firstRelease.scenario, customScenarioId);
       equal('DOMAIN_RELEASE_MISSION_ORDER', firstRelease.missions.map(function(item){ return item.id; }), missionOrder);
       assert('DOMAIN_RELEASE_FROZEN', Object.isFrozen(firstRelease), 'Release no congelado.');
 
@@ -372,9 +371,10 @@
       equal('RECOVERY_PREPARED_SCENARIO', recoveredPrepared.data.campaign.escenario, customScenarioId);
       equal('RECOVERY_SESSION_PUBLICATION', recoveredSessionData.campana.publicationId, publicationId);
       equal('RECOVERY_SESSION_HASH', recoveredSessionData.campana.contentHash, contentHash);
-      equal('RECOVERY_DRAFT_SCENARIO_CURRENT', recoveredDraft.escenario, 'antartida');
-      equal('RECOVERY_RELEASE_SCENARIO_CURRENT', recoveredRelease.scenario, 'antartida');
-      assert('RECOVERY_RELEASE_STILL_TEMPORARY', /^release-temp-\d+$/.test(recoveredRelease.id), 'Release recuperado no temporal.');
+      equal('RECOVERY_DRAFT_PUBLICATION_ID', recoveredDraft.id, publicationId);
+      equal('RECOVERY_DRAFT_PUBLISHED_SCENARIO', recoveredDraft.escenario, customScenarioId);
+      equal('RECOVERY_RELEASE_PUBLISHED_SCENARIO', recoveredRelease.scenario, customScenarioId);
+      equal('RECOVERY_RELEASE_PUBLICATION_ID', recoveredRelease.id, publicationId);
       assert('RECOVERY_NO_SILENT_FALLBACK', !recoveryRuntime.document.getElementById('legacyLaunchFallback'), 'Apareció fallback durante recuperación válida.');
       var recoveryDiag = childDiagnostics(recoveryRuntime);
       equal('RECOVERY_PAGE_ERRORS', recoveryDiag.pageErrors.length, 0);

@@ -304,11 +304,15 @@ function getDomainContract(ownerKey, contractKey) {
 }
 
 function buildCampaignDraftForRelease(campaign) {
+  const publishedMetadata = runtimeCampaignMode === 'published'
+    ? preparedRuntimeCampaign?.data?.campaign
+    : null;
+
   return {
-    id: null,
+    id: publishedMetadata ? publishedMetadata.publicationId : null,
     nombre: String(campaign.titulo || '').trim(),
     descripcion: String(campaign.descripcion || '').trim(),
-    escenario: 'antartida',
+    escenario: publishedMetadata ? publishedMetadata.escenario : 'antartida',
     estado: 'draft',
     version: 1,
     misiones: runtimeCampaignMode === 'published'
