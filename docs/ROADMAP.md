@@ -17,6 +17,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-011 cerrado con núcleo puro de Game Flow, adaptador legacy, primera integración real, rollback atómico y corrección de acceso a campaña en pantallas angostas.
 - A2-012 / RT-008 cerrado con falsación de la garantía documental global `DC-030`.
 - Integración operativa inicial de `published` cerrada con selección explícita en Runtime, acceso desde Studio, runner E2E durable y correcciones de reanudación de sesión.
+- A2-013 cerrado con extracción incremental de Evaluation, Progress y decisión de navegación de misión, más contratos inmutables de PlayerStateResult y RuntimeResult integrados en Game Flow.
 
 ## Cierres recientes
 
@@ -83,13 +84,50 @@ La evidencia acumulada registra:
 
 Las pérdidas de `pageId` del navegador integrado de VS Code y la salida vacía de `msedge --dump-dom` fueron fallos del controlador o del entorno, no fallos funcionales del producto. No se usan como evidencia negativa ni justifican nuevos cambios de producción.
 
+### A2-013 — contratos de dominio y resultados inmutables en Game Flow
+
+La extracción incremental queda cerrada en doce commits locales:
+
+- `d957f535ea2a31f4684b6270dc0152b4dd67f16b` y `58878946faf80a2a753deb856811d892acd0c204` — contrato e integración de Evaluation.
+- `4f94a84987e012c04561a519b88dc6555e02ba4e` y `1ab865116325702d7d19d55016e7447e8c71ff9e` — contrato e integración de Progress.
+- `1b8cac12f476e7a38222963107deb8db11384450` y `f154762511b66fded0135ac38cf698c220dbfa4e` — contrato e integración de la decisión de navegación de misión.
+- `bb96a9f215a32174c87d8de1fa29c6bbb3b841c1`, `99f89d43a232c92b9623064e2134d329f9404ed0` y `c661698d3da0d1301ab37854d6f5fc6294c0bb94` — caracterización, contrato inmutable e integración de PlayerStateResult.
+- `d1f54ba8069e5ea7bad1fc2ed5c661138b1fcf06`, `e9ca1ae0a675ac08895e0ff2e9b9d66d03a7e192` y `28ab938c1432c613fd7e3228a44296f4584cf5cf` — caracterización de RuntimeCore, contrato inmutable RuntimeResult e integración en Game Flow.
+
+El cierre preserva estas fronteras:
+
+- Game Flow mantiene el orden PlayerState → Progress → Runtime → Navigation y valida resultados mediante contratos canónicos.
+- El adaptador legacy crea snapshots inmutables para PlayerStateResult y RuntimeResult antes de continuar el flujo.
+- Navigation recibe el RuntimeResult validado completo; Runtime se reconstruye una sola vez por ejecución.
+- `js/crios.js`, `js/runtime/runtime-core.js` y `js/navigation/navigation-core.js` no fueron modificados por la integración final de RuntimeResult.
+- RuntimeCore y NavigationCore conservan por ahora su composición legacy mediante `window.CRIOS_DOMAIN`.
+- Transacción, rollback, persistencia local, sincronización remota, DOM, audio y cambio visual continúan fuera de los contratos puros y siguen perteneciendo a `js/crios.js`.
+
+La evidencia de cierre registra:
+
+- EvaluationModel: 18/18;
+- ProgressModel: 24/24;
+- MissionNavigationModel: 22/22;
+- PlayerStateService: 13/13;
+- PlayerStateResultModel: 20/20;
+- RuntimeCore: 25/25;
+- RuntimeResultModel: 28/28;
+- Game Flow Core: 28/28;
+- adaptador legacy: 19/19;
+- integración real de navegador: 24/24, sin errores de página, consola, requests fallidos ni requests externos.
+
+El respaldo `Proyecto-Crios-28ab938c1432c613-main.bundle` fue verificado contra `main` en `28ab938c1432c613fd7e3228a44296f4584cf5cf`; su SHA-256 es `e20bac242baf9153b8e3f117f28d2546bc0905695521e809b8877c716be57e4c`. El parche externo de integración fue eliminado únicamente después de verificar ese respaldo.
+
+A2-013 no declara finalizada la extracción de toda la orquestación legacy. Cierra los contratos enumerados y deja explícitamente fuera las fronteras de efectos y ownership todavía alojadas en `js/crios.js`.
+
 ## Trabajo posterior
 
-Con la integración operativa inicial de `published` cerrada, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
+Con la integración operativa inicial de `published` y A2-013 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
 
 - ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
-- completar la extracción de Evaluation y Progress respecto de la orquestación legacy;
-- consolidar Game Flow como dueño de más transiciones solo cuando cada borde pueda aislarse y revertirse;
+- investigar por separado si RuntimeCore y NavigationCore deben dejar de depender de `window.CRIOS_DOMAIN`;
+- delimitar ownership de transacción, rollback, persistencia, sincronización remota y aplicación visual antes de trasladar cualquiera de esos efectos;
+- consolidar Game Flow como dueño de más transiciones solo cuando cada borde pueda aislarse, validarse y revertirse;
 - ampliar Studio con nuevos handlers, tipos de misión, escenarios y taxonomías;
 - evaluar persistencia remota, sincronización entre dispositivos y colaboración multiusuario.
 
@@ -105,7 +143,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline local el commit de corrección de auditoría `56ee4ec5148916dbef2dd89e098b54e1996380a6`, creado el 2 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
+Esta actualización toma como baseline local el commit `28ab938c1432c613fd7e3228a44296f4584cf5cf`, creado el 4 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
