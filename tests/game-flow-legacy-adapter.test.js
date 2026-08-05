@@ -4,6 +4,7 @@ import {
   isPlayerStateResultModel,
   isGameOverPlayerStateResult
 } from '../js/player-state/player-state-result-model.js';
+import { isRuntimeResultModel } from '../js/runtime/runtime-result-model.js';
 
 const cases = [];
 
@@ -19,8 +20,18 @@ function equal(actual, expected, message) {
   assert(actual === expected, message || `${actual} !== ${expected}`);
 }
 
+function sameValue(actual, expected) {
+  equal(JSON.stringify(actual), JSON.stringify(expected));
+}
+
 function sameKeys(actual, expected) {
   equal(Object.keys(actual).sort().join(','), expected.slice().sort().join(','));
+}
+
+function assertDeepFrozen(value) {
+  if (value === null || typeof value !== 'object') return;
+  assert(Object.isFrozen(value));
+  Object.keys(value).forEach(key => assertDeepFrozen(value[key]));
 }
 
 function createCommand() {
@@ -32,12 +43,38 @@ function createCommand() {
   };
 }
 
+function createRuntimeSnapshot() {
+  return {
+    session: {
+      releaseId: 'campaign',
+      currentMissionIndex: 0,
+      progress: {
+        currentMissionId: 'mission',
+        completedMissionIds: []
+      },
+      detail: {
+        preserved: true
+      }
+    },
+    mission: {
+      id: 'mission',
+      detail: {
+        preserved: true
+      }
+    },
+    state: {
+      status: 'initialized',
+      errors: []
+    }
+  };
+}
+
 function createSetup(overrides = {}) {
   const calls = [];
   const values = Object.assign({
     state: { status: 'running', lives: 2, sessionId: 'session-state' },
     progressResult: { progress: { mission: 2 }, campaignCompleted: false },
-    runtime: { mission: 'next' },
+    runtime: createRuntimeSnapshot(),
     navigation: { action: 'OPEN_MISSION', target: 'next' }
   }, overrides.values || {});
   const dependencies = {
@@ -102,7 +139,7 @@ test('02 rechaza dependencias inválidas', () => {
   });
 });
 
-test('03 adapta el flujo completo con snapshot inmutable de PlayerState', () => {
+test('03 adapta el flujo completo con snapshots inmutables de PlayerState y Runtime', () => {
   const setup = createSetup();
   const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
   equal(result.status, 'FLOW_COMPLETED');
@@ -117,8 +154,11 @@ test('03 adapta el flujo completo con snapshot inmutable de PlayerState', () => 
   assert(!Object.prototype.hasOwnProperty.call(result.playerState, 'gameOver'));
   equal(result.progress.status, 'PROGRESS_UPDATED');
   equal(result.progress.progress, setup.values.progressResult.progress);
-  equal(result.runtime.status, 'RUNTIME_REBUILT');
-  equal(result.runtime.runtime, setup.values.runtime);
+  assert(isRuntimeResultModel(result.runtime));
+  sameKeys(result.runtime, ['status', 'runtime']);
+  sameValue(result.runtime.runtime, setup.values.runtime);
+  assert(result.runtime.runtime !== setup.values.runtime);
+  assertDeepFrozen(result.runtime);
   equal(result.navigation.status, 'NAVIGATION_RESOLVED');
 });
 
@@ -146,7 +186,10 @@ test('04 pasa argumentos exactos a cada dependencia', () => {
   const navigationArgs = setup.calls[3].args;
   sameKeys(navigationArgs, ['evaluation', 'playerState', 'progress', 'runtime', 'session', 'mission', 'campaign']);
   assertDomainArguments(navigationArgs, command);
-  equal(navigationArgs.runtime.runtime, setup.values.runtime);
+  assert(isRuntimeResultModel(navigationArgs.runtime));
+  sameValue(navigationArgs.runtime.runtime, setup.values.runtime);
+  assert(navigationArgs.runtime.runtime !== setup.values.runtime);
+  assertDeepFrozen(navigationArgs.runtime);
 });
 
 test('05 conserva el orden de las dependencias', () => {
@@ -213,7 +256,33 @@ test('12 convierte un estado incoherente de PlayerState en PORT_FAILURE', () => 
   equal(setup.calls.length, 1);
 });
 
-test('13 admite navegación con target null', () => {
+test('13 convierte un Runtime incoherente en PORT_FAILURE', () => {
+  const invalidRuntime = createRuntimeSnapshot();
+  invalidRuntime.mission.id = 'other-mission';
+  const setup = createSetup({ values: { runtime: invalidRuntime } });
+  const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
+  equal(result.status, 'PORT_FAILURE');
+  equal(result.stage, 'RUNTIME');
+  equal(result.error, 'runtime must be a coherent Runtime snapshot.');
+  equal(setup.calls.length, 3);
+});
+
+test('14 el snapshot Runtime no cambia si la dependencia muta despues', () => {
+  const setup = createSetup();
+  const sourceRuntime = setup.values.runtime;
+  const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
+  const navigationRuntime = setup.calls[3].args.runtime;
+  sourceRuntime.session.progress.currentMissionId = 'changed';
+  sourceRuntime.mission.id = 'changed';
+  sourceRuntime.state.status = 'error';
+  sourceRuntime.state.errors.push('late');
+  equal(result.runtime.runtime.session.progress.currentMissionId, 'mission');
+  equal(result.runtime.runtime.mission.id, 'mission');
+  sameValue(result.runtime.runtime.state, { status: 'initialized', errors: [] });
+  equal(navigationRuntime, result.runtime);
+});
+
+test('15 admite navegación con target null', () => {
   const setup = createSetup({ values: { navigation: { action: 'STAY', target: null } } });
   const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
   equal(result.status, 'FLOW_COMPLETED');
@@ -221,7 +290,7 @@ test('13 admite navegación con target null', () => {
   equal(result.target, null);
 });
 
-test('14 no muta command ni objetos recibidos', () => {
+test('16 no muta command ni objetos recibidos', () => {
   const command = createCommand();
   const setup = createSetup();
   const beforeCommand = JSON.stringify(command);
@@ -231,14 +300,24 @@ test('14 no muta command ni objetos recibidos', () => {
   equal(JSON.stringify(setup.values), beforeValues);
   assert(!Object.isFrozen(command));
   assert(!Object.isFrozen(setup.values.state));
+  assert(!Object.isFrozen(setup.values.runtime));
+  assert(!Object.isFrozen(setup.values.runtime.session));
 });
 
-test('15 devuelve el adapter congelado', () => {
+test('17 devuelve el adapter congelado', () => {
   const adapter = createLegacyGameFlowAdapter(createSetup().dependencies);
   assert(Object.isFrozen(adapter));
 });
 
-test('16 no accede a fronteras prohibidas', () => {
+test('18 construye el RuntimeResult una sola vez', () => {
+  const setup = createSetup();
+  const result = createLegacyGameFlowAdapter(setup.dependencies).execute(createCommand());
+  equal(setup.calls.filter(call => call.dependency === 'rebuildRuntime').length, 1);
+  equal(setup.calls.filter(call => call.dependency === 'resolveNavigation').length, 1);
+  equal(setup.calls[3].args.runtime, result.runtime);
+});
+
+test('19 no accede a fronteras prohibidas', () => {
   const source = createLegacyGameFlowAdapter.toString();
   const forbidden = [
     'win' + 'dow', 'doc' + 'ument', 'global' + 'This', 'local' + 'Storage',

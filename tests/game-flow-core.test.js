@@ -1,6 +1,7 @@
 /* CRIOS A2-011 - Game Flow pure core focal tests */
 import { executeGameFlow } from '../js/game-flow/game-flow-core.js';
 import { createPlayerStateResult } from '../js/player-state/player-state-result-model.js';
+import { createRuntimeResult } from '../js/runtime/runtime-result-model.js';
 
 const cases = [];
 
@@ -36,12 +37,32 @@ function createCommand() {
   };
 }
 
+function createRuntimeSnapshot() {
+  return {
+    session: {
+      releaseId: 'campaign',
+      currentMissionIndex: 0,
+      progress: {
+        currentMissionId: 'mission',
+        completedMissionIds: []
+      }
+    },
+    mission: {
+      id: 'mission'
+    },
+    state: {
+      status: 'initialized',
+      errors: []
+    }
+  };
+}
+
 function createSetup(overrides = {}) {
   const calls = [];
   const values = Object.assign({
     playerState: createPlayerStateResult({ status: 'running', lives: 2 }),
     progress: { status: 'UPDATED', campaignCompleted: false, progress: { mission: 2 } },
-    runtime: { status: 'REBUILT', runtime: { mission: 'next' } },
+    runtime: createRuntimeResult(createRuntimeSnapshot()),
     navigation: { status: 'RESOLVED', action: 'OPEN_MISSION', target: 'next' }
   }, overrides.values || {});
   const ports = {
@@ -236,8 +257,13 @@ test('11 CAMPAIGN_COMPLETED corta Runtime y Navigation', () => {
   assertLaterStagesNull(result, 'runtime');
 });
 
-test('12 rechaza Runtime inválido y no ejecuta Navigation', () => {
-  const setup = createSetup({ values: { runtime: { status: 'REBUILT', runtime: null } } });
+test('12 rechaza RuntimeResult inválido y no ejecuta Navigation', () => {
+  const invalidRuntime = {
+    status: 'RUNTIME_REBUILT',
+    runtime: createRuntimeSnapshot()
+  };
+  invalidRuntime.runtime.mission.id = 'other-mission';
+  const setup = createSetup({ values: { runtime: invalidRuntime } });
   const result = executeGameFlow(createCommand(), setup.ports);
   equal(result.status, 'INVALID_RUNTIME_RESULT');
   equal(setup.calls.length, 3);
@@ -330,6 +356,54 @@ test('22 mantiene en null todas las etapas no ejecutadas', () => {
   assertLaterStagesNull(invalidPorts, 'playerState');
 });
 
+test('23 conserva el RuntimeResult canónico exacto', () => {
+  const setup = createSetup();
+  const result = executeGameFlow(createCommand(), setup.ports);
+  equal(result.runtime, setup.values.runtime);
+  equal(result.runtime.status, 'RUNTIME_REBUILT');
+  sameKeys(result.runtime, ['status', 'runtime']);
+  sameKeys(result.runtime.runtime, ['session', 'mission', 'state']);
+  assert(Object.isFrozen(result.runtime));
+  assert(Object.isFrozen(result.runtime.runtime));
+  assert(Object.isFrozen(result.runtime.runtime.session));
+  assert(Object.isFrozen(result.runtime.runtime.mission));
+  assert(Object.isFrozen(result.runtime.runtime.state));
+});
+
+test('24 rechaza RuntimeResult con claves adicionales o status no canónico', () => {
+  const extraWrapper = {
+    ...createRuntimeResult(createRuntimeSnapshot()),
+    detail: true
+  };
+  const extraRuntime = createRuntimeSnapshot();
+  extraRuntime.detail = true;
+  const extraState = createRuntimeSnapshot();
+  extraState.state.detail = true;
+  const invalidValues = [
+    extraWrapper,
+    { status: 'REBUILT', runtime: createRuntimeSnapshot() },
+    { status: 'RUNTIME_REBUILT', runtime: extraRuntime },
+    { status: 'RUNTIME_REBUILT', runtime: extraState }
+  ];
+
+  invalidValues.forEach(runtime => {
+    const setup = createSetup({ values: { runtime } });
+    const result = executeGameFlow(createCommand(), setup.ports);
+    equal(result.status, 'INVALID_RUNTIME_RESULT');
+    equal(setup.calls.length, 3);
+    equal(result.navigation, null);
+  });
+});
+
+test('25 Navigation recibe exactamente el RuntimeResult validado', () => {
+  const setup = createSetup();
+  const result = executeGameFlow(createCommand(), setup.ports);
+  const navigationCall = setup.calls.find(call => call.port === 'navigation');
+  equal(navigationCall.args.runtime, setup.values.runtime);
+  equal(navigationCall.args.runtime, result.runtime);
+  assert(Object.isFrozen(navigationCall.args.runtime));
+});
+
 const source = executeGameFlow.toString();
 const runtimeBoundaries = [
   'doc' + 'ument', 'win' + 'dow', 'local' + 'Storage', 'session' + 'Storage',
@@ -337,17 +411,17 @@ const runtimeBoundaries = [
   'set' + 'Interval', 'Au' + 'dio', 'Audio' + 'Context', 'loca' + 'tion'
 ];
 
-test('23 no accede a DOM, storage, red, audio ni timers', () => {
+test('26 no accede a DOM, storage, red, audio ni timers', () => {
   runtimeBoundaries.forEach(name => assert(!source.includes(name)));
 });
 
-test('24 no obtiene dependencias mediante globals', () => {
+test('27 no obtiene dependencias mediante globals', () => {
   assert(!source.includes('global' + 'This'));
   assert(!source.includes('CRIOS_' + 'DOMAIN'));
   assert(!source.includes('__CRIOS_' + 'REGISTER_DOMAIN_MODULE__'));
 });
 
-test('25 no importa ni conecta Game Flow con crios.js', () => {
+test('28 no importa ni conecta Game Flow con crios.js', () => {
   assert(!source.includes('crios' + '.js'));
   assert(!source.includes('REGISTRO_' + 'MISIONES'));
 });

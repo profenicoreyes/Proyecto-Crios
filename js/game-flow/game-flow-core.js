@@ -6,6 +6,7 @@ import {
   isGameOverPlayerStateResult
 } from '../player-state/player-state-result-model.js';
 import { isProgressModel } from '../progress/progress-model.js';
+import { isRuntimeResultModel } from '../runtime/runtime-result-model.js';
 import { isMissionNavigationModel } from '../navigation/mission-navigation-model.js';
 
 const STAGES = Object.freeze({
@@ -23,10 +24,6 @@ function isObject(value) {
 
 function has(value, key) {
   return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-function nonEmptyString(value) {
-  return typeof value === 'string' && value.trim() !== '';
 }
 
 function validCommand(command) {
@@ -53,8 +50,7 @@ function validProgress(value) {
 }
 
 function validRuntime(value) {
-  return isObject(value) && nonEmptyString(value.status)
-    && has(value, 'runtime') && isObject(value.runtime);
+  return isRuntimeResultModel(value);
 }
 
 function validNavigation(value) {

@@ -1,5 +1,6 @@
 import { executeGameFlow } from './game-flow-core.js';
 import { createPlayerStateResult } from '../player-state/player-state-result-model.js';
+import { createRuntimeResult } from '../runtime/runtime-result-model.js';
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -65,10 +66,7 @@ export function createLegacyGameFlowAdapter(dependencies) {
               campaign: args.campaign
             });
 
-            return {
-              status: 'RUNTIME_REBUILT',
-              runtime
-            };
+            return createRuntimeResult(runtime);
           }
         },
         navigation: {
