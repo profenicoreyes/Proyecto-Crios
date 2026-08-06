@@ -7,9 +7,10 @@
     throw new Error('No se pudo registrar NavigationCore: registrador de composición no disponible.');
   }
 
+  const compositionDomain = Object.assign({}, window.CRIOS_DOMAIN || {});
+
   function getReleaseValidator() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const releaseValidator = domain.releaseValidator;
+    const releaseValidator = compositionDomain.releaseValidator;
     if (!releaseValidator || typeof releaseValidator.validateReleaseStructure !== 'function') {
       throw new Error('Navigation inválida: ReleaseValidator no disponible.');
     }
@@ -17,8 +18,7 @@
   }
 
   function getRuntimeValidator() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const runtimeCore = domain.runtimeCore;
+    const runtimeCore = compositionDomain.runtimeCore;
     if (!runtimeCore || typeof runtimeCore.validateRuntime !== 'function') {
       throw new Error('Navigation inválida: RuntimeCore no disponible.');
     }
@@ -26,8 +26,7 @@
   }
 
   function getReleaseModel() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const releaseModel = domain.releaseModel;
+    const releaseModel = compositionDomain.releaseModel;
     if (!releaseModel || typeof releaseModel.deepFreeze !== 'function') {
       throw new Error('Navigation inválida: ReleaseModel no disponible.');
     }
