@@ -408,6 +408,41 @@ test('25 no contiene efectos de DOM storage red audio navegacion ni timers', () 
   forbidden.forEach(pattern => assert(!pattern.test(source), `Forbidden pattern: ${pattern}`));
 });
 
+test('26 conserva las dependencias de composicion aunque CRIOS_DOMAIN se reemplace despues del registro', () => {
+  const sourceRuntime = runtimeCore.createRuntime(release(), session());
+  const originals = {
+    releaseValidator: loaded.domain.releaseValidator,
+    sessionValidator: loaded.domain.sessionValidator,
+    releaseModel: loaded.domain.releaseModel
+  };
+
+  try {
+    loaded.domain.releaseValidator = {
+      validateReleaseStructure() {
+        throw new Error('late release validator replacement');
+      }
+    };
+    loaded.domain.sessionValidator = {
+      validateStudentSession() {
+        throw new Error('late session validator replacement');
+      }
+    };
+    loaded.domain.releaseModel = {
+      safeClone() {
+        throw new Error('late release model replacement');
+      }
+    };
+
+    const result = runtimeCore.createRuntime(release(), session());
+    equal(result.mission.id, 'energy');
+    equal(runtimeCore.validateRuntime(sourceRuntime), undefined);
+  } finally {
+    loaded.domain.releaseValidator = originals.releaseValidator;
+    loaded.domain.sessionValidator = originals.sessionValidator;
+    loaded.domain.releaseModel = originals.releaseModel;
+  }
+});
+
 const results = [];
 for (const entry of cases) {
   try {
