@@ -19,6 +19,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - Integración operativa inicial de `published` cerrada con selección explícita en Runtime, acceso desde Studio, runner E2E durable y correcciones de reanudación de sesión.
 - A2-013 cerrado con extracción incremental de Evaluation, Progress y decisión de navegación de misión, más contratos inmutables de PlayerStateResult y RuntimeResult integrados en Game Flow.
 - A2-014 cerrado con preservación de identidad y escenario published, desacople de misiones ejecutables respecto del registro legacy, constructor canónico de lanzamiento, entrada visible para publicaciones persistidas y auditoría final de regresión.
+- A2-015 cerrado con caracterización y estabilización de las dependencias de composición de RuntimeCore, conservando su API pública y compatibilidad legacy.
 
 ## Cierres recientes
 
@@ -160,12 +161,39 @@ El respaldo vigente es `Proyecto-Crios-73ba7c25bbb40f6c-main.bundle`, verificado
 
 A2-014 no declara `published` como modo principal ni elimina el camino legacy. Cierra la expansión enumerada y conserva esas decisiones como trabajo futuro sujeto a nueva evidencia y arquitectura.
 
+### A2-015 — estabilidad de composición de RuntimeCore
+
+El tramo queda cerrado en dos commits locales:
+
+- `ea3889612d3c7e325fedee9a11c92ab249ed216e` — `test(runtime): characterize composition boundary`.
+- `e37b2b0180a41ad79cb60afe738376a5bf3ac444` — `fix(runtime): preserve composition dependencies`.
+
+El cierre preserva estas fronteras:
+
+- RuntimeCore captura una vez, durante su composición, las referencias activas de validación y clonación que necesita.
+- Reemplazar posteriormente contratos dentro de `window.CRIOS_DOMAIN` ya no modifica el comportamiento del RuntimeCore previamente registrado.
+- La API pública permanece limitada a `createRuntime` y `validateRuntime`, sin cambios de contrato.
+- El wrapper clásico, el registro global y la compatibilidad legacy se conservan; este tramo no extrae una factoría pura ni elimina `window.CRIOS_DOMAIN`.
+- NavigationCore, Game Flow y los efectos de DOM, storage, red, audio, navegación y timers permanecen fuera del cambio productivo.
+
+La validación de cierre sobre el commit limpio registra:
+
+- RuntimeCore: 26/26;
+- Published Launch Operational E2E: 136/136;
+- Game Flow First Legacy Integration: 24/24;
+- total relacionado: 186/186;
+- cero errores de página, consola o promesas;
+- telemetría y cleanup limpios, sin frames residuales;
+- árbol de trabajo limpio, staging vacío y ausencia de archivos sin seguimiento o eliminados.
+
+A2-015 no declara eliminada la composición legacy ni extiende el cambio a NavigationCore. Cierra únicamente la lectura dinámica tardía de dependencias dentro de RuntimeCore y deja cualquier extracción adicional sujeta a nueva caracterización.
+
 ## Trabajo posterior
 
-Con la integración operativa inicial de `published`, A2-013 y A2-014 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
+Con la integración operativa inicial de `published`, A2-013, A2-014 y A2-015 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
 
 - ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
-- investigar por separado si RuntimeCore y NavigationCore deben dejar de depender de `window.CRIOS_DOMAIN`;
+- investigar por separado la composición de NavigationCore y, solo con nueva evidencia, si RuntimeCore debe avanzar desde captura estable hacia una factoría pura sin registro global;
 - delimitar ownership de transacción, rollback, persistencia, sincronización remota y aplicación visual antes de trasladar cualquiera de esos efectos;
 - consolidar Game Flow como dueño de más transiciones solo cuando cada borde pueda aislarse, validarse y revertirse;
 - ampliar Studio con nuevos handlers, tipos de misión, escenarios y taxonomías;
@@ -183,7 +211,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline local el commit `73ba7c25bbb40f6c9c99d8393e617c48eb1e3f0e`, creado el 6 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
+Esta actualización toma como baseline local el commit `e37b2b0180a41ad79cb60afe738376a5bf3ac444`, creado el 6 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
