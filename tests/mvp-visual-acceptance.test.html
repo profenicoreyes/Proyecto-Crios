@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRIOS MVP 1.0 Visual Acceptance</title>
+<link rel="icon" href="data:,">
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05080d;color:#d7f7ff;font-family:system-ui,sans-serif}
+#results{position:fixed;inset:0;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;z-index:1}
+</style>
+</head>
+<body>
+<pre id="results">RUNNING</pre>
+<script>
+(function(){
+  'use strict';
+  if (new URLSearchParams(window.location.search).get('shell') === '1') {
+    document.getElementById('results').textContent = 'SHELL';
+    return;
+  }
+  var script = document.createElement('script');
+  script.src = './mvp-visual-acceptance.test.js';
+  document.body.appendChild(script);
+})();
+</script>
+</body>
+</html>
