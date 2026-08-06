@@ -130,13 +130,16 @@
     });
 
     var child=frame.contentWindow;
+    var harness={name:name,frame:frame,child:child,state:child.__CRIOS_A2_011_CHILD__,restore:null};
+    installInstrumentation(harness);
     child.document.getElementById('userNameInput').value='Equipo A2-011';
     child.document.getElementById('characterNameInput').value='Operador A2-011';
     child.document.getElementById('groupInput').value='A2-011';
     await child.identifyUser();
     await waitFor(function(){return child.CRIOS.obtenerMisionesActivas().length===4&&child.document.getElementById('mission-energy');});
+    await waitFor(function(){return harness.metrics.createRuntime.length>=1&&harness.metrics.createNavigation.length>=1;});
     await settle();
-    return {name:name,frame:frame,child:child,state:child.__CRIOS_A2_011_CHILD__,restore:null};
+    return harness;
   }
 
   function installInstrumentation(harness){
@@ -250,7 +253,6 @@
   async function withHarness(name,run){
     var harness=await buildHarness(name);
     try{
-      installInstrumentation(harness);
       return await run(harness);
     }finally{
       try{
