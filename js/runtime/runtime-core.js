@@ -8,10 +8,10 @@
   }
 
   const RUNTIME_STATE_STATUSES = ['initialized', 'ready', 'error'];
+  const compositionDomain = Object.assign({}, window.CRIOS_DOMAIN || {});
 
   function getReleaseValidator() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const releaseValidator = domain.releaseValidator;
+    const releaseValidator = compositionDomain.releaseValidator;
     if (!releaseValidator || typeof releaseValidator.validateReleaseStructure !== 'function') {
       throw new Error('Runtime inválido: ReleaseValidator no disponible.');
     }
@@ -19,8 +19,7 @@
   }
 
   function getSessionValidator() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const sessionValidator = domain.sessionValidator;
+    const sessionValidator = compositionDomain.sessionValidator;
     if (!sessionValidator || typeof sessionValidator.validateStudentSession !== 'function') {
       throw new Error('Runtime inválido: SessionValidator no disponible.');
     }
@@ -28,8 +27,7 @@
   }
 
   function getSessionModel() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const sessionModel = domain.sessionModel;
+    const sessionModel = compositionDomain.sessionModel;
     if (!sessionModel || typeof sessionModel.isAllowedStatus !== 'function') {
       throw new Error('Runtime inválido: SessionModel no disponible.');
     }
@@ -37,8 +35,7 @@
   }
 
   function getReleaseModel() {
-    const domain = window.CRIOS_DOMAIN || {};
-    const releaseModel = domain.releaseModel;
+    const releaseModel = compositionDomain.releaseModel;
     if (!releaseModel || typeof releaseModel.safeClone !== 'function') {
       throw new Error('Runtime inválido: ReleaseModel no disponible.');
     }
