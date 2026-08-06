@@ -2,11 +2,12 @@
 
 ## 1. Baseline
 
-- Rama prevista: `main`.
-- Commit de contrato del MVP: `f4399e1d819306a4f861aad37ff8527243171add`.
-- Asunto: `docs(mvp): define CRIOS 1.0 acceptance contract`.
-- Documento contractual: `docs/MVP_1_0.md`.
-- Esta matriz no modifica producción ni amplía el alcance del MVP.
+- Rama: `main`.
+- Commit de evidencia E2E: `99ce2f790c409cbac748ea0b2e636f03cdb9c99c`.
+- Asunto: `test(mvp): characterize full published flow`.
+- Contrato: `docs/MVP_1_0.md`.
+- Matriz inicial: commit `8f8d154ccb5ec1aad12a4e2aa4ddd411a167f8a2`.
+- Esta actualización no modifica producción ni amplía el alcance del MVP.
 
 ## 2. Base de evidencia
 
@@ -17,6 +18,7 @@ La clasificación utiliza:
 - runners versionados existentes;
 - resultados de cierre ya confirmados hasta A2-016;
 - evidencia A2-016C de 141/141 sobre árbol limpio;
+- evidencia A2-017C1 de 110/110 para el recorrido `published` integral;
 - contratos y límites registrados en ROADMAP.
 
 No se considera demostrada una capacidad únicamente porque exista código para ella. Para marcar `DEMOSTRADO` debe existir evidencia focal o E2E que cubra el comportamiento relevante. `PARCIAL` indica que hay implementación y evidencia cercana, pero falta el recorrido exacto exigido por el MVP. `SIN_EVIDENCIA` no implica necesariamente un defecto.
@@ -25,21 +27,22 @@ No se considera demostrada una capacidad únicamente porque exista código para 
 
 | Estado | Cantidad |
 |---|---:|
-| DEMOSTRADO | 20 |
-| PARCIAL | 11 |
-| SIN_EVIDENCIA | 5 |
+| DEMOSTRADO | 33 |
+| PARCIAL | 13 |
+| SIN_EVIDENCIA | 0 |
 | DEFECTO_CONFIRMADO | 0 |
-| **Total** | **36** |
+| **Total** | **46** |
 
-La arquitectura necesaria para el MVP ya existe. No se identificó mediante inspección estática un defecto nuevo que justifique modificar producción antes de ejecutar la aceptación integral.
+La matriz inicial resumía por error 36 criterios, aunque su tabla detallada contenía 46. Esta actualización corrige únicamente el conteo documental.
 
-Las brechas principales son:
+La arquitectura y el recorrido funcional necesarios para el MVP ya existen. A2-017C1 completó 110/110 comprobaciones sobre el flujo `published`, sin errores de página, consola, warnings ni promesas no controladas y sin modificar producción.
 
-1. recorrido `published` completo a través de dos o más misiones;
-2. desbloqueo y ejecución del protocolo final;
-3. persistencia y reanudación después de completar la campaña;
-4. cierre de sesión y comienzo limpio de una nueva;
-5. auditoría visual del recorrido completo en notebook y viewport angosto.
+Las brechas restantes son exclusivamente:
+
+1. caracterización publicada específica de rollback, reintento incorrecto y game over;
+2. auditoría visual integral de contraste, solapamientos y mensajes;
+3. guía breve de uso y documentación de release;
+4. validación final agregada, bundle y limpieza de cierre.
 
 ## 4. Matriz detallada
 
@@ -64,10 +67,10 @@ Las brechas principales son:
 | MVP-SES-01 | La identidad se confirma mediante controles visibles. | DEMOSTRADO | Formulario real con nombre, personaje y grupo; E2E completa la identificación. | Ninguna para el inicio. |
 | MVP-SES-02 | La sesión conserva campaña, publicación, modo, identidad y escenario. | DEMOSTRADO | Session, Runtime Bootstrap, Published Domain Bridge y cierre A2-014. | Ninguna. |
 | MVP-SES-03 | Una recarga `published` vuelve a pedir confirmación de identidad. | DEMOSTRADO | E2E de reanudación publicada. | Ninguna. |
-| MVP-SES-04 | La recarga conserva `idSesion`, publicación y misión resuelta. | DEMOSTRADO | E2E operativo ampliado. | Falta comprobarlo después de varias misiones y finalización. |
+| MVP-SES-04 | La recarga conserva `idSesion`, publicación y misión resuelta. | DEMOSTRADO | A2-017C1 conserva el mismo `idSesion`, publicación y progreso después de dos misiones y después de la finalización. | Ninguna. |
 | MVP-SES-05 | Una entrada legacy explícita no reutiliza una sesión publicada. | DEMOSTRADO | E2E de sesión publicada obsoleta y recuperación legacy. | Ninguna. |
 | MVP-SES-06 | Campañas y publicaciones distintas no comparten estado accidentalmente. | DEMOSTRADO | Runtime Launch Selection, Persistence y aislamiento de claves/sesiones. | Falta una comprobación integral con dos campañas reales, no necesaria para la demo mínima. |
-| MVP-SES-07 | Cerrar la sesión permite comenzar otra identidad sin residuos. | PARCIAL | Existe `resetProgress` y limpieza de claves de sesión. | Falta E2E de cierre, nueva identidad y nueva sesión publicada. |
+| MVP-SES-07 | Cerrar la sesión permite comenzar otra identidad sin residuos. | DEMOSTRADO | A2-017C1 elimina sesión, progreso, finalización e identidad; preserva la publicación y crea un `idSesion` nuevo con 0/4 misiones. | Ninguna. |
 
 ### 4.3 Misiones, evaluación y Game Flow
 
@@ -81,10 +84,10 @@ Las brechas principales son:
 | MVP-FLOW-06 | Un fallo posterior a Progress no persiste estado parcial. | PARCIAL | Rollback real demostrado en integración legacy. | Falta escenario equivalente publicado o justificar formalmente la reutilización exacta del borde. |
 | MVP-FLOW-07 | Una respuesta incorrecta mantiene la misión disponible para reintentar. | PARCIAL | Demostrado en integración legacy; lógica compartida visible en producción. | Falta comprobarlo en `published`. |
 | MVP-FLOW-08 | Game over restaura el estado sin cambiar de misión ni corromper progreso. | PARCIAL | Integración legacy y Runtime Local State Coherence. | Falta decidir si el MVP publicado debe aceptar este escenario y probarlo. |
-| MVP-FLOW-09 | Dos o más misiones publicadas se completan secuencialmente. | SIN_EVIDENCIA | Existen cuatro misiones y navegación entre ellas, pero el E2E publicado cerrado resuelve solo la primera. | Crear escenario E2E multi-misión. |
-| MVP-FLOW-10 | La última misión desbloquea el protocolo final. | SIN_EVIDENCIA | `updateMap` habilita `finalBtn` cuando todas están completas. | Falta comprobarlo en navegador con progreso publicado real. |
-| MVP-FLOW-11 | El protocolo final puede resolverse y abre créditos. | SIN_EVIDENCIA | Existen `validateFinal`, persistencia de finalización y transición a `credits`. | Falta prueba funcional integral. |
-| MVP-FLOW-12 | La finalización es estable y no se duplica al reintentar. | SIN_EVIDENCIA | Hay guardado de `complete` y envío de resultados. | Falta caracterización y aceptación. |
+| MVP-FLOW-09 | Dos o más misiones publicadas se completan secuencialmente. | DEMOSTRADO | A2-017C1 resuelve `energy`, `greenhouse`, recarga, y luego `ice` y `hangar` mediante controles visibles. | Ninguna. |
+| MVP-FLOW-10 | La última misión desbloquea el protocolo final. | DEMOSTRADO | A2-017C1 confirma el botón final deshabilitado con 0/4 y 2/4, y habilitado con 4/4. | Ninguna. |
+| MVP-FLOW-11 | El protocolo final puede resolverse y abre créditos. | DEMOSTRADO | A2-017C1 construye el procedimiento visible, obtiene `836`, persiste el resultado y abre créditos. | Ninguna. |
+| MVP-FLOW-12 | La finalización es estable y no se duplica al reintentar. | DEMOSTRADO | A2-017C1 conserva `final.answerCorrect`, `complete`, evaluación, envío y el mismo `idSesion` después de recargar. | Ninguna dentro del recorrido aceptado. |
 
 ### 4.4 Persistencia y recuperación
 
@@ -94,15 +97,15 @@ Las brechas principales son:
 | MVP-REC-02 | Una publicación desactivada no crea sesión ni misiones. | DEMOSTRADO | E2E de desactivación. | Ninguna. |
 | MVP-REC-03 | Persistencia corrupta se bloquea y no se borra automáticamente. | DEMOSTRADO | Persistence y E2E de corrupción. | Ninguna. |
 | MVP-REC-04 | Limpiar una sesión no elimina publicaciones ni campañas ajenas. | PARCIAL | Stores y claves separadas están probados; `resetProgress` elimina claves concretas de sesión. | Falta E2E desde la interfaz. |
-| MVP-REC-05 | Puede iniciarse una nueva sesión después de cerrar o invalidar la anterior. | PARCIAL | Hay caminos de reset y creación de sesión nueva. | Falta aceptación publicada. |
-| MVP-REC-06 | Una campaña completada se reanuda como completada. | SIN_EVIDENCIA | Existe `STORAGE.complete`, pero no hay E2E completo. | Comprobar recarga posterior a créditos/finalización. |
+| MVP-REC-05 | Puede iniciarse una nueva sesión después de cerrar o invalidar la anterior. | DEMOSTRADO | A2-017C1 crea una sesión publicada nueva, con identificador distinto, progreso 0/4 y final bloqueado. | Ninguna. |
+| MVP-REC-06 | Una campaña completada se reanuda como completada. | DEMOSTRADO | A2-017C1 recarga después de créditos y conserva las cuatro misiones, el final correcto, `complete=true`, 100 % y el mismo `idSesion`. | Ninguna. |
 
 ### 4.5 Interfaz y experiencia de uso
 
 | ID | Criterio | Estado | Evidencia existente | Brecha restante |
 |---|---|---|---|---|
-| MVP-UX-01 | Inicio, identidad, campaña, mapa y misión tienen controles visibles. | DEMOSTRADO | Entradas reales en `index.html`, superficie publicada y E2E de primera misión. | Falta recorrerlos juntos hasta créditos. |
-| MVP-UX-02 | No se necesitan herramientas de desarrollo para el recorrido principal. | PARCIAL | Todas las acciones tienen controles de interfaz. | Falta una corrida de aceptación operada únicamente por UI. |
+| MVP-UX-01 | Inicio, identidad, campaña, mapa y misión tienen controles visibles. | DEMOSTRADO | A2-017C1 recorre identidad, entrada, mapa, cuatro misiones, protocolo final, créditos y nueva sesión. | Ninguna funcional. |
+| MVP-UX-02 | No se necesitan herramientas de desarrollo para el recorrido principal. | DEMOSTRADO | A2-017C1 opera el recorrido principal mediante los controles visibles de Studio y CRIOS. | Ninguna funcional. |
 | MVP-UX-03 | Los bloqueos muestran mensajes comprensibles y una salida posible. | PARCIAL | Mensajes de publicación no disponible y fallback legacy comprobados. | Revisar todos los fallos del recorrido MVP, no solo lanzamiento. |
 | MVP-UX-04 | El acceso esencial funciona en viewport angosto. | PARCIAL | Corrección y smoke del acceso a campaña en pantalla angosta cerrados en A2-011. | Falta recorrer publicación, misiones y final completo en ese viewport. |
 | MVP-UX-05 | No hay solapamientos, scroll bloqueante ni controles fuera de pantalla. | PARCIAL | Evidencia puntual del selector/acceso. | Revisión visual integral pendiente. |
@@ -114,16 +117,16 @@ Las brechas principales son:
 | ID | Criterio | Estado | Evidencia existente | Brecha restante |
 |---|---|---|---|---|
 | MVP-QA-01 | Contratos focales y regresiones relacionadas están aprobados. | DEMOSTRADO | Cierres A2-013 a A2-016; A2-016C 141/141. | Volver a ejecutarlos tras cualquier cambio futuro. |
-| MVP-QA-02 | Los recorridos existentes terminan sin errores de página, consola o promesas. | DEMOSTRADO | E2E publicado, puente de dominio, coherencia local y legacy cerrados sin errores. | Falta la misma garantía para la aceptación integral. |
-| MVP-QA-03 | Existe un runner durable para el recorrido MVP completo. | SIN_EVIDENCIA | Hay E2E operativo inicial, pero no recorre múltiples misiones, final y recarga final. | Crear el runner A2-017C. |
+| MVP-QA-02 | Los recorridos existentes terminan sin errores de página, consola o promesas. | DEMOSTRADO | A2-017C1 registra 0 errores de página, consola, warnings y promesas no controladas en la aceptación integral; cleanup de storage y frames confirmado. | Ninguna para el recorrido actual. |
+| MVP-QA-03 | Existe un runner durable para el recorrido MVP completo. | DEMOSTRADO | `tests/mvp-e2e-characterization.test.html` y `.js`, versionados en `99ce2f7…`, aprobaron 110/110. | Ninguna. |
 | MVP-QA-04 | La versión tiene instrucciones breves de uso. | PARCIAL | Existen README y documentación de Studio. | Redactar una guía específica del MVP después de cerrar el recorrido. |
 | MVP-QA-05 | El cierre produce commit, bundle verificado y limpieza. | PARCIAL | El procedimiento está probado en tramos anteriores. | Ejecutarlo para el commit final del MVP. |
 
 ## 5. Decisión de arquitectura
 
-No se autoriza una nueva extracción arquitectónica antes de obtener evidencia del runner integral.
+La aceptación integral no confirmó defectos productivos. No se autoriza una nueva extracción arquitectónica para cerrar el MVP.
 
-En particular, A2-017 no necesita por ahora:
+En particular, A2-017 no necesita:
 
 - eliminar legacy;
 - cambiar el modo predeterminado;
@@ -132,40 +135,43 @@ En particular, A2-017 no necesita por ahora:
 - agregar backend, sincronización o multiusuario;
 - crear nuevos tipos de misión.
 
-La primera tarea técnica debe observar el recorrido real con el código actual.
+A2-017C1 demuestra que el código actual ya soporta el recorrido funcional obligatorio.
 
-## 6. Próximo tramo recomendado
+## 6. Evidencia A2-017C1
 
-### A2-017C1 — caracterización E2E del recorrido MVP
+- commit: `99ce2f790c409cbac748ea0b2e636f03cdb9c99c`;
+- total: 110;
+- aprobadas: 110;
+- fallidas: 0;
+- misiones: `energy`, `greenhouse`, `ice`, `hangar`;
+- protocolo final esperado y obtenido: `836`;
+- recarga intermedia: aprobada;
+- recarga posterior a la finalización: aprobada;
+- nueva sesión después del reset: aprobada;
+- errores de página, consola, frames y promesas: 0;
+- warnings: 0;
+- cleanup de localStorage, sessionStorage y frames: aprobado;
+- producción modificada: no;
+- defectos productivos confirmados: 0.
 
-Crear un runner durable que:
+## 7. Próximo tramo recomendado
 
-1. abra Studio;
-2. prepare y publique la campaña de cuatro misiones;
-3. active y abra la publicación;
-4. confirme identidad;
-5. resuelva al menos dos misiones en orden;
-6. recargue y confirme que ambas siguen resueltas;
-7. resuelva las misiones restantes;
-8. confirme que el protocolo final se habilita;
-9. resuelva el protocolo final;
-10. confirme créditos y estado completo;
-11. recargue nuevamente;
-12. compruebe reanudación coherente de la campaña completada;
-13. cierre la sesión;
-14. cree una sesión nueva sin residuos;
-15. reporte errores, warnings, requests, storage, frames y cleanup.
+### A2-017D — aceptación visual y documentación de uso
 
-El runner debe ejecutarse primero contra producción sin modificar. Si falla, cada fallo se clasificará como:
+1. revisar visualmente el recorrido en notebook;
+2. revisar identidad, entrada y mapa en viewport angosto;
+3. verificar contraste, foco, solapamientos, scroll y mensajes;
+4. registrar solo defectos visuales reales;
+5. redactar la guía breve de uso del MVP;
+6. ejecutar después la validación agregada y el cierre de release.
 
-- defecto de producción;
-- limitación contractual;
-- defecto del runner;
-- dependencia del entorno;
-- brecha exclusivamente visual o documental.
+Los escenarios publicados de rollback, respuesta incorrecta y game over siguen clasificados como parciales. No bloquean el recorrido feliz del MVP, pero deben mantenerse documentados y no presentarse como evidencia integral hasta contar con una prueba publicada específica.
 
-Solo después se autorizará A2-017C2 para corregir el primer defecto real confirmado.
+## 8. Definición de cierre de esta actualización
 
-## 7. Definición de cierre de A2-017B
+La actualización queda cerrada cuando se versiona:
 
-A2-017B queda cerrado cuando esta matriz se versiona sin cambios productivos y se acepta que la siguiente acción es caracterizar el E2E integral antes de implementar.
+- la corrección del total a 46 criterios;
+- la evidencia 110/110;
+- la reclasificación a 33 demostrados, 13 parciales y 0 sin evidencia;
+- la decisión de no modificar producción antes de la revisión visual.
