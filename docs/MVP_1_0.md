@@ -109,7 +109,7 @@ La versión candidata debe aprobar:
 - `git diff --check` aprobado;
 - árbol limpio después de la validación.
 
-El total exacto de comprobaciones se fijará al crear el runner de aceptación. No debe disminuir la cobertura cerrada de los módulos existentes.
+La aceptación final quedó fijada en 417 comprobaciones: 141 regresiones de arquitectura y compatibilidad, 110 del recorrido publicado completo y 166 de aceptación visual. La revisión visual manual también debe aprobarse. Ningún cierre posterior puede reducir esta cobertura sin una decisión explícita y documentada.
 
 ## 6. Entregables de CRIOS MVP 1.0
 
@@ -168,17 +168,17 @@ Versionar este documento sin cambios productivos.
 
 Mapear cada criterio del MVP contra código, pruebas y evidencia existentes. Identificar únicamente las brechas reales.
 
-### A2-017C — cierre de brechas
+### A2-017C — aceptación funcional integral
 
-Resolver una brecha por tarea, con prueba focal, regresión relacionada y commit independiente.
+Crear y ejecutar un runner E2E durable para el recorrido `published` completo, desde Studio hasta créditos, recarga final y sesión nueva.
 
-### A2-017D — aceptación integral
+### A2-017D — aceptación visual
 
-Crear y ejecutar un runner E2E durable para el recorrido completo del MVP.
+Caracterizar el recorrido visual, corregir únicamente defectos confirmados y aprobar la revisión automática y manual.
 
-### A2-017E — release
+### A2-017E — validación agregada y release
 
-Revisión visual final, documentación de uso, commit de cierre, bundle verificado y limpieza de temporales.
+Ejecutar conjuntamente las regresiones de arquitectura, el E2E completo y la aceptación visual; documentar el uso; crear el commit documental de cierre; generar el bundle verificado y limpiar temporales.
 
 ## 10. Definición de terminado
 
@@ -192,3 +192,45 @@ CRIOS MVP 1.0 está terminado cuando:
 - las limitaciones están documentadas;
 - el repositorio está limpio;
 - existe un único bundle vigente y verificado del commit de cierre.
+
+## 11. Evidencia final de aceptación
+
+El candidato funcional aceptado es:
+
+- rama: `main`;
+- commit: `a01a89f71fb7a8063ac3994011b798459416a6a0`;
+- asunto: `fix(mvp): complete visual acceptance`.
+
+Resultados acumulados:
+
+- NavigationCore: 8/8;
+- Published Domain Bridge: 63/63;
+- Runtime Local State Coherence: 46/46;
+- Game Flow First Legacy Integration: 24/24;
+- regresiones de arquitectura y compatibilidad: 141/141;
+- recorrido MVP publicado completo: 110/110;
+- aceptación visual automatizada: 166/166;
+- revisión visual manual: aprobada;
+- total agregado: 417/417;
+- errores de página: 0;
+- errores de consola: 0;
+- warnings: 0;
+- promesas no controladas: 0;
+- árbol de trabajo posterior a la validación: limpio.
+
+La aceptación visual corrigió ocho defectos confirmados de acceso, viewport, composición, clasificación y orientación sin ampliar la arquitectura ni modificar los contratos de dominio.
+
+## 12. Brechas no bloqueantes preservadas
+
+El MVP no presenta como cobertura integral:
+
+- rollback publicado posterior a Progress;
+- reintento publicado después de una respuesta incorrecta;
+- game over publicado;
+- aislamiento E2E completo entre dos campañas simultáneas;
+- limpieza de una sesión observada contra campañas ajenas mediante un único recorrido de interfaz;
+- recorrido completo de misión y protocolo final en todos los viewports angostos posibles;
+- totalidad de mensajes de bloqueo posibles;
+- backend, autenticación, sincronización o colaboración.
+
+Estas brechas quedan registradas para trabajo posterior. No invalidan el recorrido feliz obligatorio aceptado para CRIOS MVP 1.0.

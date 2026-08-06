@@ -21,6 +21,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-014 cerrado con preservación de identidad y escenario published, desacople de misiones ejecutables respecto del registro legacy, constructor canónico de lanzamiento, entrada visible para publicaciones persistidas y auditoría final de regresión.
 - A2-015 cerrado con caracterización y estabilización de las dependencias de composición de RuntimeCore, conservando su API pública y compatibilidad legacy.
 - A2-016 cerrado con caracterización y estabilización de las dependencias de composición de NavigationCore, conservando su API pública, registro clásico y compatibilidad legacy.
+- A2-017 aceptado funcional y visualmente como CRIOS MVP 1.0, con recorrido `published` completo, 417/417 comprobaciones agregadas y revisión manual aprobada.
 
 ## Cierres recientes
 
@@ -218,9 +219,53 @@ La validación de cierre sobre el commit limpio registra:
 
 A2-016 no declara eliminada la composición legacy ni convierte NavigationCore en una factoría pura. Cierra únicamente la lectura dinámica tardía de sus dependencias y mantiene fuera del cambio la ampliación funcional de navegación y los efectos de aplicación.
 
+
+### A2-017 — aceptación de CRIOS MVP 1.0
+
+El tramo establece y valida el primer MVP cerrado del recorrido `published`.
+
+Commits principales:
+
+- `f4399e1d819306a4f861aad37ff8527243171add` — `docs(mvp): define CRIOS 1.0 acceptance contract`.
+- `8f8d154ccb5ec1aad12a4e2aa4ddd411a167f8a2` — `docs(mvp): map CRIOS 1.0 coverage`.
+- `99ce2f790c409cbac748ea0b2e636f03cdb9c99c` — `test(mvp): characterize full published flow`.
+- `c5aa8d496204fad5306fd8e4fb7c4f42de2b209d` — `docs(mvp): record full-flow evidence`.
+- `bc94b846d1504bafee60e3a73a8c44d04d4f6310` — `test(mvp): characterize visual acceptance`.
+- `a01a89f71fb7a8063ac3994011b798459416a6a0` — `fix(mvp): complete visual acceptance`.
+
+El recorrido aceptado cubre:
+
+- creación y publicación desde Studio;
+- activación y apertura explícita de la publicación;
+- identidad y sesión;
+- ejecución secuencial de `energy`, `greenhouse`, `ice` y `hangar`;
+- Evaluation, PlayerState, Progress, Runtime, Navigation y decisión de Game Flow;
+- recarga intermedia;
+- protocolo final y créditos;
+- recarga de una campaña completada;
+- cierre y creación de una sesión nueva sin residuos de identidad, progreso ni finalización.
+
+La evidencia final registra:
+
+- regresiones de arquitectura y compatibilidad: 141/141;
+- NavigationCore: 8/8;
+- Published Domain Bridge: 63/63;
+- Runtime Local State Coherence: 46/46;
+- Game Flow First Legacy Integration: 24/24;
+- recorrido MVP publicado: 110/110;
+- aceptación visual: 166/166;
+- revisión visual manual: aprobada;
+- total agregado: 417/417;
+- errores de página, consola, warnings y promesas no controladas: 0;
+- árbol limpio después de la validación.
+
+La aceptación visual corrigió ocho defectos confirmados relacionados con acceso desde Studio, controles fuera del viewport, composición de identidad y entrada, clasificación publicada, aviso de orientación, protocolo final y acciones de créditos.
+
+A2-017 no declara `published` como modo predeterminado, no elimina legacy y no agrega backend, sincronización, cuentas ni colaboración. Los escenarios publicados específicos de rollback posterior a Progress, respuesta incorrecta y game over conservan cobertura parcial y quedan como trabajo posterior no bloqueante.
+
 ## Trabajo posterior
 
-Con la integración operativa inicial de `published`, A2-013, A2-014, A2-015 y A2-016 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
+Con CRIOS MVP 1.0 funcional y visualmente aceptado, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
 
 - ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
 - evaluar, solo con nueva evidencia, si RuntimeCore o NavigationCore deben avanzar desde captura estable hacia factorías puras sin registro global;
@@ -241,7 +286,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline local el commit `a4c72531260b918fc2f6297395dd69b148aab6af`, creado el 6 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
+Esta actualización toma como baseline funcional el commit `a01a89f71fb7a8063ac3994011b798459416a6a0`, creado el 6 de agosto de 2026. El commit documental que incorpore este cierre será posterior.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
