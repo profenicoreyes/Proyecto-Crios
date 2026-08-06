@@ -1679,9 +1679,27 @@ function progresoDeCampana(campana) {
   };
 }
 
+function obtenerClasificacionCampana(campana) {
+  const directa = campana && campana.clasificacion;
+  if (directa && directa.materia && directa.tema && directa.subtema) return directa;
+
+  const ids = campana && Array.isArray(campana.misiones) ? campana.misiones : [];
+  const mision = ids
+    .map((id) => misionesActivas.find((item) => item && item.id === id))
+    .find((item) => item && item.clasificacion);
+
+  if (mision && mision.clasificacion) return mision.clasificacion;
+
+  return {
+    materia: 'Sin clasificación',
+    tema: 'Sin clasificación',
+    subtema: 'Sin clasificación'
+  };
+}
+
 function actualizarCabeceraCampana() {
   if (!campanaActiva) return;
-  const etiquetas = obtenerEtiquetaTaxonomia(campanaActiva.clasificacion);
+  const etiquetas = obtenerEtiquetaTaxonomia(obtenerClasificacionCampana(campanaActiva));
   const titulo = document.getElementById('mapCampaignTitle');
   const clasificacion = document.getElementById('mapCampaignClass');
   if (titulo) titulo.textContent = campanaActiva.titulo;
@@ -1751,7 +1769,7 @@ function detalleCampana(id) {
   const campana = obtenerCampanaPorId(id);
   const panel = document.getElementById('campaignDetail');
   if (!campana || !panel) return;
-  const etiquetas = obtenerEtiquetaTaxonomia(campana.clasificacion);
+  const etiquetas = obtenerEtiquetaTaxonomia(obtenerClasificacionCampana(campana));
   const estado = progresoDeCampana(campana);
   const publicada = campana.estado === 'publicada';
   panel.innerHTML = `
@@ -1780,7 +1798,7 @@ function renderCampaignSelector() {
   const campanas = listarCampanas();
   if (contador) contador.textContent = `${campanas.length} ${campanas.length === 1 ? 'campaña' : 'campañas'}`;
   lista.innerHTML = campanas.map((campana) => {
-    const etiquetas = obtenerEtiquetaTaxonomia(campana.clasificacion);
+    const etiquetas = obtenerEtiquetaTaxonomia(obtenerClasificacionCampana(campana));
     const estado = progresoDeCampana(campana);
     const bloqueada = campana.estado !== 'publicada';
     return `<button type="button" class="campaign-card ${campana.id === campanaActiva.id ? 'selected' : ''} ${bloqueada ? 'locked' : ''}"

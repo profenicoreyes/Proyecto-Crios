@@ -473,3 +473,136 @@
 .campaign-detail .detail-row{padding:12px;border-left:2px solid rgba(86,201,239,.45);background:rgba(7,27,42,.58)}
 .campaign-detail .detail-row span{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
 @media(max-width:900px){.campaign-layout{grid-template-columns:1fr}.campaign-detail{display:block}}
+
+/* A2-017D — keep identity and campaign entry inside the 1366 × 768 canvas. */
+#reveal .hero{
+  display:grid!important;
+  grid-template-columns:minmax(0,1.05fr) minmax(390px,.95fr);
+  grid-template-areas:
+    "brand access"
+    "title access"
+    "tagline access"
+    "terminal access"
+    "story access";
+  grid-template-rows:auto auto auto auto 1fr;
+  column-gap:42px;
+  row-gap:0;
+  align-content:center;
+  height:700px;
+  max-height:700px!important;
+  padding:40px 48px!important;
+  overflow:hidden!important;
+}
+#reveal .hero>.brand{grid-area:brand}
+#reveal .hero>h1{
+  grid-area:title;
+  font-size:4.55rem;
+  line-height:.94;
+  margin:14px 0 12px;
+}
+#reveal .hero>.subtitle:first-of-type{
+  grid-area:tagline;
+  font-size:1.08rem;
+  line-height:1.45;
+  margin:0;
+}
+#reveal .hero>.terminal{
+  grid-area:terminal;
+  margin:18px 0 12px;
+  padding:10px 16px;
+  line-height:1.55;
+}
+#reveal .hero>.subtitle:nth-of-type(2){
+  grid-area:story;
+  align-self:start;
+  font-size:1rem;
+  line-height:1.48;
+  margin:0;
+}
+#reveal #missionLogin,
+#reveal #missionWelcome{
+  grid-area:access;
+  align-self:center;
+  min-width:0;
+}
+#reveal #missionLogin .brief,
+#reveal #missionWelcome h3{
+  margin-top:0!important;
+}
+#reveal #missionLogin .answer{
+  max-width:none!important;
+}
+#reveal #missionWelcome .actions{
+  margin-top:18px;
+}
+#reveal #missionWelcome .btn{
+  flex:1 1 100%;
+}
+
+/* The portrait notice lives outside the scaled canvas and must fill the real viewport. */
+.orientation-warning{
+  padding:clamp(24px,8vw,56px);
+}
+.orientation-warning .panel{
+  width:min(100%,560px);
+  max-width:560px;
+  padding:clamp(30px,8vw,52px);
+}
+.orientation-warning h2{
+  font-size:clamp(2.2rem,10vw,4.4rem);
+  margin-bottom:18px;
+}
+.orientation-warning p{
+  margin:0;
+  font-size:clamp(1.05rem,4.8vw,1.45rem);
+  line-height:1.5;
+}
+
+/* A2-017D2 — keep final and completion actions inside the fixed 1366 × 768 canvas. */
+#final .final-card:first-child{
+  padding:20px;
+}
+#final .final-card:first-child h2{
+  font-size:3rem;
+}
+#final .final-card:first-child .systems{
+  line-height:1.65;
+}
+#final .final-card:first-child>.actions{
+  margin-top:12px;
+}
+
+#credits .hero{
+  padding:42px 64px!important;
+}
+#credits .hero h1{
+  font-size:5rem;
+  margin-bottom:8px;
+}
+#credits .hero h2{
+  font-size:2.65rem;
+  margin-bottom:10px;
+}
+#credits .hero>.subtitle{
+  font-size:1.15rem;
+  line-height:1.45;
+  margin:0 0 12px;
+}
+#credits .hero>.terminal{
+  margin:16px 0;
+  padding:10px 16px;
+  line-height:1.55;
+}
+#credits .hero>.brief{
+  margin:12px 0;
+  padding:12px 14px;
+}
+#credits .hero>p{
+  margin:10px 0;
+}
+#credits .hero>.sources{
+  line-height:1.35;
+}
+#credits .hero>.actions{
+  margin-top:14px;
+}

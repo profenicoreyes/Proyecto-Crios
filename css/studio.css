@@ -50,3 +50,64 @@
 .config-select,.config-input{width:100%;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);color:var(--text);padding:8px 10px;font-size:.9rem}
 .config-select:focus,.config-input:focus{outline:2px solid rgba(120,221,255,.18);box-shadow:0 0 0 3px rgba(120,221,255,.04)}
 .campaign-config label{font-size:.9rem;color:var(--muted)}
+
+/* A2-017D — Studio is a scrollable workspace, not the fixed CRIOS game canvas. */
+html,
+body{
+  width:100%;
+  min-height:100%;
+  height:auto;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+}
+body{position:static}
+.app{
+  position:relative!important;
+  left:auto!important;
+  top:auto!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:100vh!important;
+  overflow:visible!important;
+  transform:none!important;
+}
+
+/* Keep the active launch action immediately reachable after publication. */
+#studioPublicationPanel .studio-runtime-launch-link:not([hidden]){
+  position:fixed;
+  top:18px;
+  right:18px;
+  z-index:1200;
+  width:auto;
+  max-width:calc(100vw - 36px);
+  justify-content:center;
+  box-shadow:0 12px 36px rgba(0,0,0,.5),0 0 24px rgba(51,207,255,.18);
+}
+
+@media(max-width:700px){
+  #studioPublicationPanel .studio-runtime-launch-link:not([hidden]){
+    top:auto;
+    right:12px;
+    bottom:12px;
+    left:12px;
+    width:auto;
+  }
+}
+
+/* A2-017D2 — keep the launch action visible without covering the summary title. */
+#campaignSummary{
+  position:relative;
+}
+#campaignSummary:has(#studioRuntimeLaunchLink:not([hidden])){
+  padding-top:76px;
+}
+#studioPublicationPanel .studio-runtime-launch-link:not([hidden]){
+  position:absolute;
+}
+
+@media(max-width:700px){
+  #campaignSummary:has(#studioRuntimeLaunchLink:not([hidden])){
+    padding-top:0;
+    padding-bottom:76px;
+  }
+}
