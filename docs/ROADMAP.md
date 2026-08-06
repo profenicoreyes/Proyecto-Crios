@@ -18,6 +18,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-012 / RT-008 cerrado con falsación de la garantía documental global `DC-030`.
 - Integración operativa inicial de `published` cerrada con selección explícita en Runtime, acceso desde Studio, runner E2E durable y correcciones de reanudación de sesión.
 - A2-013 cerrado con extracción incremental de Evaluation, Progress y decisión de navegación de misión, más contratos inmutables de PlayerStateResult y RuntimeResult integrados en Game Flow.
+- A2-014 cerrado con preservación de identidad y escenario published, desacople de misiones ejecutables respecto del registro legacy, constructor canónico de lanzamiento, entrada visible para publicaciones persistidas y auditoría final de regresión.
 
 ## Cierres recientes
 
@@ -120,9 +121,48 @@ El respaldo `Proyecto-Crios-28ab938c1432c613-main.bundle` fue verificado contra 
 
 A2-013 no declara finalizada la extracción de toda la orquestación legacy. Cierra los contratos enumerados y deja explícitamente fuera las fronteras de efectos y ownership todavía alojadas en `js/crios.js`.
 
+### A2-014 — expansión operativa del dominio published
+
+La expansión queda cerrada en seis commits locales:
+
+- `51b1fed6f00b2e61ccba872717e12d0594f8ae50` — `test(publication): characterize published domain bridge`.
+- `471d24e6f5bccb3a753a983dcdb4f268e86e8617` — `fix(publication): preserve published identity and scenario`.
+- `1e06511f1f4448508d54e3e710ea2fbb7963da59` — `fix(publication): decouple executable missions from legacy registry`.
+- `48dd9fc88d9d8e6c5fcf23ab0012e99e71e6af89` — `fix(studio): use canonical published launch builder`.
+- `c535664505264051c6ae6a8cc21c0e852fb0bb7b` — `feat(runtime): expose persisted published entries`.
+- `73ba7c25bbb40f6c9c99d8393e617c48eb1e3f0e` — `test(legacy): wait for harness readiness`.
+
+El cierre preserva estas fronteras:
+
+- La identidad, el escenario, la campaña, la publicación, la versión y el `contentHash` published permanecen coherentes durante lanzamiento, reanudación y recarga.
+- Las misiones ejecutables published se resuelven desde el contenido publicado validado y no dependen del registro legacy global.
+- Studio y Runtime construyen enlaces published mediante el contrato canónico de lanzamiento.
+- `index.html` ofrece entradas visibles únicamente para referencias activas y publicaciones persistidas coherentes.
+- Una entrada published explícita no es interferida por la nueva superficie y no existe fallback silencioso hacia legacy.
+- El arranque sin parámetros continúa en modo legacy no explícito.
+- Publicaciones desactivadas, corruptas o incompatibles permanecen bloqueadas.
+- El ajuste final de Game Flow modificó únicamente el readiness del arnés legacy; producción permaneció intacta.
+
+La auditoría final de navegador registra:
+
+- 17 suites ejecutadas;
+- 1345/1345 comprobaciones aprobadas;
+- cero errores funcionales pendientes;
+- telemetría y cleanup limpios en la validación final;
+- Game Flow First Legacy Integration: 24/24;
+- Published Launch Operational E2E: 136/136;
+- Published Entry Surface: 11/11;
+- Published Domain Bridge Characterization: 63/63.
+
+Runtime Degraded Availability aprobó 96/96 en 358,038 segundos. La evidencia confirma que el límite externo anterior de 180 segundos era insuficiente para el peor caso observado; no indica un defecto de producción.
+
+El respaldo vigente es `Proyecto-Crios-73ba7c25bbb40f6c-main.bundle`, verificado contra `main` en `73ba7c25bbb40f6c9c99d8393e617c48eb1e3f0e`; su SHA-256 es `111b0905d773c481d62b25642a2fa497864eb3b324ee89676afcf4f1d091fc2c` y su tamaño es 2817189 bytes. El bundle anterior de A2-014 fue eliminado únicamente después de verificar este respaldo.
+
+A2-014 no declara `published` como modo principal ni elimina el camino legacy. Cierra la expansión enumerada y conserva esas decisiones como trabajo futuro sujeto a nueva evidencia y arquitectura.
+
 ## Trabajo posterior
 
-Con la integración operativa inicial de `published` y A2-013 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
+Con la integración operativa inicial de `published`, A2-013 y A2-014 cerrados, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
 
 - ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
 - investigar por separado si RuntimeCore y NavigationCore deben dejar de depender de `window.CRIOS_DOMAIN`;
@@ -143,7 +183,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline local el commit `28ab938c1432c613fd7e3228a44296f4584cf5cf`, creado el 4 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
+Esta actualización toma como baseline local el commit `73ba7c25bbb40f6c9c99d8393e617c48eb1e3f0e`, creado el 6 de agosto de 2026. El commit documental que incorpore esta actualización será posterior.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
