@@ -230,19 +230,18 @@
     var child = controlled.child;
     await waitGroups(child, label);
     await identify(child, 'Alumno Stage 4', 'Operador Stage 4', 'ALUMNO_STAGE4');
-    await waitFor(function(){ return child.document.getElementById('legacyLaunchFallback'); }, 30000, label + '-fallback');
-    var fallback = child.document.getElementById('legacyLaunchFallback');
+    await waitFor(function(){
+      var feedback = child.document.getElementById('nameFeedback');
+      return feedback && feedback.classList.contains('show') && feedback.classList.contains('bad');
+    }, 30000, label + '-blocked-feedback');
     var feedback = child.document.getElementById('nameFeedback').textContent;
-    var result = {
+    return {
       child: child,
       controlled: controlled,
-      fallbackHref: fallback.href,
-      fallbackSearch: new URL(fallback.href).search,
       feedback: feedback,
       session: getSession(child),
       missionCount: child.CRIOS.obtenerMisionesActivas().length
     };
-    return result;
   }
 
   async function run() {
@@ -437,8 +436,7 @@
       deactivatedRuntime = await expectOperationalBlock(new URL(launchHref, studio.location.href).href, 'Runtime deactivated block');
       assert('DEACTIVATED_RUNTIME_STILL_PUBLISHED_REQUEST', deactivatedRuntime.child.CRIOS.runtimeCampaignMode === 'published', 'Solicitud publicada alterada.');
       assert('DEACTIVATED_RUNTIME_BLOCK_MESSAGE', /no está disponible/i.test(deactivatedRuntime.feedback), 'Mensaje de bloqueo ausente.');
-      assert('DEACTIVATED_RUNTIME_FALLBACK_PRESENT', Boolean(deactivatedRuntime.child.document.getElementById('legacyLaunchFallback')), 'Fallback ausente.');
-      assert('DEACTIVATED_RUNTIME_FALLBACK_SEARCH', deactivatedRuntime.fallbackSearch === '?source=legacy', 'Fallback legacy incorrecto.');
+      assert('DEACTIVATED_RUNTIME_NO_LEGACY_FALLBACK', !deactivatedRuntime.child.document.getElementById('legacyLaunchFallback'), 'No debe ofrecerse acceso legacy.');
       assert('DEACTIVATED_RUNTIME_NO_SESSION', deactivatedRuntime.session === null, 'Se creó una sesión al bloquear.');
       equal('DEACTIVATED_RUNTIME_NO_MISSIONS', deactivatedRuntime.missionCount, 0);
       var deactivatedDiag = snapshotDiagnostics('runtime-deactivated', deactivatedRuntime.child);
@@ -446,19 +444,6 @@
       equal('DEACTIVATED_RUNTIME_CONSOLE_ERRORS', deactivatedDiag.consoleErrors.length, 0);
       equal('DEACTIVATED_RUNTIME_REJECTIONS', deactivatedDiag.unhandledRejections.length, 0);
 
-      sessionStorage.clear();
-      legacyRuntime = await launchRuntime(deactivatedRuntime.fallbackHref, 'Runtime explicit legacy recovery');
-      await waitGroups(legacyRuntime.child, 'runtime-legacy');
-      assert('LEGACY_RECOVERY_MODE', legacyRuntime.child.CRIOS.runtimeCampaignMode === 'legacy', 'Fallback no abrió legacy.');
-      assert('LEGACY_RECOVERY_EXPLICIT', legacyRuntime.child.CRIOS.runtimeLaunch.explicit === true, 'Fallback no explícito.');
-      assert('LEGACY_RECOVERY_NOT_BLOCKED', legacyRuntime.child.CRIOS.runtimeLaunch.blocked === false, 'Fallback bloqueado.');
-      assert('LEGACY_RECOVERY_NO_CAMPAIGN_ID', legacyRuntime.child.CRIOS.runtimeLaunch.campaignId === null, 'Fallback conserva campaignId.');
-      var legacyDiag = snapshotDiagnostics('runtime-legacy', legacyRuntime.child);
-      equal('LEGACY_RECOVERY_PAGE_ERRORS', legacyDiag.pageErrors.length, 0);
-      equal('LEGACY_RECOVERY_CONSOLE_ERRORS', legacyDiag.consoleErrors.length, 0);
-      equal('LEGACY_RECOVERY_REJECTIONS', legacyDiag.unhandledRejections.length, 0);
-      legacyRuntime.frame.remove();
-      legacyRuntime = null;
       deactivatedRuntime.controlled.frame.remove();
       deactivatedRuntime = null;
 
@@ -485,8 +470,7 @@
       sessionStorage.clear();
       corruptedRuntime = await expectOperationalBlock(new URL(reactivatedLink.href, studio.location.href).href, 'Runtime corrupted persistence block');
       assert('CORRUPTED_RUNTIME_BLOCK_MESSAGE', /no está disponible/i.test(corruptedRuntime.feedback), 'Corrupción no bloqueada.');
-      assert('CORRUPTED_RUNTIME_FALLBACK_PRESENT', Boolean(corruptedRuntime.child.document.getElementById('legacyLaunchFallback')), 'Fallback ausente ante corrupción.');
-      assert('CORRUPTED_RUNTIME_FALLBACK_SEARCH', corruptedRuntime.fallbackSearch === '?source=legacy', 'Fallback de corrupción incorrecto.');
+      assert('CORRUPTED_RUNTIME_NO_LEGACY_FALLBACK', !corruptedRuntime.child.document.getElementById('legacyLaunchFallback'), 'No debe ofrecerse acceso legacy ante corrupción.');
       assert('CORRUPTED_RUNTIME_NO_SESSION', corruptedRuntime.session === null, 'Corrupción creó sesión.');
       equal('CORRUPTED_RUNTIME_NO_MISSIONS', corruptedRuntime.missionCount, 0);
       var corruptedDiag = snapshotDiagnostics('runtime-corrupted', corruptedRuntime.child);

@@ -393,9 +393,11 @@
       var blockedRuntime = blockedControlled.child;
       var blockedCaptures = installBridgeInstrumentation(blockedRuntime);
       await identify(blockedRuntime);
-      await waitFor(function(){ return blockedRuntime.document.getElementById('legacyLaunchFallback'); }, 30000, 'blocked-fallback');
-      assert('BLOCKED_FALLBACK_EXPLICIT', Boolean(blockedRuntime.document.getElementById('legacyLaunchFallback')), 'No se ofreció fallback explícito.');
-      equal('BLOCKED_FALLBACK_SEARCH', new URL(blockedRuntime.document.getElementById('legacyLaunchFallback').href).search, '?source=legacy');
+      await waitFor(function(){
+        var feedback = blockedRuntime.document.getElementById('nameFeedback');
+        return feedback && feedback.classList.contains('show') && feedback.classList.contains('bad');
+      }, 30000, 'blocked-feedback');
+      assert('BLOCKED_NO_LEGACY_FALLBACK', !blockedRuntime.document.getElementById('legacyLaunchFallback'), 'No debe ofrecerse acceso legacy.');
       equal('BLOCKED_NO_DOMAIN_DRAFT', blockedCaptures.drafts.length, 0);
       equal('BLOCKED_NO_DOMAIN_RELEASE', blockedCaptures.releases.length, 0);
       equal('BLOCKED_NO_SESSION', getSession(blockedRuntime), null);

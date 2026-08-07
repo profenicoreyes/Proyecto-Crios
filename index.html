@@ -8,6 +8,10 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Proyecto CRIOS — CRIOS OS v1.25</title>
+<script src="js/runtime/launch/runtime-entry-gate.js"></script>
+<script>
+  CRIOS_RUNTIME_ENTRY_GATE.enforce({ studioHref: './studio/index.html' });
+</script>
 <link rel="stylesheet" href="css/crios.css">
 </head>
 <body>
@@ -23,7 +27,6 @@
 <div class="system-controls">
   <button id="audioControl" class="system-control" onclick="toggleAmbientAudio(event)">SILENCIAR MÚSICA</button>
   <button id="fullscreenControl" class="system-control" onclick="toggleFullscreen(event)">PANTALLA COMPLETA</button>
-  <a id="studioLink" class="system-control" href="./studio/index.html" target="_blank" rel="noopener">CRIOS Studio</a>
 </div>
 <div class="version-mark">CRIOS OS · v1.23</div>
 <div id="toast" class="toast"></div>
@@ -41,11 +44,6 @@
     </div>
     <div class="boot-progress" role="progressbar" aria-label="Progreso de conexión" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="bootProgressFill"></span></div>
     <p class="subtitle">Transmisión fechada el <strong>17 de julio de 2089</strong>. Origen: meseta antártica oriental.</p>
-    <div id="publishedEntrySurface" class="brief" hidden>
-      <strong>Campañas publicadas disponibles</strong>
-      <p class="small">Abrí una campaña publicada guardada en este dispositivo.</p>
-      <div id="publishedEntryList" class="actions"></div>
-    </div>
     <p id="tapPrompt" class="tap-prompt">TOCÁ CUALQUIER PUNTO PARA ESTABLECER LA CONEXIÓN</p>
         <p id="connectionAccepted" class="connection-accepted">CONEXIÓN ACEPTADA · INICIALIZANDO A.R.I.A.</p>
   </div>

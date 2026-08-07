@@ -1,4 +1,4 @@
-/* CRIOS A2-014F - explicit published entry surface characterization */
+/* CRIOS A3-003A - runtime must not expose locally persisted campaign entry shortcuts */
 (function(){
   'use strict';
 
@@ -205,8 +205,8 @@
     assert('INDEX_REQUEST_IS_NOT_EXPLICIT', child.CRIOS.runtimeLaunch.explicit === false, 'Runtime request unexpectedly explicit.');
     assert('INDEX_CAN_READ_PERSISTED_PUBLICATION', details.persistedPublicationCount === 1 && details.activeReference && details.activeReference.publicationId === seed.publicationId, 'Index origin cannot recover the seeded publication.');
     assert(
-      'A2_014F_INDEX_EXPOSES_PERSISTED_PUBLISHED_ENTRY',
-      entries.length > 0,
+      'A3_003A_INDEX_DOES_NOT_EXPOSE_PERSISTED_PUBLISHED_ENTRY',
+      entries.length === 0,
       'persistedPublicationCount=' + details.persistedPublicationCount +
         '; activePublicationId=' + (details.activeReference && details.activeReference.publicationId || 'none') +
         '; runtimeMode=' + details.runtimeMode +

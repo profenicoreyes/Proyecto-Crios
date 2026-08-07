@@ -1540,29 +1540,13 @@ function emitBootstrapRuntime(eventType,payload){
   traceEvent(eventType,payload);
 }
 
-function buildLegacyLaunchHref(){
-  const search=runtimeLaunchApi&&typeof runtimeLaunchApi.buildLegacyLaunchSearch==='function'
-    ? runtimeLaunchApi.buildLegacyLaunchSearch()
-    : '?source=legacy';
-  return `${window.location.pathname}${search}${window.location.hash||''}`;
-}
-
 function neutralPublishedBlock(feedback,message){
   if(!feedback) return;
   feedback.className='feedback show bad';
   feedback.replaceChildren();
   const text=document.createElement('span');
-  text.textContent=message||'La campaña no está disponible en este momento. Solicitá asistencia docente.';
+  text.textContent=message||'La campaña no está disponible en este momento. Solicitá un nuevo enlace al docente.';
   feedback.appendChild(text);
-  const actions=document.createElement('div');
-  actions.className='actions';
-  const fallback=document.createElement('a');
-  fallback.id='legacyLaunchFallback';
-  fallback.className='btn secondary';
-  fallback.href=buildLegacyLaunchHref();
-  fallback.textContent='Abrir modo estable';
-  actions.appendChild(fallback);
-  feedback.appendChild(actions);
 }
 
 function applyPreparedPublishedCampaign(prepared){
@@ -1716,53 +1700,6 @@ function configureCampaignEntry(){
   }
   if(prompt) prompt.textContent='Seleccioná el recorrido operativo que querés iniciar.';
   if(button) button.textContent='Seleccionar campaña';
-}
-
-function renderPublishedEntrySurface(){
-  const surface=document.getElementById('publishedEntrySurface');
-  const list=document.getElementById('publishedEntryList');
-  if(!surface||!list) return;
-
-  surface.addEventListener('pointerdown',(event)=>event.stopPropagation());
-  surface.addEventListener('keydown',(event)=>event.stopPropagation());
-  list.replaceChildren();
-  surface.hidden=true;
-  if(runtimeLaunchState.explicit||runtimeCampaignMode!=='legacy') return;
-
-  const persistenceApi=window.CRIOS_PUBLICATION_PERSISTENCE;
-  if(!persistenceApi||typeof persistenceApi.createPersistenceCoordinator!=='function') return;
-  if(!runtimeLaunchApi||typeof runtimeLaunchApi.buildPublishedLaunchSearch!=='function') return;
-
-  try{
-    const coordinator=persistenceApi.createPersistenceCoordinator({storage:window.localStorage});
-    const documentValue=coordinator.exportDocument();
-    const references=Array.isArray(documentValue.activeReferences)
-      ? documentValue.activeReferences.slice().sort((left,right)=>left.campaignId.localeCompare(right.campaignId))
-      : [];
-
-    references.forEach((reference)=>{
-      const publication=coordinator.publicationStore.getPublication(reference.publicationId);
-      if(!publication||publication.campaignId!==reference.campaignId||publication.version!==reference.version||publication.contentHash!==reference.contentHash) return;
-      const search=runtimeLaunchApi.buildPublishedLaunchSearch(reference.campaignId);
-      if(!search) return;
-
-      const link=document.createElement('a');
-      link.className='btn secondary';
-      link.href=search;
-      link.dataset.campaignId=reference.campaignId;
-      link.dataset.publicationId=reference.publicationId;
-      const title=publication.content&&typeof publication.content.title==='string'
-        ? publication.content.title.trim()
-        : '';
-      link.textContent=title||reference.campaignId;
-      list.appendChild(link);
-    });
-
-    surface.hidden=list.children.length===0;
-  }catch(error){
-    list.replaceChildren();
-    surface.hidden=true;
-  }
 }
 
 function detalleCampana(id) {
@@ -2204,7 +2141,6 @@ window.addEventListener('orientationchange',()=>setTimeout(fitCriosToViewport,12
 fitCriosToViewport();
 updateAudioButton();
 updateFullscreenButton();
-renderPublishedEntrySurface();
 
 const publicApi = Object.freeze({
   go,
