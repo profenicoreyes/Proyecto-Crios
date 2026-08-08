@@ -39,19 +39,57 @@
   }
   function isPreparedRuntimeCampaign(value){return Boolean(value&&value.version===VERSION&&value.data&&Object.isFrozen(value.data)&&value.bridge&&Array.isArray(value.bridge.missions)&&value.data.missionOrder.length===value.bridge.missions.length&&value.data.missions.every(function(item,index){return item.missionId===value.data.missionOrder[index]&&value.bridge.missions[index].id===item.missionId;}));}
   function prepareLegacyCampaign(options){var campaign=options&&options.campaign;var missions=options&&options.missions;if(!isObject(campaign)||!Array.isArray(missions))return failure('LEGACY_CAMPAIGN_INVALID','$',null);return freeze({success:true,campaign:Object.freeze({version:VERSION,data:copy({sourceMode:'legacy',campaign:clone(campaign),missionOrder:missions.map(function(item){return item.id;})}),bridge:Object.freeze({missions:Object.freeze(missions.slice())})}),error:null});}
-  function dependencies(options){return options&&options.runtimePublicationApi&&options.publicationCore&&options.missionHandlersApi&&options.persistenceApi&&typeof options.persistenceApi.createPersistenceCoordinator==='function';}
+  function hasOwn(value,key){return Boolean(value&&Object.prototype.hasOwnProperty.call(value,key));}
+  function validReaders(value){return Boolean(value&&typeof value.activeReferenceReader==='function'&&typeof value.publicationReader==='function');}
+  function baseDependencies(options){return Boolean(options&&options.runtimePublicationApi&&options.publicationCore&&options.missionHandlersApi);}
+  function codedError(code,message){var value=new Error(String(message||code));value.code=String(code);return value;}
   function contextParts(identity,publication,missionId,index){return [text(identity),publication.campaignId,publication.publicationId,String(publication.version),publication.contentHash,missionId,String(index)];}
   async function prepare(options,fixedIdentity){
     var telemetry=options&&options.telemetry;var selectedMode=mode(options&&options.mode);emit(telemetry,'mode-selected',{mode:options&&options.mode,result:selectedMode?'accepted':'blocked'});if(selectedMode!=='published')return failure(selectedMode?'MODE_NOT_PUBLISHED':'INVALID_RUNTIME_CAMPAIGN_MODE','$.mode',null);
-    var campaignId=text(options&&options.campaignId);var identity=text(options&&options.identity);if(!campaignId)return failure('INVALID_CAMPAIGN_ID','$.campaignId',null);if(!identity)return failure('INVALID_STUDENT_IDENTITY','$.identity',null);if(!dependencies(options))return failure('BOOTSTRAP_DEPENDENCY_MISSING','$.dependencies',null);
-    var coordinator;try{coordinator=options.persistenceApi.createPersistenceCoordinator(options.persistenceOptions||{});}catch(cause){return failure('PERSISTENCE_COORDINATOR_UNAVAILABLE','$.persistence',null);}if(!coordinator||!coordinator.activationStore||!coordinator.publicationStore)return failure('PERSISTENCE_COORDINATOR_UNAVAILABLE','$.persistence',null);
-    var publication=null;var pinned=fixedIdentity||null;var referenceReader=async function(id){var reference;if(pinned){reference={campaignId:pinned.campaignId,publicationId:pinned.publicationId,version:pinned.publicationVersion,contentHash:pinned.contentHash};}else{reference=await coordinator.activationStore.getActiveReference(id);}emit(telemetry,'active-reference-read',{mode:'published',campaignId:id,publicationId:reference&&reference.publicationId,result:reference?'found':'missing'});return reference;};
-    var publicationReader=async function(publicationId){publication=await coordinator.publicationStore.getPublication(publicationId);emit(telemetry,'publication-read',{mode:'published',campaignId:campaignId,publicationId:publicationId,publicationVersion:publication&&publication.version,contentHash:publication&&publication.contentHash,result:publication?'found':'missing'});return publication;};
+    var campaignId=text(options&&options.campaignId);var requestedPublicationId=text(options&&options.publicationId);var identity=text(options&&options.identity);
+    if(!campaignId)return failure('INVALID_CAMPAIGN_ID','$.campaignId',null);
+    if(!requestedPublicationId)return failure('INVALID_PUBLICATION_ID','$.publicationId',null);
+    if(!identity)return failure('INVALID_STUDENT_IDENTITY','$.identity',null);
+    if(!baseDependencies(options))return failure('BOOTSTRAP_DEPENDENCY_MISSING','$.dependencies',null);
+    var pinned=fixedIdentity||null;
+    if(pinned&&text(pinned.publicationId)!==requestedPublicationId)return failure('PINNED_PUBLICATION_MISMATCH','$.pinnedPublication.publicationId',{expected:requestedPublicationId,actual:text(pinned.publicationId)});
+    var sourceReaders=null;var coordinator=null;var explicitReaders=hasOwn(options,'publicationReaders');
+    if(explicitReaders){
+      if(!validReaders(options.publicationReaders))return failure('BOOTSTRAP_DEPENDENCY_MISSING','$.publicationReaders',null);
+      sourceReaders=options.publicationReaders;
+    }else{
+      if(!options.persistenceApi||typeof options.persistenceApi.createPersistenceCoordinator!=='function')return failure('BOOTSTRAP_DEPENDENCY_MISSING','$.dependencies.persistenceApi',null);
+      try{coordinator=options.persistenceApi.createPersistenceCoordinator(options.persistenceOptions||{});}catch(cause){return failure('PERSISTENCE_COORDINATOR_UNAVAILABLE','$.persistence',null);}
+      if(!coordinator||!coordinator.activationStore||!coordinator.publicationStore||typeof coordinator.activationStore.getActiveReference!=='function'||typeof coordinator.publicationStore.getPublication!=='function')return failure('PERSISTENCE_COORDINATOR_UNAVAILABLE','$.persistence',null);
+      sourceReaders={
+        activeReferenceReader:function(id){return coordinator.activationStore.getActiveReference(id);},
+        publicationReader:function(publicationId){return coordinator.publicationStore.getPublication(publicationId);}
+      };
+    }
+    var publication=null;
+    var referenceReader=async function(id){
+      var reference;
+      if(pinned){
+        reference={campaignId:pinned.campaignId,publicationId:pinned.publicationId,version:pinned.publicationVersion,contentHash:pinned.contentHash};
+      }else{
+        reference=await sourceReaders.activeReferenceReader(id);
+      }
+      if(reference&&text(reference.publicationId)!==requestedPublicationId)throw codedError('PUBLICATION_IDENTITY_MISMATCH','Active publication does not match requested publicationId.');
+      emit(telemetry,'active-reference-read',{mode:'published',campaignId:id,publicationId:reference&&reference.publicationId,result:reference?'found':'missing'});
+      return reference;
+    };
+    var publicationReader=async function(publicationId){
+      if(text(publicationId)!==requestedPublicationId)throw codedError('PUBLICATION_IDENTITY_MISMATCH','Resolver requested a publication outside the launch identity.');
+      publication=await sourceReaders.publicationReader(publicationId,campaignId);
+      emit(telemetry,'publication-read',{mode:'published',campaignId:campaignId,publicationId:publicationId,publicationVersion:publication&&publication.version,contentHash:publication&&publication.contentHash,result:publication?'found':'missing'});
+      return publication;
+    };
     var rngFactory=function(missionId,index,publicationValue){return createRng(contextParts(identity,publicationValue,missionId,index));};
-    emit(telemetry,pinned?'recovery-started':'resolution-started',{mode:'published',campaignId:campaignId,publicationId:pinned&&pinned.publicationId});
+    emit(telemetry,pinned?'recovery-started':'resolution-started',{mode:'published',campaignId:campaignId,publicationId:requestedPublicationId});
     var resolver;var result;try{resolver=options.runtimePublicationApi.createRuntimePublicationResolver({activeReferenceReader:referenceReader,publicationReader:publicationReader,publicationCore:options.publicationCore,missionHandlersApi:options.missionHandlersApi,rngFactory:rngFactory});result=await resolver.resolveActiveCampaign(campaignId);}catch(cause){result={success:false,error:{code:'RUNTIME_BOOTSTRAP_ERROR',path:'$'}};}
-    if(!result||!result.success){var causeError=result&&result.error||{code:'RUNTIME_BOOTSTRAP_ERROR',path:'$'};emit(telemetry,'blocked',{mode:'published',phase:pinned?'recovery':'resolution',campaignId:campaignId,publicationId:pinned&&pinned.publicationId,code:causeError.code,result:'blocked'});return failure(causeError.code,causeError.path,causeError.metadata);}
+    if(!result||!result.success){var causeError=result&&result.error||{code:'RUNTIME_BOOTSTRAP_ERROR',path:'$'};emit(telemetry,'blocked',{mode:'published',phase:pinned?'recovery':'resolution',campaignId:campaignId,publicationId:requestedPublicationId,code:causeError.code,result:'blocked'});return failure(causeError.code,causeError.path,causeError.metadata);}
     var resolved=result.campaign;emit(telemetry,'publication-resolved',{mode:'published',campaignId:resolved.campaignId,publicationId:resolved.publicationId,publicationVersion:resolved.publicationVersion,contentHash:resolved.contentHash,result:'resolved'});
+    if(resolved.publicationId!==requestedPublicationId)return failure('PUBLICATION_IDENTITY_MISMATCH','$.publicationId',{expected:requestedPublicationId,actual:resolved.publicationId});
     if(pinned&&(resolved.publicationId!==pinned.publicationId||resolved.publicationVersion!==pinned.publicationVersion||resolved.contentHash!==pinned.contentHash||resolved.runtimeContractVersion!==pinned.runtimeContractVersion))return failure('PINNED_PUBLICATION_MISMATCH','$.pinnedPublication',null);
     var finalRng=createRng(contextParts(identity,publication,'finalEvaluation',-1));var finalResult=validateFinalEvaluation(resolved.finalEvaluation,finalRng);if(!finalResult.success){emit(telemetry,'blocked',{mode:'published',phase:'final-evaluation',campaignId:campaignId,publicationId:resolved.publicationId,code:finalResult.error.code,result:'blocked'});return finalResult;}
     var prepared;try{prepared=buildPrepared(publication,resolved,finalResult.value);}catch(cause){return failure('CAMPAIGN_ADAPTATION_FAILED','$.campaign',null);}if(!isPreparedRuntimeCampaign(prepared))return failure('PREPARED_CAMPAIGN_INVALID','$',null);

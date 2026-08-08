@@ -1567,11 +1567,32 @@ function applyPreparedPublishedCampaign(prepared){
   missionOpenedAt={};
 }
 
+function selectRuntimePublicationReaders(){
+  const remoteBootstrap=window.CRIOS_RUNTIME_REMOTE_PUBLICATION_BOOTSTRAP;
+  const remoteConfigPresent=Object.prototype.hasOwnProperty.call(window,'CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG');
+  if(!remoteBootstrap||typeof remoteBootstrap.createReaderSelection!=='function'){
+    return remoteConfigPresent
+      ? {configured:true,readers:null,error:{code:'RUNTIME_REMOTE_PUBLICATION_MODULE_UNAVAILABLE'}}
+      : {configured:false,readers:null,error:null};
+  }
+  return remoteBootstrap.createReaderSelection({
+    campaignId:campanaActivaId,
+    publicationId:requestedPublishedPublicationId
+  });
+}
+
 async function preparePublishedForIdentity(realName,characterName,groupName,recoverPinned){
   await ensureDomainModulesLoaded();
   const adapter=(window.CRIOS_DOMAIN||{}).runtimeBootstrapAdapter;
   if(!adapter) return {success:false,error:{code:'BOOTSTRAP_DEPENDENCY_MISSING'}};
   const options={mode:runtimeCampaignMode,campaignId:campanaActivaId,publicationId:requestedPublishedPublicationId,identity:[realName,characterName,groupName].join('|'),runtimePublicationApi:window.CRIOS_RUNTIME_EXECUTABLE_PUBLICATION,publicationCore:window.CRIOS_PUBLICATION_CORE,missionHandlersApi:window.CRIOS_RUNTIME_MISSION_HANDLERS,persistenceApi:window.CRIOS_PUBLICATION_PERSISTENCE,telemetry:emitBootstrapRuntime};
+  const remoteSelection=selectRuntimePublicationReaders();
+  if(remoteSelection.configured){
+    if(remoteSelection.error||!remoteSelection.readers){
+      return {success:false,error:remoteSelection.error||{code:'RUNTIME_REMOTE_PUBLICATION_READERS_INVALID'}};
+    }
+    options.publicationReaders=remoteSelection.readers;
+  }
   const pinned=recoverPinned&&sessionData&&sessionData.campana&&sessionData.campana.sourceMode==='published'?sessionData.campana:null;
   return pinned
     ? adapter.recoverPublishedCampaign({...options,pinnedPublication:pinned})
@@ -1615,7 +1636,8 @@ async function identifyUser(){
     const existingSession=sessionData;
     const existingIdentity=existingSession&&existingSession.nombre===realName&&existingSession.personaje===characterName&&existingSession.grupo===groupName;
     const existingCampaignId=existingSession&&existingSession.campana&&(existingSession.campana.campaignId||existingSession.campana.id);
-    const recoverPinned=Boolean(existingIdentity&&existingSession.campana&&existingSession.campana.sourceMode==='published'&&existingCampaignId===campanaActivaId);
+    const existingPublicationId=existingSession&&existingSession.campana&&existingSession.campana.publicationId;
+    const recoverPinned=Boolean(existingIdentity&&existingSession.campana&&existingSession.campana.sourceMode==='published'&&existingCampaignId===campanaActivaId&&existingPublicationId===requestedPublishedPublicationId);
     const prepared=await preparePublishedForIdentity(realName,characterName,groupName,recoverPinned);
     if(!prepared.success){
       neutralPublishedBlock(fb);

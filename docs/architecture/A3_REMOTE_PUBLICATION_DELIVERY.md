@@ -54,7 +54,11 @@ A stale local activation cache must never override a remote result.
 
 Runtime receives published launch identity at bootstrap.
 
-Through B3 the identity is transported end-to-end, but remote Runtime readers are intentionally not wired yet. Remote resolution is B4.
+From B4, Runtime may resolve the exact requested publication through explicit read-only remote readers. The reader composition is opt-in: when `CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG` is absent, the existing local persistence path is preserved. When remote configuration is explicitly present but invalid, incomplete, missing required modules or unable to construct the remote readers, Runtime fails closed and does not silently fall back to local persistence.
+
+The remote reader pair is bound to the launch `(campaignId, publicationId)`, shares one memoized remote GET snapshot per resolution, and delegates transport to the existing remote publication client. Runtime still revalidates the active reference, publication identity, content hash, execution manifest and handler compatibility before materializing missions.
+
+Runtime remote configuration is read-only. It accepts only `endpoint` and optional `timeoutMs`; teacher write authorization is forbidden in the Runtime configuration.
 
 ## 4. Core contracts
 
@@ -116,7 +120,7 @@ Required guarantees:
 
 ## 6. Implementation lineage
 
-The following commits form the remote-publication path before B3:
+The following commits form the remote-publication path through B3:
 
 | Commit | Purpose |
 |---|---|
@@ -134,6 +138,14 @@ The following commits form the remote-publication path before B3:
 The B3 commit is the commit that first contains this document together with `tests/published-launch-identity-node.test.js`. It can always be resolved without relying on a copied hash:
 
 `git log --format="%H %s" --diff-filter=A -- docs/architecture/A3_REMOTE_PUBLICATION_DELIVERY.md`
+
+B3 is:
+
+`1814ad679a65d01a847251fb708d5b6bdd985d49` — `feat(runtime): bind published launch identity`
+
+The B4 commit is the later commit that modifies this document together with `js/runtime/publication/runtime-remote-publication-readers.js` and `js/runtime/publication/runtime-remote-publication-bootstrap.js`. It can be resolved with:
+
+`git log --format="%H %s" --all -- js/runtime/publication/runtime-remote-publication-readers.js`
 
 ## 7. B3 exact scope
 
@@ -244,25 +256,151 @@ Until B5:
 - remote configuration remains explicit and opt-in;
 - live deployment is deferred.
 
-## 12. Known limitation at B3
+## 12. B4 Runtime remote reader boundary
 
-B3 transports exact publication identity but does not yet fetch that publication remotely in Runtime.
+B4 wires the existing Runtime publication resolver to an explicit remote reader pair without rewriting the resolver.
 
-Therefore B3 alone does not complete cross-device student delivery.
+New production modules:
 
-B4 must inject remote Runtime readers and resolve the exact active publication without guessing or local-only fallback.
+- `js/runtime/publication/runtime-remote-publication-readers.js`
+- `js/runtime/publication/runtime-remote-publication-bootstrap.js`
 
-## 13. Forward dependency order
+Modified Runtime composition:
 
-From B3:
+- `js/runtime/bootstrap/runtime-bootstrap-adapter.js`
+- `js/crios.js`
+- `index.html`
 
-1. B4 — Runtime remote publication readers.
-2. B5 — teacher authorization and controlled Apps Script deployment.
-3. B6 — real cross-device end-to-end validation and regressions.
+Modified regression harness:
 
-The order matters for rollback: undo later dependencies before undoing their identity contract.
+- `tests/runtime-bootstrap-integration.test.js`
 
-## 14. Temporary-file policy
+New permanent B4 tests:
+
+- `tests/runtime-remote-publication-readers-node.test.js`
+- `tests/runtime-remote-publication-bootstrap-node.test.js`
+- `tests/runtime-remote-publication-integration-node.test.js`
+
+### Reader behavior
+
+The remote reader factory is constructed with the exact `campaignId` and `publicationId` from the student launch.
+
+Its `activeReferenceReader` and `publicationReader` share a single memoized remote `getPublication(campaignId, publicationId)` snapshot. This avoids two independent network reads that could observe different activation states during one Runtime resolution.
+
+The response is accepted only when:
+
+- the returned publication matches the requested campaign and publication;
+- the returned active reference matches the same campaign and publication;
+- publication and active reference agree on version and `contentHash`;
+- the remote contract shape is valid.
+
+The existing Runtime resolver then independently validates publication identity, SHA-256 content integrity, executable publication contract, required handlers and mission materialization.
+
+### Local/remote selection rule
+
+Absence of `CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG` preserves the local persistence path for compatibility and offline development.
+
+Presence of that configuration is an explicit request for remote Runtime resolution. Any invalid config, missing module, creation failure or invalid reader interface fails closed; there is no local fallback.
+
+The Runtime configuration accepts only:
+
+- `endpoint`
+- optional `timeoutMs`
+
+`writeToken` and `writeTokenProvider` are explicitly rejected. Runtime GET reads do not carry teacher credentials.
+
+### Pinned-session rule
+
+A same-student, same-campaign session may be recovered only when its pinned `publicationId` also equals the `publicationId` in the current student link.
+
+This prevents a new link for publication B from silently recovering publication A merely because both publications belong to the same campaign.
+
+Pinned remote recovery still reads the pinned publication through the remote reader, so activation and availability are revalidated remotely rather than trusted from local session data.
+
+## 13. B4 validation evidence
+
+Before commit, the B4 candidate passed the following focal and relevant regression suites:
+
+- remote Runtime readers: 54/54
+- remote Runtime bootstrap composition: 103/103
+- remote Runtime integration with fake transport: 47/47
+- Runtime bootstrap integration: 159/159
+- executable Runtime publication resolution: 121/121
+- remote publication client regression: 71/71
+- B3 published launch identity regression: 80/80
+- Studio remote publication bootstrap regression: 149/149
+- Studio remote activation wiring regression: 62/62
+- Runtime launch contract/selection/entry-gate regressions: 119/119
+
+Total checked: 965/965, 0 failures.
+
+The integration suite uses a fake transport. No live publication endpoint, real network, deployment, Copilot or push is required for B4 validation.
+
+## 14. Pre-B4 recovery point
+
+The verified recovery bundle immediately before B4 is:
+
+`Proyecto-Crios-1814ad679a65d01a-main.bundle`
+
+Expected bundle HEAD:
+
+`1814ad679a65d01a847251fb708d5b6bdd985d49 refs/heads/main`
+
+Expected SHA-256:
+
+`bc6220ceac8617a018d0a4f40c546cf98814653d3ded83e4054719e7bb648b93`
+
+Expected size:
+
+`2942740` bytes
+
+This bundle is the direct recovery point for the exact state after B3 and before B4.
+
+After a B4 commit and replacement bundle are both verified, cleanup may remove this predecessor bundle under the project backup policy. Git history and this documentation remain the permanent rollback source.
+
+## 15. B4 rollback rules
+
+### Revert B4 before B5/B6
+
+B4 may be reverted as one commit.
+
+Expected semantic result:
+
+- B3 student links still carry `campaignId + publicationId`;
+- Runtime returns to its pre-B4 local persistence reader path;
+- cross-device student publication delivery is no longer available;
+- Studio remote publication and activation wiring remain intact;
+- no backend data migration needs to be undone because B4 performs reads only.
+
+After revert, rerun the B3 identity suite, Runtime bootstrap integration, Runtime executable publication resolution and launch entry regressions.
+
+### Revert after B5/B6
+
+Do not remove B4 while later deployment/configuration or cross-device validation still depends on its Runtime remote reader contract.
+
+Undo in reverse dependency order:
+
+1. B6 cross-device closure/configuration that assumes remote Runtime reads;
+2. B5 deployment/security/configuration changes that expose the publication endpoint to Runtime;
+3. B4 Runtime remote readers;
+4. B3 only if the launch identity contract itself must also be undone.
+
+## 16. Remaining limitation after B4
+
+B4 completes the Runtime-side read path structurally, but no production publication endpoint is embedded or deployed by this tranche.
+
+Therefore a real student device still cannot use the remote path until B5 supplies the controlled deployment/configuration and teacher-write security boundary.
+
+## 17. Forward dependency order
+
+From B4:
+
+1. B5 — teacher authorization, controlled Apps Script deployment and explicit Runtime/Studio publication endpoint configuration.
+2. B6 — real cross-device end-to-end validation and regressions.
+
+The order matters for rollback: undo later dependencies before undoing the Runtime remote reader contract.
+
+## 18. Temporary-file policy
 
 Files created only to transport or execute a tranche are temporary:
 
