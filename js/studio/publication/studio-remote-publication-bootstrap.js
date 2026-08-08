@@ -18,10 +18,11 @@
     });
   }
 
-  function selection(configured, service, error) {
+  function selection(configured, service, client, error) {
     return Object.freeze({
       configured: Boolean(configured),
       service: service || null,
+      client: client || null,
       error: error || null
     });
   }
@@ -98,13 +99,13 @@
     var configState = resolveConfig(opts);
 
     if (!configState.present) {
-      return selection(false, null, null);
+      return selection(false, null, null, null);
     }
 
     var config = configState.value;
     var configError = validateConfig(config);
     if (configError) {
-      return selection(true, null, configError);
+      return selection(true, null, null, configError);
     }
 
     var core = opts.core || window.CRIOS_PUBLICATION_CORE || null;
@@ -119,6 +120,7 @@
         !serviceFactory || typeof serviceFactory.createRemotePublicationService !== 'function') {
       return selection(
         true,
+        null,
         null,
         frozenError(
           'REMOTE_PUBLICATION_MODULE_UNAVAILABLE',
@@ -142,6 +144,7 @@
       return selection(
         true,
         null,
+        null,
         frozenError(
           'REMOTE_PUBLICATION_CLIENT_CREATE_FAILED',
           String(clientError && clientError.message || clientError || 'Remote publication client creation failed.'),
@@ -161,6 +164,7 @@
       return selection(
         true,
         null,
+        null,
         frozenError(
           'REMOTE_PUBLICATION_SERVICE_CREATE_FAILED',
           String(serviceError && serviceError.message || serviceError || 'Remote publication service creation failed.'),
@@ -173,6 +177,7 @@
       return selection(
         true,
         null,
+        null,
         frozenError(
           'REMOTE_PUBLICATION_SERVICE_INVALID',
           'Remote publication service does not expose the required Studio publication interface.',
@@ -181,7 +186,7 @@
       );
     }
 
-    return selection(true, service, null);
+    return selection(true, service, client, null);
   }
 
   window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP = Object.freeze({

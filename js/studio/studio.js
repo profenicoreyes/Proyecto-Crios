@@ -506,8 +506,9 @@
             },
             onDeactivate: function(campaignId){
               if (!studioActivationController) return;
-              studioActivationController.deactivatePublication(campaignId);
-              render(missions, campaigns, taxonomy);
+              studioActivationController.deactivatePublication(campaignId).then(function(){
+                render(missions, campaigns, taxonomy);
+              });
             },
             onRollback: function(campaignId, publicationId){
               if (!studioActivationController) return;
@@ -603,6 +604,7 @@
     var publicationAdapterFactory = window.CRIOS_STUDIO_PUBLICATION_ADAPTER;
     var publicationControllerFactory = window.CRIOS_STUDIO_PUBLICATION_CONTROLLER;
     var remotePublicationBootstrapFactory = window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP;
+    var remoteActivationServiceFactory = window.CRIOS_STUDIO_REMOTE_ACTIVATION_SERVICE;
     var activationApi = window.CRIOS_PUBLICATION_ACTIVATION;
     var activationControllerFactory = window.CRIOS_STUDIO_ACTIVATION_CONTROLLER;
     var persistenceApi = window.CRIOS_PUBLICATION_PERSISTENCE;
@@ -618,6 +620,7 @@
     var publicationStore = null;
     var activationStore = null;
     var remotePublicationSelection = null;
+    var remoteActivationService = null;
     var recoveredCampaignId = '';
     var missionSpecAdapter = null;
 
@@ -677,6 +680,7 @@
       remotePublicationSelection = Object.freeze({
         configured: true,
         service: null,
+        client: null,
         error: Object.freeze({
           code: 'REMOTE_PUBLICATION_MODULE_UNAVAILABLE',
           message: 'Remote publication bootstrap is not available.',
@@ -761,7 +765,7 @@
     }
 
     if (activationApi && activationControllerFactory && publicationCore && studioPublicationApi) {
-      studioActivationController = activationControllerFactory.createStudioActivationController({
+      var activationControllerOptions = {
         publicationApi: studioPublicationApi,
         activationApi: activationApi,
         core: publicationCore,
@@ -769,7 +773,31 @@
         onStateChange: function(){
           render(missions, campaigns, taxonomy);
         }
-      });
+      };
+
+      if (remotePublicationSelection && remotePublicationSelection.configured) {
+        if (studioPublicationController &&
+            remotePublicationSelection.service &&
+            remotePublicationSelection.client &&
+            remoteActivationServiceFactory &&
+            typeof remoteActivationServiceFactory.createRemoteActivationService === 'function') {
+          try {
+            remoteActivationService = remoteActivationServiceFactory.createRemoteActivationService({
+              activationApi: activationApi,
+              publicationApi: studioPublicationApi,
+              remoteClient: remotePublicationSelection.client,
+              store: activationStore || undefined
+            });
+          } catch (remoteActivationError) {
+            remoteActivationService = null;
+          }
+        }
+        activationControllerOptions.activationService = remoteActivationService;
+      }
+
+      studioActivationController = activationControllerFactory.createStudioActivationController(
+        activationControllerOptions
+      );
       studioActivationApi = Object.freeze({
         version: '1.0.0',
         activatePublication: studioActivationController.activatePublication,
@@ -842,6 +870,7 @@
     try { delete window.CRIOS_STUDIO_PUBLICATION_CONTROLLER; } catch (ignoreC) {}
     try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP; } catch (ignoreRemoteBootstrap) {}
     try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_SERVICE; } catch (ignoreRemoteService) {}
+    try { delete window.CRIOS_STUDIO_REMOTE_ACTIVATION_SERVICE; } catch (ignoreRemoteActivationService) {}
     try { delete window.CRIOS_REMOTE_PUBLICATION_CLIENT; } catch (ignoreRemoteClient) {}
     try { delete window.CRIOS_REMOTE_PUBLICATION_CONTRACT; } catch (ignoreRemoteContract) {}
     try { delete window.CRIOS_STUDIO_ACTIVATION_CONTROLLER; } catch (ignoreActivation) {}
