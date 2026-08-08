@@ -1,0 +1,109 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const crypto = require('crypto');
+
+const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'));
+const source = fs.readFileSync(path.join(repo, 'backend/google-apps-script/PublicationBackend.gs'), 'utf8');
+
+let properties = Object.create(null);
+const context = {
+  console,
+  Object,
+  Array,
+  Number,
+  String,
+  Boolean,
+  Date,
+  JSON,
+  Math,
+  RegExp,
+  Error,
+  Set,
+  Map,
+  PropertiesService: {
+    getScriptProperties() {
+      return {
+        getProperty(name) {
+          return Object.prototype.hasOwnProperty.call(properties, name) ? properties[name] : null;
+        }
+      };
+    }
+  },
+  Utilities: {
+    DigestAlgorithm: { SHA_256: 'SHA_256' },
+    Charset: { UTF_8: 'UTF_8' },
+    computeDigest(algorithm, text) {
+      if (algorithm !== 'SHA_256') throw new Error('unexpected algorithm');
+      return Array.from(crypto.createHash('sha256').update(String(text), 'utf8').digest());
+    }
+  }
+};
+context.global = context;
+vm.createContext(context);
+vm.runInContext(source, context, { filename: 'PublicationBackend.gs' });
+
+let total = 0;
+let failed = 0;
+function check(condition, message) {
+  total += 1;
+  if (!condition) {
+    failed += 1;
+    console.error('FAIL=' + message);
+  }
+}
+function equal(actual, expected, message) {
+  check(Object.is(actual, expected), message + ' actual=' + String(actual) + ' expected=' + String(expected));
+}
+function sha(value) {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+function authorize(token) {
+  return context.autorizarEscrituraPublicacionRemota({ writeToken: token });
+}
+
+check(typeof context.autorizarEscrituraPublicacionRemota === 'function', 'authorization function exists');
+
+properties = {};
+equal(authorize('x'.repeat(48)), false, 'missing hash property fails closed');
+
+properties = { CRIOS_PUBLICATION_WRITE_TOKEN_SHA256: 'not-a-hash' };
+equal(authorize('x'.repeat(48)), false, 'invalid stored hash fails closed');
+
+properties = {
+  CRIOS_PUBLICATION_WRITE_TOKEN: 'legacy-secret-that-must-not-be-used',
+  CRIOS_PUBLICATION_WRITE_TOKEN_SHA256: ''
+};
+equal(authorize('legacy-secret-that-must-not-be-used'), false, 'legacy raw token property is ignored');
+
+const validToken = 'teacher-token-' + 'a'.repeat(48);
+properties = { CRIOS_PUBLICATION_WRITE_TOKEN_SHA256: sha(validToken) };
+equal(authorize(validToken), true, 'correct teacher token accepted');
+equal(authorize(validToken + 'x'), false, 'wrong teacher token rejected');
+equal(authorize('short-token'), false, 'short teacher token rejected');
+equal(authorize('x'.repeat(257)), false, 'oversized teacher token rejected');
+equal(authorize('x'.repeat(31) + '\n'), false, 'control character rejected');
+equal(context.autorizarEscrituraPublicacionRemota({}), false, 'missing context token rejected');
+equal(context.autorizarEscrituraPublicacionRemota(null), false, 'null context rejected');
+
+const differentToken = 'teacher-token-' + 'b'.repeat(48);
+properties = { CRIOS_PUBLICATION_WRITE_TOKEN_SHA256: sha(differentToken) };
+equal(authorize(validToken), false, 'rotated token invalidates previous token');
+equal(authorize(differentToken), true, 'rotated token accepted');
+
+check(source.includes("CRIOS_PUBLICATION_WRITE_TOKEN_SHA256"), 'hashed token property name present');
+check(!source.includes("getProperty(CRIOS_PUBLICATION_WRITE_TOKEN_PROPERTY)"), 'legacy raw property lookup absent');
+check(!/CRIOS_PUBLICATION_WRITE_TOKEN_PROPERTY\s*=/.test(source), 'legacy raw token constant absent');
+check(source.includes('sha256PublicacionRemota(recibido)'), 'received token hashed before comparison');
+check(source.includes('compararConstantePublicacionRemota'), 'constant comparison retained');
+
+console.log('PUBLICATION_BACKEND_SECURITY_TEST_STATUS=' + (failed ? 'FAIL' : 'PASS'));
+console.log('PUBLICATION_BACKEND_SECURITY_TEST_TOTAL=' + total);
+console.log('PUBLICATION_BACKEND_SECURITY_TEST_FAILED=' + failed);
+console.log('PUBLICATION_BACKEND_RAW_TOKEN_STORED=false');
+console.log('PUBLICATION_BACKEND_HASHED_TOKEN_PROPERTY=true');
+console.log('PUBLICATION_BACKEND_LEGACY_RAW_PROPERTY_IGNORED=true');
+console.log('PUBLICATION_BACKEND_TOKEN_ROTATION_SUPPORTED=true');
+if (failed) process.exit(1);

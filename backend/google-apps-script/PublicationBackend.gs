@@ -1,5 +1,7 @@
 const CRIOS_PUBLICATION_PROTOCOL_VERSION = '1.0';
-const CRIOS_PUBLICATION_WRITE_TOKEN_PROPERTY = 'CRIOS_PUBLICATION_WRITE_TOKEN';
+const CRIOS_PUBLICATION_WRITE_TOKEN_HASH_PROPERTY = 'CRIOS_PUBLICATION_WRITE_TOKEN_SHA256';
+const CRIOS_PUBLICATION_WRITE_TOKEN_MIN_LENGTH = 32;
+const CRIOS_PUBLICATION_WRITE_TOKEN_MAX_LENGTH = 256;
 const CRIOS_PUBLICATION_MAX_CONTENT_BYTES = 524288;
 const CRIOS_PUBLICATION_CHUNK_SIZE = 30000;
 
@@ -289,12 +291,24 @@ function compararConstantePublicacionRemota(a, b) {
 }
 
 function autorizarEscrituraPublicacionRemota(contexto) {
-  const esperado = PropertiesService
+  const hashEsperado = PropertiesService
     .getScriptProperties()
-    .getProperty(CRIOS_PUBLICATION_WRITE_TOKEN_PROPERTY);
-  if (!esperado) return false;
-  const recibido = contexto && typeof contexto.writeToken === 'string' ? contexto.writeToken : '';
-  return compararConstantePublicacionRemota(esperado, recibido);
+    .getProperty(CRIOS_PUBLICATION_WRITE_TOKEN_HASH_PROPERTY);
+  if (!hashValidoPublicacionRemota(hashEsperado)) return false;
+
+  const recibido = contexto && typeof contexto.writeToken === 'string'
+    ? contexto.writeToken
+    : '';
+  if (recibido.length < CRIOS_PUBLICATION_WRITE_TOKEN_MIN_LENGTH ||
+      recibido.length > CRIOS_PUBLICATION_WRITE_TOKEN_MAX_LENGTH ||
+      /[\u0000-\u001F\u007F]/.test(recibido)) {
+    return false;
+  }
+
+  return compararConstantePublicacionRemota(
+    hashEsperado,
+    sha256PublicacionRemota(recibido)
+  );
 }
 
 function encabezadosValidosPublicacionRemota(hoja, encabezados) {

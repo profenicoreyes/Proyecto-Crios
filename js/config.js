@@ -8,6 +8,8 @@ const CRIOS_CONFIG = Object.freeze({
   version: '1.25',
   runtimeCampaignMode: 'legacy',
   resultsEndpoint: 'https://script.google.com/macros/s/AKfycbwnoHvlD8xAtDHhcymZxfrt9TlKSx86F-sAECTfj1Y8mAOYDbtnFCLfKPeUVxzr8bwEyA/exec',
+  publicationEndpoint: '',
+  publicationTimeoutMs: 15000,
   variantCount: 36,
   progressSendDelayMs: 250,
   missionReturnDelayMs: 1400,
