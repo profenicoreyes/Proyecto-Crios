@@ -248,13 +248,14 @@ Restore only into a separate recovery clone/worktree or according to the project
 
 ## 11. Security constraints
 
-Until B5:
+After B5B:
 
-- no production publication endpoint is embedded;
+- the production publication endpoint is explicit in `CRIOS_CONFIG.publicationEndpoint`;
 - no write token is embedded in public JavaScript;
-- the existing results endpoint must not be reused as an implicit publication-mutation credential path;
-- remote configuration remains explicit and opt-in;
-- live deployment is deferred.
+- the existing results endpoint remains separate and is not reused for publication transport;
+- Runtime receives no teacher credential;
+- Studio obtains the teacher token only through its just-in-time provider;
+- the live Apps Script deployment has passed public-read and authorization-boundary probes before endpoint enablement.
 
 ## 12. B4 Runtime remote reader boundary
 
@@ -385,20 +386,25 @@ Undo in reverse dependency order:
 3. B4 Runtime remote readers;
 4. B3 only if the launch identity contract itself must also be undone.
 
-## 16. Remaining limitation after B4
+## 16. B5B deployment/configuration state
 
-B4 completes the Runtime-side read path structurally, but no production publication endpoint is embedded or deployed by this tranche.
+B5B completes the controlled deployment/configuration dependency that B4 intentionally deferred. The validated Apps Script web-app endpoint is now:
 
-Therefore a real student device still cannot use the remote path until B5 supplies the controlled deployment/configuration and teacher-write security boundary.
+`https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec`
+
+Before committing that endpoint, the live probe confirmed public read access, rejection of an invalid teacher token and successful traversal of the valid teacher authorization boundary without creating any publication mutation. Runtime therefore has a deployable cross-device read path while remaining secret-free.
+
+The remaining work is no longer architectural transport wiring: B6 must exercise the real teacher → published link → separate student browser/device flow end to end.
 
 ## 17. Forward dependency order
 
-From B4:
+Current order:
 
-1. B5 — teacher authorization, controlled Apps Script deployment and explicit Runtime/Studio publication endpoint configuration.
-2. B6 — real cross-device end-to-end validation and regressions.
+1. B5A/B5A1 — teacher authorization and token policy: complete.
+2. B5B — controlled Apps Script deployment and explicit Runtime/Studio publication endpoint configuration: complete once the endpoint-enable commit and replacement bundle are verified.
+3. B6 — real cross-device end-to-end validation and final regressions.
 
-The order matters for rollback: undo later dependencies before undoing the Runtime remote reader contract.
+Rollback remains reverse-order: undo B6 assumptions first, then B5B endpoint/configuration, then B5 authorization, then B4 Runtime readers.
 
 ## 18. Temporary-file policy
 

@@ -36,13 +36,18 @@ The publication endpoint is deliberately separate from the legacy `resultsEndpoi
 
 `CRIOS_CONFIG.publicationEndpoint` is the only deployment endpoint consumed by the publication configuration bridge.
 
-Before controlled deployment this value remains the empty string. With an empty value:
+B5A/B5A1 deliberately left this value empty until the backend, authorization boundary and anonymous read path were validated against a live deployment. B5B now commits the validated production endpoint:
 
-- Runtime remote publication configuration is not created;
-- Studio remote publication configuration is not created;
-- the existing local/offline path remains unchanged.
+`https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec`
 
-No production publication endpoint is committed by B5 security preparation.
+With this value present:
+
+- Runtime receives the public read-only remote publication configuration;
+- Studio receives the same endpoint plus its just-in-time teacher token provider;
+- `resultsEndpoint` remains separate and unchanged;
+- the raw teacher token is still absent from public source and browser persistence.
+
+Clearing `publicationEndpoint` remains the immediate client-side rollback switch for remote publication composition.
 
 ## Browser configuration
 
@@ -109,6 +114,51 @@ After the B5 security-preparation commit and its replacement bundle are verified
 The B5 security-preparation commit can be resolved later without relying on a copied hash:
 
 `git log --format="%H %s" --diff-filter=A -- docs/architecture/A3_PUBLICATION_SECURITY_DEPLOYMENT.md`
+
+
+## B5B controlled deployment record
+
+Controlled deployment was validated on 2026-08-08 against the post-B5A1 repository state.
+
+Baseline source commit before enabling the endpoint:
+
+`fa8007e86ff901243cc1045e2b49269bb7c2bdaa` — `fix(publication): align teacher token policy`
+
+Deployed web-app endpoint:
+
+`https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec`
+
+The live non-mutating probe passed all required boundaries:
+
+- health GET: PASS;
+- public GET without a teacher token: PASS with `PUBLICATION_UNAVAILABLE` for the intentionally nonexistent publication;
+- invalid teacher authorization: PASS with `WRITE_UNAUTHORIZED`;
+- valid teacher authorization boundary: PASS, reaching `PUBLICATION_UNAVAILABLE` only after authorization;
+- publication mutation created by probe: false;
+- raw teacher token printed: false;
+- raw teacher token written to disk: false.
+
+The endpoint is public by design. The teacher credential is not part of the URL and remains protected by the SHA-256 Script Property boundary.
+
+### Pre-B5B recovery point
+
+The verified bundle immediately before endpoint enablement is:
+
+`Proyecto-Crios-fa8007e86ff90124-main.bundle`
+
+Expected HEAD:
+
+`fa8007e86ff901243cc1045e2b49269bb7c2bdaa refs/heads/main`
+
+Expected SHA-256:
+
+`45c35631ac6a9486b8ee21480361fd8daccb9d62707383d4e87f612e63792742`
+
+Expected size:
+
+`2976194` bytes
+
+This is the direct recovery point for the exact state with hardened teacher authorization but with `publicationEndpoint` still blank.
 
 ## Token rotation
 

@@ -51,8 +51,28 @@ function contextWith(configExpression, withAuth, promptImpl) {
   const window = contextWith('repo', false);
   check(Boolean(window.CRIOS_REMOTE_PUBLICATION_DEPLOYMENT_CONFIG), 'bridge API exists');
   equal(window.CRIOS_REMOTE_PUBLICATION_DEPLOYMENT_CONFIG.version, '1.0.0', 'bridge version');
-  check(!Object.prototype.hasOwnProperty.call(window, 'CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG'), 'blank repository endpoint preserves local Runtime');
-  check(!Object.prototype.hasOwnProperty.call(window, 'CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG'), 'blank repository endpoint preserves local Studio');
+  check(Boolean(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG), 'deployed repository endpoint configures Runtime');
+  equal(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG.endpoint, 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec', 'Runtime uses deployed publication endpoint');
+  equal(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG.timeoutMs, 15000, 'Runtime uses configured publication timeout');
+  check(!Object.prototype.hasOwnProperty.call(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG, 'writeToken'), 'deployed Runtime remains secret-free');
+  check(!Object.prototype.hasOwnProperty.call(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG, 'writeTokenProvider'), 'deployed Runtime has no teacher provider');
+  check(!Object.prototype.hasOwnProperty.call(window, 'CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG'), 'Studio config remains absent when auth factory is unavailable');
+}
+
+{
+  const prompts = [];
+  const token = 'crios123';
+  const window = contextWith('repo', true, (message) => {
+    prompts.push(message);
+    return token;
+  });
+  const studio = window.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG;
+  check(Boolean(studio), 'deployed repository endpoint configures Studio when auth factory exists');
+  equal(studio.endpoint, 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec', 'Studio uses deployed publication endpoint');
+  equal(studio.timeoutMs, 15000, 'Studio uses configured publication timeout');
+  equal(prompts.length, 0, 'deployed Studio provider remains lazy');
+  equal(studio.writeTokenProvider(), token, 'deployed Studio provider resolves teacher token at write time');
+  equal(prompts.length, 1, 'deployed Studio provider prompts exactly on write');
 }
 
 {
@@ -129,7 +149,8 @@ check(studioOrder.every((index, i) => i === 0 || index > studioOrder[i - 1]), 'S
 
 const repoConfigEndpoint = /publicationEndpoint:\s*'([^']*)'/.exec(configSource);
 check(Boolean(repoConfigEndpoint), 'repository publicationEndpoint declared');
-equal(repoConfigEndpoint && repoConfigEndpoint[1], '', 'repository publicationEndpoint remains blank before deployment');
+equal(repoConfigEndpoint && repoConfigEndpoint[1], 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec', 'repository publicationEndpoint matches controlled deployment');
+check(repoConfigEndpoint && repoConfigEndpoint[1] !== /resultsEndpoint:\s*'([^']*)'/.exec(configSource)[1], 'repository publication endpoint remains separate from results endpoint');
 
 console.log('REMOTE_DEPLOYMENT_CONFIG_TEST_STATUS=' + (failed ? 'FAIL' : 'PASS'));
 console.log('REMOTE_DEPLOYMENT_CONFIG_TEST_TOTAL=' + total);
@@ -137,5 +158,5 @@ console.log('REMOTE_DEPLOYMENT_CONFIG_TEST_FAILED=' + failed);
 console.log('REMOTE_DEPLOYMENT_ENDPOINT_SEPARATE_FROM_RESULTS=true');
 console.log('REMOTE_DEPLOYMENT_RUNTIME_SECRET_FREE=true');
 console.log('REMOTE_DEPLOYMENT_STUDIO_PROVIDER_LAZY=true');
-console.log('REMOTE_DEPLOYMENT_PRODUCTION_ENDPOINT_CONFIGURED=false');
+console.log('REMOTE_DEPLOYMENT_PRODUCTION_ENDPOINT_CONFIGURED=true');
 if (failed) process.exit(1);
