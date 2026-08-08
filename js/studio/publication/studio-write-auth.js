@@ -3,15 +3,13 @@
   'use strict';
 
   var VERSION = '1.0.0';
-  var MIN_TOKEN_LENGTH = 32;
+  var MIN_TOKEN_LENGTH = 8;
   var MAX_TOKEN_LENGTH = 256;
 
   function normalizeToken(value) {
     if (typeof value !== 'string') return '';
-    if (/[\u0000-\u001F\u007F]/.test(value)) return '';
-    var token = value.trim();
-    if (token.length < MIN_TOKEN_LENGTH || token.length > MAX_TOKEN_LENGTH) return '';
-    return token;
+    if (value.length < MIN_TOKEN_LENGTH || value.length > MAX_TOKEN_LENGTH) return '';
+    return value;
   }
 
   function createPromptProvider(options) {

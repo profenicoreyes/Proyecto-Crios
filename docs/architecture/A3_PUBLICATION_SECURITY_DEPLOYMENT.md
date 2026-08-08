@@ -22,7 +22,13 @@ The Apps Script backend does not store the raw bearer secret. Script Properties 
 
 The value is the lowercase SHA-256 hex digest of the teacher token.
 
-The raw teacher token must be at least 32 characters and at most 256 characters.
+The raw teacher token must be at least 8 characters and at most 256 characters. CRIOS imposes no composition rules: uppercase, lowercase, digits and symbols are optional, and the token is matched exactly as entered.
+
+### Teacher token policy
+
+The operator-selected minimum is 8 characters. CRIOS does not trim or normalize the token and does not require any character class. Spaces, symbols and other characters are accepted and hashed exactly as entered. The 256-character ceiling is only a transport/input bound, not a composition rule. Security therefore depends on the teacher choosing a token that is not easy to guess.
+
+This policy is enforced identically by Studio and the Apps Script backend. If it must be rolled back, revert the token-policy commit before deploying a backend that depends on a different minimum. No publication data migration is involved.
 
 ## Deployment endpoint
 
@@ -65,7 +71,7 @@ The provider prompts at write time and does not persist or expose the token thro
 Do not reuse the URL in `CRIOS_CONFIG.resultsEndpoint`.
 
 1. Confirm the repository is at the validated B5 security-preparation commit and its bundle verifies.
-2. Generate a cryptographically random teacher token of at least 32 characters on the operator machine.
+2. Choose a teacher token of at least 8 characters on the operator machine. CRIOS does not enforce composition rules; a random token is still preferable to an easily guessed phrase.
 3. Compute its lowercase SHA-256 hex digest locally.
 4. Store only that digest in Apps Script Script Properties under `CRIOS_PUBLICATION_WRITE_TOKEN_SHA256`.
 5. Keep the raw token outside the repository and outside Google Apps Script source. Use a password manager or equivalent operator-controlled storage.

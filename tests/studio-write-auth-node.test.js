@@ -49,22 +49,26 @@ equal(provider(), tokenB, 'second write prompts again instead of caching');
 equal(calls.length, 2, 'prompt invoked for every write');
 check(calls.every((message) => /No se guarda/.test(message)), 'default prompt states non-persistence');
 
-const invalidValues = [null, '', 'short', 'x'.repeat(31), 'x'.repeat(257), 'x'.repeat(32) + '\n'];
+const invalidValues = [null, '', '1234567', 'x'.repeat(257)];
 for (const value of invalidValues) {
   const local = api.createPromptProvider({ promptImpl: () => value });
   equal(local(), '', 'invalid/cancelled token fails closed');
 }
 
-const customToken = 'z'.repeat(40);
+const eightCharToken = '12345678';
+const eightCharProvider = api.createPromptProvider({ promptImpl: () => eightCharToken });
+equal(eightCharProvider(), eightCharToken, 'exactly 8 characters accepted');
+
+const customToken = ' a!\nZ9? ';
 let customMessage = '';
 const custom = api.createPromptProvider({
   message: 'Autorización docente',
   promptImpl(message) {
     customMessage = message;
-    return '  ' + customToken + '  ';
+    return customToken;
   }
 });
-equal(custom(), customToken, 'provider trims valid token');
+equal(custom(), customToken, 'provider preserves unrestricted valid token exactly');
 equal(customMessage, 'Autorización docente', 'custom prompt message respected');
 
 const noPrompt = load(undefined);
