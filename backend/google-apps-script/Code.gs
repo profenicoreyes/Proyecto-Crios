@@ -23,13 +23,22 @@ const ENCABEZADOS = [
 ];
 
 function doPost(e) {
+  let datos;
+  try {
+    datos = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (errorParseo) {
+    return responder({ok: false, error: String(errorParseo)});
+  }
+
+  if (typeof esEnvelopePostPublicacionRemota === 'function' && esEnvelopePostPublicacionRemota(datos)) {
+    return responder(procesarSolicitudPublicacionRemota(datos.request, {writeToken: datos.writeToken}));
+  }
+
   const bloqueo = LockService.getScriptLock();
   bloqueo.waitLock(10000);
 
   try {
     const libro = SpreadsheetApp.getActiveSpreadsheet();
-    const datos = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-
     const idSesion = textoSeguro(datos.idSesion);
     const grupo = textoSeguro(datos.grupo);
 
@@ -76,6 +85,13 @@ function doGet(e) {
         sistema: 'CRIOS',
         grupos: grupos
       });
+    }
+
+    if (accion === 'getPublication' && typeof construirSolicitudGetPublicacionRemota === 'function') {
+      return responder(procesarSolicitudPublicacionRemota(
+        construirSolicitudGetPublicacionRemota(e.parameter),
+        {writeToken: ''}
+      ));
     }
 
     return responder({
