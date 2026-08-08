@@ -73,6 +73,8 @@
     var adapter = options && options.adapter ? options.adapter : null;
     var missionSpecAdapter = options && options.missionSpecAdapter ? options.missionSpecAdapter : null;
     var publicationStore = options && options.publicationStore ? options.publicationStore : null;
+    var hasInjectedPublicationService = Boolean(options && Object.prototype.hasOwnProperty.call(options, 'publicationService'));
+    var injectedPublicationService = hasInjectedPublicationService ? options.publicationService : null;
     var onStateChange = options && typeof options.onStateChange === 'function' ? options.onStateChange : function(){};
 
     var state = {
@@ -88,7 +90,18 @@
     var store = null;
     var service = null;
 
-    if (core && typeof core.createInMemoryPublicationStore === 'function' && typeof core.createPublicationService === 'function' && adapter) {
+    function isPublicationService(value) {
+      return Boolean(value &&
+        typeof value.publishCampaign === 'function' &&
+        typeof value.listPublications === 'function' &&
+        typeof value.getPublication === 'function' &&
+        typeof value.getRecord === 'function');
+    }
+
+    if (hasInjectedPublicationService) {
+      service = isPublicationService(injectedPublicationService) ? injectedPublicationService : null;
+      store = publicationStore;
+    } else if (core && typeof core.createInMemoryPublicationStore === 'function' && typeof core.createPublicationService === 'function' && adapter) {
       store = publicationStore || core.createInMemoryPublicationStore();
       service = core.createPublicationService({
         store: store,
