@@ -44,18 +44,19 @@
   test('01 API pública exacta y congelada', function(){
     exactKeys(api(), ['version','constants','resolveLaunchRequest','buildPublishedLaunchSearch','buildLegacyLaunchSearch','isLaunchResolution']);
     assert(Object.isFrozen(api()));
-    equal(api().version, '1.0.0');
+    equal(api().version, '1.1.0');
   });
   test('02 constantes exactas y congeladas', function(){
-    exactKeys(api().constants, ['modes','parameters','errorCodes','maxCampaignIdLength']);
+    exactKeys(api().constants, ['modes','parameters','errorCodes','maxCampaignIdLength','maxPublicationIdLength']);
     assert(Object.isFrozen(api().constants));
     assert(Object.isFrozen(api().constants.modes));
     equal(api().constants.maxCampaignIdLength, 160);
+    equal(api().constants.maxPublicationIdLength, 200);
   });
   test('03 consulta vacía no fuerza modo', function(){
     var result = resolve('');
     assert(result.success);
-    deepEqual(result.request, {explicit:false,sourceMode:null,campaignId:null});
+    deepEqual(result.request, {explicit:false,sourceMode:null,campaignId:null,publicationId:null});
   });
   test('04 signo de pregunta solo no fuerza modo', function(){
     assert(resolve('?').success);
@@ -74,39 +75,40 @@
   });
   test('07 legacy explícito', function(){
     var result = resolve('?source=legacy');
-    deepEqual(result.request, {explicit:true,sourceMode:'legacy',campaignId:null});
+    deepEqual(result.request, {explicit:true,sourceMode:'legacy',campaignId:null,publicationId:null});
   });
   test('08 legacy acepta espacios codificados alrededor del valor', function(){
     equal(resolve('?source=%20legacy%20').request.sourceMode, 'legacy');
   });
   test('09 published explícito', function(){
-    var result = resolve('?source=published&campaignId=campana-1');
-    deepEqual(result.request, {explicit:true,sourceMode:'published',campaignId:'campana-1'});
+    var result = resolve('?source=published&campaignId=campana-1&publicationId=pub-1');
+    deepEqual(result.request, {explicit:true,sourceMode:'published',campaignId:'campana-1',publicationId:'pub-1'});
   });
   test('10 campaignId se normaliza por bordes', function(){
-    equal(resolve('?source=published&campaignId=%20campana-1%20').request.campaignId, 'campana-1');
+    equal(resolve('?source=published&campaignId=%20campana-1%20&publicationId=pub-1').request.campaignId, 'campana-1');
   });
   test('11 campaignId Unicode válido', function(){
-    equal(resolve('?source=published&campaignId=campa%C3%B1a-%C3%A1rea').request.campaignId, 'campaña-área');
+    equal(resolve('?source=published&campaignId=campa%C3%B1a-%C3%A1rea&publicationId=pub-1').request.campaignId, 'campaña-área');
   });
   test('12 campaignId con espacio interno válido', function(){
-    equal(resolve('?source=published&campaignId=grupo+uno').request.campaignId, 'grupo uno');
+    equal(resolve('?source=published&campaignId=grupo+uno&publicationId=pub-1').request.campaignId, 'grupo uno');
   });
   test('13 orden de parámetros indiferente', function(){
-    equal(resolve('?campaignId=campana-1&source=published').request.sourceMode, 'published');
+    equal(resolve('?publicationId=pub-1&campaignId=campana-1&source=published').request.sourceMode, 'published');
   });
   test('14 parámetros ajenos conviven con lanzamiento', function(){
-    equal(resolve('?trace=1&source=published&campaignId=campana-1&run=x').request.campaignId, 'campana-1');
+    equal(resolve('?trace=1&source=published&campaignId=campana-1&publicationId=pub-1&run=x').request.campaignId, 'campana-1');
   });
   test('15 builder published canónico', function(){
-    equal(api().buildPublishedLaunchSearch('campana-1'), '?source=published&campaignId=campana-1');
+    equal(api().buildPublishedLaunchSearch('campana-1', 'pub-1'), '?source=published&campaignId=campana-1&publicationId=pub-1');
   });
   test('16 builder published codifica y normaliza', function(){
-    equal(api().buildPublishedLaunchSearch(' campaña uno '), '?source=published&campaignId=campa%C3%B1a%20uno');
+    equal(api().buildPublishedLaunchSearch(' campaña uno ', ' pub uno '), '?source=published&campaignId=campa%C3%B1a%20uno&publicationId=pub%20uno');
   });
   test('17 builder published hace roundtrip', function(){
-    var search = api().buildPublishedLaunchSearch('campaña uno');
+    var search = api().buildPublishedLaunchSearch('campaña uno', 'publicación uno');
     equal(resolve(search).request.campaignId, 'campaña uno');
+    equal(resolve(search).request.publicationId, 'publicación uno');
   });
   test('18 builder legacy canónico', function(){
     equal(api().buildLegacyLaunchSearch(), '?source=legacy');
@@ -115,7 +117,10 @@
     expectFailure('?source=legacy&source=published', 'DUPLICATE_PARAMETER', 'source');
   });
   test('20 campaignId duplicado se rechaza', function(){
-    expectFailure('?source=published&campaignId=a&campaignId=b', 'DUPLICATE_PARAMETER', 'campaignId');
+    expectFailure('?source=published&campaignId=a&campaignId=b&publicationId=p', 'DUPLICATE_PARAMETER', 'campaignId');
+  });
+  test('20b publicationId duplicado se rechaza', function(){
+    expectFailure('?source=published&campaignId=a&publicationId=p&publicationId=q', 'DUPLICATE_PARAMETER', 'publicationId');
   });
   test('21 source vacío se rechaza', function(){
     expectFailure('?source=', 'INVALID_SOURCE', 'source');
@@ -124,54 +129,84 @@
     expectFailure('?source=preview', 'UNSUPPORTED_SOURCE', 'source');
   });
   test('23 source distingue mayúsculas', function(){
-    expectFailure('?source=Published&campaignId=a', 'UNSUPPORTED_SOURCE', 'source');
+    expectFailure('?source=Published&campaignId=a&publicationId=p', 'UNSUPPORTED_SOURCE', 'source');
   });
   test('24 campaignId sin source se rechaza', function(){
-    expectFailure('?campaignId=a', 'SOURCE_REQUIRED', 'source');
+    expectFailure('?campaignId=a&publicationId=p', 'SOURCE_REQUIRED', 'source');
   });
   test('25 published sin campaignId se rechaza', function(){
-    expectFailure('?source=published', 'CAMPAIGN_ID_REQUIRED', 'campaignId');
+    expectFailure('?source=published&publicationId=p', 'CAMPAIGN_ID_REQUIRED', 'campaignId');
+  });
+  test('25b published sin publicationId se rechaza', function(){
+    expectFailure('?source=published&campaignId=a', 'PUBLICATION_ID_REQUIRED', 'publicationId');
   });
   test('26 campaignId vacío se rechaza', function(){
-    expectFailure('?source=published&campaignId=', 'INVALID_CAMPAIGN_ID', 'campaignId');
+    expectFailure('?source=published&campaignId=&publicationId=p', 'INVALID_CAMPAIGN_ID', 'campaignId');
   });
   test('27 campaignId solo espacios se rechaza', function(){
-    expectFailure('?source=published&campaignId=+++', 'INVALID_CAMPAIGN_ID', 'campaignId');
+    expectFailure('?source=published&campaignId=+++&publicationId=p', 'INVALID_CAMPAIGN_ID', 'campaignId');
+  });
+  test('27b publicationId vacío se rechaza', function(){
+    expectFailure('?source=published&campaignId=a&publicationId=', 'INVALID_PUBLICATION_ID', 'publicationId');
+  });
+  test('27c publicationId solo espacios se rechaza', function(){
+    expectFailure('?source=published&campaignId=a&publicationId=+++', 'INVALID_PUBLICATION_ID', 'publicationId');
   });
   test('28 legacy con campaignId se rechaza', function(){
     expectFailure('?source=legacy&campaignId=a', 'CAMPAIGN_ID_NOT_ALLOWED', 'campaignId');
+  });
+  test('28b legacy con publicationId se rechaza', function(){
+    expectFailure('?source=legacy&publicationId=p', 'PUBLICATION_ID_NOT_ALLOWED', 'publicationId');
   });
   test('29 escape inválido en source se rechaza', function(){
     expectFailure('?source=%E0%A4%A', 'MALFORMED_QUERY', null);
   });
   test('30 escape inválido en campaignId se rechaza', function(){
-    expectFailure('?source=published&campaignId=%ZZ', 'MALFORMED_QUERY', null);
+    expectFailure('?source=published&campaignId=a&publicationId=%ZZ', 'MALFORMED_QUERY', null);
   });
   test('31 fragmento dentro del search se rechaza', function(){
     expectFailure('?source=legacy#x', 'MALFORMED_QUERY', null);
   });
   test('32 control en campaignId se rechaza', function(){
-    expectFailure('?source=published&campaignId=a%0Ab', 'INVALID_CAMPAIGN_ID', 'campaignId');
+    expectFailure('?source=published&campaignId=a%0Ab&publicationId=p', 'INVALID_CAMPAIGN_ID', 'campaignId');
+  });
+  test('32b control en publicationId se rechaza', function(){
+    expectFailure('?source=published&campaignId=a&publicationId=p%0Aq', 'INVALID_PUBLICATION_ID', 'publicationId');
   });
   test('33 longitud máxima de campaignId es válida', function(){
     var id = new Array(161).join('a');
-    equal(resolve(api().buildPublishedLaunchSearch(id)).request.campaignId.length, 160);
+    equal(resolve(api().buildPublishedLaunchSearch(id, 'pub')).request.campaignId.length, 160);
   });
   test('34 campaignId sobre longitud máxima se rechaza', function(){
     var id = new Array(162).join('a');
-    expectFailure('?source=published&campaignId=' + id, 'INVALID_CAMPAIGN_ID', 'campaignId');
+    expectFailure('?source=published&campaignId=' + id + '&publicationId=pub', 'INVALID_CAMPAIGN_ID', 'campaignId');
+  });
+  test('34b longitud máxima de publicationId es válida', function(){
+    var id = new Array(201).join('p');
+    equal(resolve(api().buildPublishedLaunchSearch('campana', id)).request.publicationId.length, 200);
+  });
+  test('34c publicationId sobre longitud máxima se rechaza', function(){
+    var id = new Array(202).join('p');
+    expectFailure('?source=published&campaignId=campana&publicationId=' + id, 'INVALID_PUBLICATION_ID', 'publicationId');
   });
   test('35 builder published rechaza vacío con código', function(){
     var thrown = null;
-    try { api().buildPublishedLaunchSearch(''); } catch (error) { thrown = error; }
+    try { api().buildPublishedLaunchSearch('', 'pub'); } catch (error) { thrown = error; }
     assert(thrown);
     equal(thrown.code, 'INVALID_CAMPAIGN_ID');
     equal(thrown.parameter, 'campaignId');
   });
   test('36 builder published rechaza controles', function(){
     var thrown = null;
-    try { api().buildPublishedLaunchSearch('a\nb'); } catch (error) { thrown = error; }
+    try { api().buildPublishedLaunchSearch('a\nb', 'pub'); } catch (error) { thrown = error; }
     equal(thrown && thrown.code, 'INVALID_CAMPAIGN_ID');
+  });
+  test('36b builder published requiere publicationId válido', function(){
+    var thrown = null;
+    try { api().buildPublishedLaunchSearch('campana', ''); } catch (error) { thrown = error; }
+    assert(thrown);
+    equal(thrown.code, 'INVALID_PUBLICATION_ID');
+    equal(thrown.parameter, 'publicationId');
   });
   test('37 null equivale a ausencia de solicitud', function(){
     equal(resolve(null).request.explicit, false);
@@ -186,10 +221,10 @@
     assert(Object.isFrozen(result.error));
   });
   test('40 request tiene claves exactas', function(){
-    exactKeys(resolve('?source=legacy').request, ['explicit','sourceMode','campaignId']);
+    exactKeys(resolve('?source=legacy').request, ['explicit','sourceMode','campaignId','publicationId']);
   });
   test('41 validador acepta resolución válida', function(){
-    assert(api().isLaunchResolution(resolve('?source=published&campaignId=a')));
+    assert(api().isLaunchResolution(resolve('?source=published&campaignId=a&publicationId=p')));
   });
   test('42 validador rechaza copia mutable', function(){
     var mutable = JSON.parse(JSON.stringify(resolve('?source=legacy')));
@@ -216,7 +251,7 @@
     window.setTimeout = function(){ counters.timeout += 1; return 0; };
     window.setInterval = function(){ counters.interval += 1; return 0; };
     try {
-      assert(resolve('?source=published&campaignId=a').success);
+      assert(resolve('?source=published&campaignId=a&publicationId=p').success);
     } finally {
       document.querySelector = originalQuery;
       localStorage.getItem = originalLocal;

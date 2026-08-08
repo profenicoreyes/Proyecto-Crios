@@ -61,7 +61,7 @@
     var api = window.CRIOS_STUDIO_RUNTIME_LAUNCH;
     assert('API_EXISTS', Boolean(api), 'La API no existe.');
     assert('API_FROZEN', Object.isFrozen(api), 'La API debe estar congelada.');
-    assert('API_VERSION', api && api.version === '1.0.0', 'Versión inesperada.');
+    assert('API_VERSION', api && api.version === '1.1.0', 'Versión inesperada.');
     assert('STATUS_FROZEN', api && Object.isFrozen(api.status), 'Los estados deben estar congelados.');
 
     var busyWithoutActive = api.buildDescriptor({
@@ -119,7 +119,7 @@
     assert('AVAILABLE_STATUS', available.status === 'AVAILABLE', 'Estado disponible incorrecto.');
     assert('AVAILABLE_CAMPAIGN', available.campaignId === 'campaña con espacios/área', 'campaignId alterado.');
     assert('AVAILABLE_PUBLICATION', available.publicationId === 'pub-a', 'publicationId alterado.');
-    assert('AVAILABLE_HREF', available.href === '../index.html?source=published&campaignId=campa%C3%B1a%20con%20espacios%2F%C3%A1rea', 'Enlace incorrecto.');
+    assert('AVAILABLE_HREF', available.href === '../index.html?source=published&campaignId=campa%C3%B1a%20con%20espacios%2F%C3%A1rea&publicationId=pub-a', 'Enlace incorrecto.');
     assert('AVAILABLE_TARGET', available.target === '_blank', 'Target incorrecto.');
     assert('AVAILABLE_REL', available.rel === 'noopener', 'Rel incorrecto.');
     assert('AVAILABLE_FROZEN', Object.isFrozen(available), 'Descriptor disponible no congelado.');
@@ -128,7 +128,7 @@
     var runtimeInvalidCampaignId = new Array(162).join('a');
     var runtimeContractError = null;
     try {
-      runtimeLaunchContract.buildPublishedLaunchSearch(runtimeInvalidCampaignId);
+      runtimeLaunchContract.buildPublishedLaunchSearch(runtimeInvalidCampaignId, 'pub-runtime-invalid');
     } catch (error) {
       runtimeContractError = error;
     }
@@ -149,6 +149,28 @@
         '; observedAvailable=' + String(runtimeInvalidDescriptor.available) +
         '; observedStatus=' + String(runtimeInvalidDescriptor.status) +
         '; observedHref=' + String(runtimeInvalidDescriptor.href)
+    );
+
+    var runtimeInvalidPublicationId = new Array(202).join('p');
+    var runtimePublicationContractError = null;
+    try {
+      runtimeLaunchContract.buildPublishedLaunchSearch('campana-runtime-valid', runtimeInvalidPublicationId);
+    } catch (error) {
+      runtimePublicationContractError = error;
+    }
+    var runtimeInvalidPublicationDescriptor = api.buildDescriptor({
+      activeReference: { campaignId: 'campana-runtime-valid', publicationId: runtimeInvalidPublicationId },
+      persistenceState: { status: 'READY', activeReferenceCount: 1 },
+      runtimePath: '../index.html'
+    });
+    assert(
+      'A3_003B3_STUDIO_REJECTS_RUNTIME_INVALID_PUBLICATION_ID',
+      Boolean(runtimeLaunchContract) &&
+        runtimePublicationContractError && runtimePublicationContractError.code === 'INVALID_PUBLICATION_ID' &&
+        runtimeInvalidPublicationDescriptor.available === false &&
+        runtimeInvalidPublicationDescriptor.status === 'INVALID_ACTIVE_REFERENCE' &&
+        runtimeInvalidPublicationDescriptor.href === null,
+      'Studio debe bloquear el publicationId que Runtime rechaza.'
     );
 
     window.CRIOS_STUDIO_RENDERER.render(baseConfig(noActive));

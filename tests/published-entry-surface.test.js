@@ -161,7 +161,7 @@
       coordinator: coordinator,
       campaignId: campaignId,
       publicationId: publicationId,
-      canonicalSearch: window.CRIOS_RUNTIME_LAUNCH.buildPublishedLaunchSearch(campaignId)
+      canonicalSearch: window.CRIOS_RUNTIME_LAUNCH.buildPublishedLaunchSearch(campaignId, publicationId)
     };
   }
 
@@ -179,7 +179,7 @@
     assert('PERSISTED_DOCUMENT_VALID', persistenceApi.isPersistenceDocument(persistedDocument) === true, 'Seeded persistence document is invalid.');
     assert('PERSISTED_PUBLICATION_LISTED', seed.coordinator.publicationStore.listPublications(seed.campaignId).length === 1, 'Persisted publication was not listed.');
     assert('ACTIVE_REFERENCE_AVAILABLE', Boolean(seed.coordinator.activationStore.getActiveReference(seed.campaignId)), 'Active reference was not persisted.');
-    assert('CANONICAL_PUBLISHED_SEARCH_AVAILABLE', seed.canonicalSearch === '?source=published&campaignId=' + encodeURIComponent(seed.campaignId), 'Canonical published search differs.');
+    assert('CANONICAL_PUBLISHED_SEARCH_AVAILABLE', seed.canonicalSearch === '?source=published&campaignId=' + encodeURIComponent(seed.campaignId) + '&publicationId=' + encodeURIComponent(seed.publicationId), 'Canonical published search differs.');
 
     var child = await openRuntimeWithoutQuery();
     var childDiag = child.__CRIOS_A2_014F_DIAG__ || {};

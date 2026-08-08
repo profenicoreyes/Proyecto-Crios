@@ -15,9 +15,11 @@
   equal('NO_QUERY_TO_STUDIO', api.resolveEntry(''), api.routes.STUDIO);
   equal('UNRELATED_QUERY_TO_STUDIO', api.resolveEntry('?foo=bar'), api.routes.STUDIO);
   equal('EXPLICIT_LEGACY_TO_STUDIO', api.resolveEntry('?source=legacy'), api.routes.STUDIO);
-  equal('PUBLISHED_WITH_CAMPAIGN_TO_RUNTIME', api.resolveEntry('?source=published&campaignId=campana-1'), api.routes.RUNTIME);
-  equal('PUBLISHED_WITHOUT_CAMPAIGN_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?source=published'), api.routes.RUNTIME);
+  equal('PUBLISHED_WITH_IDENTITY_TO_RUNTIME', api.resolveEntry('?source=published&campaignId=campana-1&publicationId=pub-1'), api.routes.RUNTIME);
+  equal('PUBLISHED_WITHOUT_IDENTIFIERS_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?source=published'), api.routes.RUNTIME);
+  equal('PUBLISHED_WITHOUT_PUBLICATION_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?source=published&campaignId=campana-1'), api.routes.RUNTIME);
   equal('CAMPAIGN_WITHOUT_SOURCE_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?campaignId=campana-1'), api.routes.RUNTIME);
+  equal('PUBLICATION_WITHOUT_SOURCE_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?publicationId=pub-1'), api.routes.RUNTIME);
   equal('INVALID_SOURCE_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?source=other'), api.routes.RUNTIME);
   equal('DUPLICATE_SOURCE_STAYS_RUNTIME_CANDIDATE', api.resolveEntry('?source=legacy&source=published'), api.routes.RUNTIME);
 

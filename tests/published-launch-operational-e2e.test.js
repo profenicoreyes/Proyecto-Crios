@@ -325,7 +325,7 @@
       assert('LAUNCH_PUBLICATION_ID', activeState.publicationId === publicationId, 'publicationId launch incorrecto.');
       assert('LAUNCH_LINK_VISIBLE', activeLink.hidden === false, 'Enlace activo oculto.');
       assert('LAUNCH_LINK_TEXT', activeLink.text === 'Abrir campaña en CRIOS', 'Texto incorrecto.');
-      assert('LAUNCH_LINK_HREF', activeLink.href === '../index.html?source=published&campaignId=' + encodeURIComponent(campaignId), 'Href incorrecto.');
+      assert('LAUNCH_LINK_HREF', activeLink.href === '../index.html?source=published&campaignId=' + encodeURIComponent(campaignId) + '&publicationId=' + encodeURIComponent(publicationId), 'Href incorrecto.');
       assert('LAUNCH_LINK_TARGET', activeLink.target === '_blank', 'Target incorrecto.');
       assert('LAUNCH_LINK_REL', activeLink.rel === 'noopener', 'Rel incorrecto.');
       assert('LAUNCH_LINK_DATA_CAMPAIGN', activeLink.campaignId === campaignId, 'Dataset campaign incorrecto.');
@@ -337,10 +337,12 @@
       await waitGroups(runtime, 'runtime-success');
       assert('RUNTIME_URL_SOURCE_PUBLISHED', new URL(runtime.location.href).searchParams.get('source') === 'published', 'source no published.');
       assert('RUNTIME_URL_CAMPAIGN_ID', new URL(runtime.location.href).searchParams.get('campaignId') === campaignId, 'campaignId URL incorrecto.');
+      assert('RUNTIME_URL_PUBLICATION_ID', new URL(runtime.location.href).searchParams.get('publicationId') === publicationId, 'publicationId URL incorrecto.');
       assert('RUNTIME_MODE_PUBLISHED', runtime.CRIOS.runtimeCampaignMode === 'published', 'Modo Runtime incorrecto.');
       assert('RUNTIME_LAUNCH_EXPLICIT', runtime.CRIOS.runtimeLaunch.explicit === true, 'Launch no explícito.');
       assert('RUNTIME_LAUNCH_NOT_BLOCKED', runtime.CRIOS.runtimeLaunch.blocked === false, 'Launch bloqueado.');
       assert('RUNTIME_LAUNCH_CAMPAIGN', runtime.CRIOS.runtimeLaunch.campaignId === campaignId, 'Campaign launch incorrecta.');
+      assert('RUNTIME_LAUNCH_PUBLICATION', runtime.CRIOS.runtimeLaunch.publicationId === publicationId, 'Publication launch incorrecta.');
       assert('RUNTIME_LAUNCH_FROZEN', Object.isFrozen(runtime.CRIOS.runtimeLaunch), 'Launch Runtime no congelado.');
 
       await identify(runtime, 'Alumno Stage 4', 'Operador Stage 4', 'ALUMNO_STAGE4');

@@ -34,11 +34,11 @@
     });
   }
 
-  function buildPublishedLaunchSearch(campaignId) {
+  function buildPublishedLaunchSearch(campaignId, publicationId) {
     var launchContract = window.CRIOS_RUNTIME_LAUNCH;
     if (!launchContract || typeof launchContract.buildPublishedLaunchSearch !== 'function') return null;
     try {
-      return launchContract.buildPublishedLaunchSearch(campaignId);
+      return launchContract.buildPublishedLaunchSearch(campaignId, publicationId);
     } catch (error) {
       return null;
     }
@@ -97,11 +97,11 @@
       );
     }
 
-    var launchSearch = buildPublishedLaunchSearch(campaignId);
+    var launchSearch = buildPublishedLaunchSearch(campaignId, publicationId);
     if (!launchSearch) {
       return unavailable(
         STATUS.INVALID_ACTIVE_REFERENCE,
-        'La referencia activa contiene un identificador de campaña inválido.',
+        'La referencia activa contiene identificadores de publicación inválidos.',
         activeReference
       );
     }
@@ -119,7 +119,7 @@
   }
 
   window.CRIOS_STUDIO_RUNTIME_LAUNCH = Object.freeze({
-    version: '1.0.0',
+    version: '1.1.0',
     status: STATUS,
     buildDescriptor: buildDescriptor
   });

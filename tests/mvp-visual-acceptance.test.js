@@ -518,7 +518,7 @@
       await waitFor(function(){ return !studio.document.getElementById('studioRuntimeLaunchLink').hidden; }, 20000, 'studio-link-active');
       var link = linkSnapshot(studio);
       assert('STUDIO_LAUNCH_LINK_AVAILABLE', link.exists && !link.hidden && Boolean(link.href), 'Enlace no disponible.');
-      assert('STUDIO_LAUNCH_LINK_CANONICAL', link.href === '../index.html?source=published&campaignId=' + encodeURIComponent(campaignId), 'Enlace no canónico.');
+      assert('STUDIO_LAUNCH_LINK_CANONICAL', link.href === '../index.html?source=published&campaignId=' + encodeURIComponent(campaignId) + '&publicationId=' + encodeURIComponent(publicationId), 'Enlace no canónico.');
       assert('STUDIO_LAUNCH_PUBLICATION_PINNED', link.publicationId === publicationId, 'Publicación activa incorrecta.');
       equal('STUDIO_PERSISTENCE_STATUS', persistenceStatus(studio).status, 'READY');
       details.campaignId = campaignId;

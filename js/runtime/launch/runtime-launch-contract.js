@@ -2,14 +2,15 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var MODES = Object.freeze({
     LEGACY: 'legacy',
     PUBLISHED: 'published'
   });
   var PARAMETERS = Object.freeze({
     SOURCE: 'source',
-    CAMPAIGN_ID: 'campaignId'
+    CAMPAIGN_ID: 'campaignId',
+    PUBLICATION_ID: 'publicationId'
   });
   var ERROR_CODES = Object.freeze({
     MALFORMED_QUERY: 'MALFORMED_QUERY',
@@ -19,16 +20,20 @@
     UNSUPPORTED_SOURCE: 'UNSUPPORTED_SOURCE',
     CAMPAIGN_ID_REQUIRED: 'CAMPAIGN_ID_REQUIRED',
     CAMPAIGN_ID_NOT_ALLOWED: 'CAMPAIGN_ID_NOT_ALLOWED',
-    INVALID_CAMPAIGN_ID: 'INVALID_CAMPAIGN_ID'
+    INVALID_CAMPAIGN_ID: 'INVALID_CAMPAIGN_ID',
+    PUBLICATION_ID_REQUIRED: 'PUBLICATION_ID_REQUIRED',
+    PUBLICATION_ID_NOT_ALLOWED: 'PUBLICATION_ID_NOT_ALLOWED',
+    INVALID_PUBLICATION_ID: 'INVALID_PUBLICATION_ID'
   });
   var CONSTANTS = Object.freeze({
     modes: MODES,
     parameters: PARAMETERS,
     errorCodes: ERROR_CODES,
-    maxCampaignIdLength: 160
+    maxCampaignIdLength: 160,
+    maxPublicationIdLength: 200
   });
   var RESOLUTION_KEYS = ['success', 'request', 'error'];
-  var REQUEST_KEYS = ['explicit', 'sourceMode', 'campaignId'];
+  var REQUEST_KEYS = ['explicit', 'sourceMode', 'campaignId', 'publicationId'];
   var ERROR_KEYS = ['code', 'message', 'parameter'];
 
   function isPlainObject(value) {
@@ -54,11 +59,12 @@
     return Object.freeze(value);
   }
 
-  function createRequest(explicit, sourceMode, campaignId) {
+  function createRequest(explicit, sourceMode, campaignId, publicationId) {
     return deepFreeze({
       explicit: Boolean(explicit),
       sourceMode: sourceMode == null ? null : String(sourceMode),
-      campaignId: campaignId == null ? null : String(campaignId)
+      campaignId: campaignId == null ? null : String(campaignId),
+      publicationId: publicationId == null ? null : String(publicationId)
     });
   }
 
@@ -105,7 +111,7 @@
         var rawKey = separator >= 0 ? pairs[index].slice(0, separator) : pairs[index];
         var rawValue = separator >= 0 ? pairs[index].slice(separator + 1) : '';
         var key = decodeComponent(rawKey);
-        if (key !== PARAMETERS.SOURCE && key !== PARAMETERS.CAMPAIGN_ID) continue;
+        if (key !== PARAMETERS.SOURCE && key !== PARAMETERS.CAMPAIGN_ID && key !== PARAMETERS.PUBLICATION_ID) continue;
         counts[key] = (counts[key] || 0) + 1;
         if (counts[key] > 1) {
           return { success: false, error: failure(ERROR_CODES.DUPLICATE_PARAMETER, 'Launch parameter must appear only once.', key) };
@@ -119,13 +125,21 @@
     return { success: true, values: values, counts: counts };
   }
 
-  function normalizeCampaignId(value) {
+  function normalizeIdentifier(value, maxLength) {
     if (typeof value !== 'string') return null;
     var normalized = value.trim();
     if (!normalized) return null;
-    if (normalized.length > CONSTANTS.maxCampaignIdLength) return null;
+    if (normalized.length > maxLength) return null;
     if (/[\u0000-\u001F\u007F]/.test(normalized)) return null;
     return normalized;
+  }
+
+  function normalizeCampaignId(value) {
+    return normalizeIdentifier(value, CONSTANTS.maxCampaignIdLength);
+  }
+
+  function normalizePublicationId(value) {
+    return normalizeIdentifier(value, CONSTANTS.maxPublicationIdLength);
   }
 
   function resolveLaunchRequest(search) {
@@ -134,12 +148,13 @@
 
     var hasSource = Boolean(parsed.counts[PARAMETERS.SOURCE]);
     var hasCampaignId = Boolean(parsed.counts[PARAMETERS.CAMPAIGN_ID]);
+    var hasPublicationId = Boolean(parsed.counts[PARAMETERS.PUBLICATION_ID]);
 
-    if (!hasSource && !hasCampaignId) {
-      return createResolution(true, createRequest(false, null, null), null);
+    if (!hasSource && !hasCampaignId && !hasPublicationId) {
+      return createResolution(true, createRequest(false, null, null, null), null);
     }
-    if (!hasSource && hasCampaignId) {
-      return failure(ERROR_CODES.SOURCE_REQUIRED, 'source is required when campaignId is present.', PARAMETERS.SOURCE);
+    if (!hasSource && (hasCampaignId || hasPublicationId)) {
+      return failure(ERROR_CODES.SOURCE_REQUIRED, 'source is required when a published launch identifier is present.', PARAMETERS.SOURCE);
     }
 
     var sourceMode = String(parsed.values[PARAMETERS.SOURCE] || '').trim();
@@ -154,7 +169,10 @@
       if (hasCampaignId) {
         return failure(ERROR_CODES.CAMPAIGN_ID_NOT_ALLOWED, 'campaignId is not allowed for legacy launches.', PARAMETERS.CAMPAIGN_ID);
       }
-      return createResolution(true, createRequest(true, MODES.LEGACY, null), null);
+      if (hasPublicationId) {
+        return failure(ERROR_CODES.PUBLICATION_ID_NOT_ALLOWED, 'publicationId is not allowed for legacy launches.', PARAMETERS.PUBLICATION_ID);
+      }
+      return createResolution(true, createRequest(true, MODES.LEGACY, null, null), null);
     }
 
     if (!hasCampaignId) {
@@ -165,7 +183,15 @@
       return failure(ERROR_CODES.INVALID_CAMPAIGN_ID, 'campaignId is invalid.', PARAMETERS.CAMPAIGN_ID);
     }
 
-    return createResolution(true, createRequest(true, MODES.PUBLISHED, campaignId), null);
+    if (!hasPublicationId) {
+      return failure(ERROR_CODES.PUBLICATION_ID_REQUIRED, 'publicationId is required for published launches.', PARAMETERS.PUBLICATION_ID);
+    }
+    var publicationId = normalizePublicationId(parsed.values[PARAMETERS.PUBLICATION_ID]);
+    if (!publicationId) {
+      return failure(ERROR_CODES.INVALID_PUBLICATION_ID, 'publicationId is invalid.', PARAMETERS.PUBLICATION_ID);
+    }
+
+    return createResolution(true, createRequest(true, MODES.PUBLISHED, campaignId, publicationId), null);
   }
 
   function invalidCampaignIdError() {
@@ -175,10 +201,21 @@
     return error;
   }
 
-  function buildPublishedLaunchSearch(campaignId) {
-    var normalized = normalizeCampaignId(campaignId);
-    if (!normalized) throw invalidCampaignIdError();
-    return '?' + PARAMETERS.SOURCE + '=' + MODES.PUBLISHED + '&' + PARAMETERS.CAMPAIGN_ID + '=' + encodeURIComponent(normalized);
+  function invalidPublicationIdError() {
+    var error = new Error('publicationId is invalid.');
+    error.code = ERROR_CODES.INVALID_PUBLICATION_ID;
+    error.parameter = PARAMETERS.PUBLICATION_ID;
+    return error;
+  }
+
+  function buildPublishedLaunchSearch(campaignId, publicationId) {
+    var normalizedCampaign = normalizeCampaignId(campaignId);
+    if (!normalizedCampaign) throw invalidCampaignIdError();
+    var normalizedPublication = normalizePublicationId(publicationId);
+    if (!normalizedPublication) throw invalidPublicationIdError();
+    return '?' + PARAMETERS.SOURCE + '=' + MODES.PUBLISHED +
+      '&' + PARAMETERS.CAMPAIGN_ID + '=' + encodeURIComponent(normalizedCampaign) +
+      '&' + PARAMETERS.PUBLICATION_ID + '=' + encodeURIComponent(normalizedPublication);
   }
 
   function buildLegacyLaunchSearch() {
@@ -192,9 +229,13 @@
       if (value.error !== null || !exactKeys(value.request, REQUEST_KEYS) || !Object.isFrozen(value.request)) return false;
       if (typeof value.request.explicit !== 'boolean') return false;
       if (value.request.sourceMode !== null && value.request.sourceMode !== MODES.LEGACY && value.request.sourceMode !== MODES.PUBLISHED) return false;
-      if (value.request.sourceMode === MODES.PUBLISHED && normalizeCampaignId(value.request.campaignId) !== value.request.campaignId) return false;
-      if (value.request.sourceMode !== MODES.PUBLISHED && value.request.campaignId !== null) return false;
-      if (!value.request.explicit && (value.request.sourceMode !== null || value.request.campaignId !== null)) return false;
+      if (value.request.sourceMode === MODES.PUBLISHED) {
+        if (normalizeCampaignId(value.request.campaignId) !== value.request.campaignId) return false;
+        if (normalizePublicationId(value.request.publicationId) !== value.request.publicationId) return false;
+      } else if (value.request.campaignId !== null || value.request.publicationId !== null) {
+        return false;
+      }
+      if (!value.request.explicit && (value.request.sourceMode !== null || value.request.campaignId !== null || value.request.publicationId !== null)) return false;
       if (value.request.explicit && value.request.sourceMode === null) return false;
       return true;
     }

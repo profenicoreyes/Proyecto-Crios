@@ -12,11 +12,12 @@
     try {
       params = new URLSearchParams(search == null ? '' : String(search));
     } catch (error) {
-      return { source: [], campaignId: [] };
+      return { source: [], campaignId: [], publicationId: [] };
     }
     return {
       source: params.getAll('source'),
-      campaignId: params.getAll('campaignId')
+      campaignId: params.getAll('campaignId'),
+      publicationId: params.getAll('publicationId')
     };
   }
 
@@ -24,9 +25,10 @@
     var values = knownValues(search);
     var sources = values.source;
     var campaignIds = values.campaignId;
+    var publicationIds = values.publicationId;
 
-    if (sources.length === 0 && campaignIds.length === 0) return ROUTES.STUDIO;
-    if (sources.length === 1 && sources[0] === 'legacy' && campaignIds.length === 0) return ROUTES.STUDIO;
+    if (sources.length === 0 && campaignIds.length === 0 && publicationIds.length === 0) return ROUTES.STUDIO;
+    if (sources.length === 1 && sources[0] === 'legacy' && campaignIds.length === 0 && publicationIds.length === 0) return ROUTES.STUDIO;
     return ROUTES.RUNTIME;
   }
 
@@ -47,7 +49,7 @@
   }
 
   window.CRIOS_RUNTIME_ENTRY_GATE = Object.freeze({
-    version: '1.0.0',
+    version: '1.1.0',
     routes: ROUTES,
     resolveEntry: resolveEntry,
     enforce: enforce

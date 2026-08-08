@@ -16,12 +16,14 @@ const runtimeLaunchState = runtimeLaunchSelectionApi && typeof runtimeLaunchSele
     blocked: true,
     sourceMode: null,
     campaignId: null,
+    publicationId: null,
     error: Object.freeze({ code: 'LAUNCH_SELECTION_UNAVAILABLE', message: 'Launch selection is unavailable.', parameter: null })
   });
 const runtimeLaunchBlocked = runtimeLaunchState.blocked;
 const runtimeLaunchError = runtimeLaunchState.error;
 const runtimeCampaignMode = runtimeLaunchState.sourceMode;
 const requestedPublishedCampaignId = runtimeLaunchState.campaignId;
+const requestedPublishedPublicationId = runtimeLaunchState.publicationId;
 const runtimeCampaignModeValid = !runtimeLaunchBlocked && (runtimeCampaignMode === 'legacy' || runtimeCampaignMode === 'published');
 let preparedRuntimeCampaign = null;
 
@@ -1569,7 +1571,7 @@ async function preparePublishedForIdentity(realName,characterName,groupName,reco
   await ensureDomainModulesLoaded();
   const adapter=(window.CRIOS_DOMAIN||{}).runtimeBootstrapAdapter;
   if(!adapter) return {success:false,error:{code:'BOOTSTRAP_DEPENDENCY_MISSING'}};
-  const options={mode:runtimeCampaignMode,campaignId:campanaActivaId,identity:[realName,characterName,groupName].join('|'),runtimePublicationApi:window.CRIOS_RUNTIME_EXECUTABLE_PUBLICATION,publicationCore:window.CRIOS_PUBLICATION_CORE,missionHandlersApi:window.CRIOS_RUNTIME_MISSION_HANDLERS,persistenceApi:window.CRIOS_PUBLICATION_PERSISTENCE,telemetry:emitBootstrapRuntime};
+  const options={mode:runtimeCampaignMode,campaignId:campanaActivaId,publicationId:requestedPublishedPublicationId,identity:[realName,characterName,groupName].join('|'),runtimePublicationApi:window.CRIOS_RUNTIME_EXECUTABLE_PUBLICATION,publicationCore:window.CRIOS_PUBLICATION_CORE,missionHandlersApi:window.CRIOS_RUNTIME_MISSION_HANDLERS,persistenceApi:window.CRIOS_PUBLICATION_PERSISTENCE,telemetry:emitBootstrapRuntime};
   const pinned=recoverPinned&&sessionData&&sessionData.campana&&sessionData.campana.sourceMode==='published'?sessionData.campana:null;
   return pinned
     ? adapter.recoverPublishedCampaign({...options,pinnedPublication:pinned})
