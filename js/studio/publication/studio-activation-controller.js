@@ -41,21 +41,50 @@
     });
   }
 
+  function unavailableResult() {
+    return deepFreeze({
+      success: false,
+      changed: false,
+      reference: null,
+      publication: null,
+      record: null,
+      error: { code: 'ACTIVATION_SERVICE_UNAVAILABLE', message: 'CRIOS activation service is not available.', metadata: null }
+    });
+  }
+
   function createStudioActivationController(options) {
     var opts = options && typeof options === 'object' ? options : {};
     var publicationApi = opts.publicationApi;
     var activationApi = opts.activationApi;
     var core = opts.core;
     var activationStore = opts.activationStore || null;
+    var hasInjectedActivationService = Object.prototype.hasOwnProperty.call(opts, 'activationService');
+    var injectedActivationService = hasInjectedActivationService ? opts.activationService : null;
     var onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : function(){};
 
-    var service = activationApi.createActivationService({
-      publicationReader: function(publicationId){ return publicationApi.getPublication(publicationId); },
-      publicationLister: function(campaignId){ return publicationApi.listPublications(campaignId); },
-      canonicalizer: function(publication){ return core.buildCanonicalContent(publication); },
-      hashCalculator: function(canonicalContent){ return core.calculateContentHash(canonicalContent); },
-      activationStore: activationStore || undefined
-    });
+    var service = null;
+
+    function isActivationService(value) {
+      return Boolean(value &&
+        typeof value.activatePublication === 'function' &&
+        typeof value.deactivatePublication === 'function' &&
+        typeof value.rollbackPublication === 'function' &&
+        typeof value.getActiveReference === 'function' &&
+        typeof value.resolveActivePublication === 'function' &&
+        typeof value.listHistory === 'function');
+    }
+
+    if (hasInjectedActivationService) {
+      service = isActivationService(injectedActivationService) ? injectedActivationService : null;
+    } else if (activationApi && typeof activationApi.createActivationService === 'function' && publicationApi && core) {
+      service = activationApi.createActivationService({
+        publicationReader: function(publicationId){ return publicationApi.getPublication(publicationId); },
+        publicationLister: function(campaignId){ return publicationApi.listPublications(campaignId); },
+        canonicalizer: function(publication){ return core.buildCanonicalContent(publication); },
+        hashCalculator: function(canonicalContent){ return core.calculateContentHash(canonicalContent); },
+        activationStore: activationStore || undefined
+      });
+    }
 
     var state = {
       status: STATUS.IDLE,
@@ -73,8 +102,8 @@
 
     function refresh(campaignId, patch) {
       var key = String(campaignId || state.currentCampaignId || '').trim();
-      var reference = key ? service.getActiveReference(key) : null;
-      var history = key ? service.listHistory(key) : Object.freeze([]);
+      var reference = service && key ? service.getActiveReference(key) : null;
+      var history = service && key ? service.listHistory(key) : Object.freeze([]);
       state = Object.assign({}, state, patch || {}, {
         currentCampaignId: key,
         activeReference: reference,
@@ -83,10 +112,11 @@
     }
 
     function setCurrentCampaign(campaignId) {
-      refresh(campaignId, {
+      var key = String(campaignId || '').trim();
+      refresh(key, {
         status: state.busy
           ? state.status
-          : (service.getActiveReference(String(campaignId || '').trim()) ? STATUS.ACTIVE : STATUS.INACTIVE)
+          : (service && service.getActiveReference(key) ? STATUS.ACTIVE : STATUS.INACTIVE)
       });
     }
 
@@ -108,34 +138,41 @@
       return frozenCopy(result);
     }
 
+    function failUnavailable(campaignId) {
+      return finish(campaignId, unavailableResult());
+    }
+
     async function activatePublication(campaignId, publicationId, callOptions) {
       if (state.busy) return busyResult(state.activeReference);
+      if (!service) return failUnavailable(campaignId);
       begin(STATUS.ACTIVATING, campaignId);
       return finish(campaignId, await service.activatePublication(campaignId, publicationId, callOptions));
     }
 
-    function deactivatePublication(campaignId, callOptions) {
+    async function deactivatePublication(campaignId, callOptions) {
       if (state.busy) return busyResult(state.activeReference);
+      if (!service) return failUnavailable(campaignId);
       begin(STATUS.DEACTIVATING, campaignId);
-      return finish(campaignId, service.deactivatePublication(campaignId, callOptions));
+      return finish(campaignId, await service.deactivatePublication(campaignId, callOptions));
     }
 
     async function rollbackPublication(campaignId, targetPublicationId, callOptions) {
       if (state.busy) return busyResult(state.activeReference);
+      if (!service) return failUnavailable(campaignId);
       begin(STATUS.ROLLING_BACK, campaignId);
       return finish(campaignId, await service.rollbackPublication(campaignId, targetPublicationId, callOptions));
     }
 
     function getActiveReference(campaignId) {
-      return service.getActiveReference(campaignId);
+      return service ? service.getActiveReference(campaignId) : null;
     }
 
     function resolveActivePublication(campaignId) {
-      return service.resolveActivePublication(campaignId);
+      return service ? service.resolveActivePublication(campaignId) : unavailableResult();
     }
 
     function listHistory(campaignId) {
-      return service.listHistory(campaignId);
+      return service ? service.listHistory(campaignId) : Object.freeze([]);
     }
 
     function getState() {
@@ -143,7 +180,7 @@
     }
 
     function canRollback(publication) {
-      if (!publication || !state.activeReference) return false;
+      if (!service || !publication || !state.activeReference) return false;
       if (publication.campaignId !== state.activeReference.campaignId) return false;
       if (publication.version >= state.activeReference.version) return false;
       return state.history.some(function(record){ return record.nextPublicationId === publication.publicationId; });
