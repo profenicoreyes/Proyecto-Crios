@@ -602,6 +602,7 @@
     var publicationCore = window.CRIOS_PUBLICATION_CORE;
     var publicationAdapterFactory = window.CRIOS_STUDIO_PUBLICATION_ADAPTER;
     var publicationControllerFactory = window.CRIOS_STUDIO_PUBLICATION_CONTROLLER;
+    var remotePublicationBootstrapFactory = window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP;
     var activationApi = window.CRIOS_PUBLICATION_ACTIVATION;
     var activationControllerFactory = window.CRIOS_STUDIO_ACTIVATION_CONTROLLER;
     var persistenceApi = window.CRIOS_PUBLICATION_PERSISTENCE;
@@ -616,6 +617,7 @@
     var persistenceCoordinator = null;
     var publicationStore = null;
     var activationStore = null;
+    var remotePublicationSelection = null;
     var recoveredCampaignId = '';
     var missionSpecAdapter = null;
 
@@ -660,6 +662,29 @@
       }
     }
 
+    var remotePublicationConfigPresent = Object.prototype.hasOwnProperty.call(
+      window,
+      'CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG'
+    );
+
+    if (remotePublicationBootstrapFactory &&
+        typeof remotePublicationBootstrapFactory.createServiceSelection === 'function') {
+      remotePublicationSelection = remotePublicationBootstrapFactory.createServiceSelection({
+        core: publicationCore,
+        store: publicationStore
+      });
+    } else if (remotePublicationConfigPresent) {
+      remotePublicationSelection = Object.freeze({
+        configured: true,
+        service: null,
+        error: Object.freeze({
+          code: 'REMOTE_PUBLICATION_MODULE_UNAVAILABLE',
+          message: 'Remote publication bootstrap is not available.',
+          metadata: null
+        })
+      });
+    }
+
     if (publicationCore && publicationAdapterFactory && publicationControllerFactory) {
       try {
         var publicationAdapter = publicationAdapterFactory.createStudioPublicationAdapter({
@@ -672,7 +697,7 @@
           }));
         }
 
-        var publicationController = publicationControllerFactory.createStudioPublicationController({
+        var publicationControllerOptions = {
           core: publicationCore,
           adapter: publicationAdapter,
           missionSpecAdapter: missionSpecAdapter,
@@ -680,7 +705,15 @@
           onStateChange: function(){
             render(missions, campaigns, taxonomy);
           }
-        });
+        };
+
+        if (remotePublicationSelection && remotePublicationSelection.configured) {
+          publicationControllerOptions.publicationService = remotePublicationSelection.service;
+        }
+
+        var publicationController = publicationControllerFactory.createStudioPublicationController(
+          publicationControllerOptions
+        );
 
         studioPublicationController = publicationController;
 
@@ -807,6 +840,10 @@
 
     try { delete window.CRIOS_STUDIO_PUBLICATION_ADAPTER; } catch (ignoreA) {}
     try { delete window.CRIOS_STUDIO_PUBLICATION_CONTROLLER; } catch (ignoreC) {}
+    try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP; } catch (ignoreRemoteBootstrap) {}
+    try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_SERVICE; } catch (ignoreRemoteService) {}
+    try { delete window.CRIOS_REMOTE_PUBLICATION_CLIENT; } catch (ignoreRemoteClient) {}
+    try { delete window.CRIOS_REMOTE_PUBLICATION_CONTRACT; } catch (ignoreRemoteContract) {}
     try { delete window.CRIOS_STUDIO_ACTIVATION_CONTROLLER; } catch (ignoreActivation) {}
     try { delete window.CRIOS_STUDIO_PERSISTENCE_CONTROLLER; } catch (ignorePersistence) {}
     try { delete window.CRIOS_STUDIO_GEOMETRY_AREA_SPEC_CATALOG; } catch (ignoreCatalog) {}
