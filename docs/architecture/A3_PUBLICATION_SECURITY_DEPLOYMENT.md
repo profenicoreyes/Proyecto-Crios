@@ -197,3 +197,9 @@ After live deployment:
 5. B4 may be reverted only after B5 deployment/configuration is no longer depended upon.
 
 Never roll B4 back first while a live B5 configuration still expects its Runtime readers.
+
+## B6C — contexto seguro para la clave docente
+
+La validación cross-device confirmó que un Studio abierto desde una IP LAN por HTTP no es un contexto seguro del navegador. Aunque el endpoint remoto use HTTPS, el documento y JavaScript de Studio habrían sido entregados por HTTP antes de solicitar la credencial. Por ese motivo CRIOS no solicita la clave docente cuando `window.isSecureContext === false` y devuelve `INSECURE_CONTEXT` antes de cualquier prompt o POST autenticado.
+
+La operación docente autenticada debe realizarse desde HTTPS o desde un origen local tratado como seguro por el navegador (`localhost` / `127.0.0.1` durante desarrollo). Runtime puede seguir leyéndose desde LAN HTTP únicamente para validaciones locales; esa capacidad no amplía el modelo de seguridad de producción.

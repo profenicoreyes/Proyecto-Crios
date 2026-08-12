@@ -7,6 +7,7 @@ REGISTRO_MISIONES.registrar({
   nombreCorto: 'Hangar',
   mapa: Object.freeze({ titulo: 'Hangar', subtitulo: 'Perforación', clase: 'm-hangar' }),
   clasificacion: Object.freeze({ materia: 'matematica', tema: 'geometria', subtema: 'calculoAreas', nivel: 'educacion-media', dificultad: 3 }),
+  curriculum: CRIOS_CURRICULUM.createMissionReference('anep-ebi-matematica-t5-g7-areas'),
   narrativa: Object.freeze({ ubicacion: 'Hangar de Perforación', objetivo: 'Determinar la superficie libre segura para maniobrar.' }),
   tipoActividad: 'respuesta-numerica-con-procedimiento',
   duracionEstimadaMinutos: 15,

@@ -7,6 +7,7 @@ REGISTRO_MISIONES.registrar({
   nombreCorto: 'Energía',
   mapa: Object.freeze({ titulo: 'Centro de Energía', subtitulo: 'Calefacción', clase: 'm-energy' }),
   clasificacion: Object.freeze({ materia: 'matematica', tema: 'geometria', subtema: 'calculoAreas', nivel: 'educacion-media', dificultad: 2 }),
+  curriculum: CRIOS_CURRICULUM.createMissionReference('anep-ebi-matematica-t5-g7-areas'),
   narrativa: Object.freeze({ ubicacion: 'Centro de Energía', objetivo: 'Determinar la superficie activa para distribuir la calefacción.' }),
   tipoActividad: 'respuesta-numerica-con-procedimiento',
   duracionEstimadaMinutos: 12,

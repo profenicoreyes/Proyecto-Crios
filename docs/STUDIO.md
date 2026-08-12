@@ -13,7 +13,8 @@ Studio permite:
 - visualizar el banco de cuatro misiones: `energy`, `greenhouse`, `ice` y `hangar`;
 - agregar, quitar y reordenar misiones del Campaign Draft;
 - editar nombre, descripción y escenario;
-- consultar resumen, cantidad, duración, dificultad y validación;
+- agregar una nota docente opcional a cada misión dentro de la campaña, sin mutar la misión base del catálogo;
+- consultar resumen, cantidad, duración y dificultad derivadas automáticamente de las misiones, además de la referencia curricular sugerida ANEP;
 - mantener y validar cuatro `missionSpecs` y su `runtimeExecutionManifest`;
 - validar el Draft con Publication Core;
 - publicar una nueva versión inmutable con contenido canónico y `contentHash`;
@@ -31,6 +32,8 @@ Véanse [STUDIO_PUBLICATION_INTEGRATION.md](architecture/STUDIO_PUBLICATION_INTE
 `window.CRIOS_CAMPAIGN_DRAFT` conserva el estado mutable de edición. Expone operaciones para leer la campaña y sus misiones, agregar, mover o quitar misiones, editar metadatos, y leer o establecer `missionSpecs` y la evaluación final.
 
 El Draft vive en memoria, cambia su revisión cuando cambia contenido publicable, no es Campaign Release, no alimenta Runtime directamente y no se recupera desde la persistencia de publicaciones. La persistencia implementada conserva publicaciones y activaciones, no una sesión remota de edición colaborativa.
+
+La dificultad, la duración estimada y la referencia curricular sugerida no son datos que ingrese el docente. Cada misión los declara como metadatos canónicos de CRIOS y Studio deriva los valores de campaña: suma de duraciones, promedio aritmético de dificultades e intersección de referencias curriculares. La gramática curricular se centraliza en `js/curriculum/anep-curriculum-catalog.js`. Véase [A3_CURRICULUM_METADATA_MODEL.md](architecture/A3_CURRICULUM_METADATA_MODEL.md).
 
 ## 4. Servicios compartidos y APIs
 

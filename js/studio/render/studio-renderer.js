@@ -93,8 +93,19 @@
       badge.className = 'mission-badge';
       badge.textContent = getCampaignLabel(mission.id);
 
+      const metrics = document.createElement('div');
+      metrics.className = 'mission-meta-line';
+      metrics.textContent = 'Dificultad de misión ' + String(mission.dificultadNivel || 0) + '/6 · ' +
+        String(mission.duracionMinutos || 0) + ' min';
+
+      const curriculum = document.createElement('div');
+      curriculum.className = 'mission-curriculum-line';
+      curriculum.textContent = String(mission.curriculumLabel || 'Sin referencia curricular');
+
       content.appendChild(title);
       content.appendChild(badge);
+      content.appendChild(metrics);
+      content.appendChild(curriculum);
 
       const action = document.createElement('button');
       action.className = 'btn studio-btn';
@@ -226,107 +237,58 @@
     if (!config) {
       config = document.createElement('div');
       config.className = 'campaign-config';
-
-      const title = document.createElement('label');
-      title.className = 'config-title';
-      title.textContent = 'Configuración';
-      config.appendChild(title);
-
-      const dificultadLabel = document.createElement('label');
-      dificultadLabel.textContent = 'Dificultad';
-      config.appendChild(dificultadLabel);
-
-      const dificultadSelect = document.createElement('select');
-      dificultadSelect.id = 'campaign-dificultad-input';
-      dificultadSelect.className = 'config-select';
-      ['baja', 'media', 'alta'].forEach(val => {
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = val.charAt(0).toUpperCase() + val.slice(1);
-        dificultadSelect.appendChild(opt);
-      });
-      dificultadSelect.addEventListener('change', (e) => {
-        if (typeof options.alCambiarDificultad === 'function') options.alCambiarDificultad(e.target.value);
-      });
-      config.appendChild(dificultadSelect);
-
-      const duracionLabel = document.createElement('label');
-      duracionLabel.textContent = 'Duración estimada (minutos)';
-      config.appendChild(duracionLabel);
-
-      const duracionInput = document.createElement('input');
-      duracionInput.id = 'campaign-duracion-input';
-      duracionInput.type = 'number';
-      duracionInput.className = 'config-input';
-      duracionInput.min = '0';
-      duracionInput.step = '1';
-      duracionInput.addEventListener('input', (e) => {
-        if (typeof options.alCambiarDuracion === 'function') options.alCambiarDuracion(e.target.value);
-      });
-      config.appendChild(duracionInput);
-
-      const nivelLabel = document.createElement('label');
-      nivelLabel.textContent = 'Nivel';
-      config.appendChild(nivelLabel);
-
-      const nivelSelect = document.createElement('select');
-      nivelSelect.id = 'campaign-nivel-input';
-      nivelSelect.className = 'config-select';
-      const nivelOpt = document.createElement('option');
-      nivelOpt.value = '';
-      nivelOpt.textContent = 'Seleccionar nivel';
-      nivelSelect.appendChild(nivelOpt);
-      ['7° EBI', '8° EBI', '9° EBI', '1° EMS', 'Otro'].forEach(val => {
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = val;
-        nivelSelect.appendChild(opt);
-      });
-      nivelSelect.addEventListener('change', (e) => {
-        if (typeof options.alCambiarNivel === 'function') options.alCambiarNivel(e.target.value);
-      });
-      config.appendChild(nivelSelect);
-
-      const modalidadLabel = document.createElement('label');
-      modalidadLabel.textContent = 'Modalidad';
-      config.appendChild(modalidadLabel);
-
-      const modalidadSelect = document.createElement('select');
-      modalidadSelect.id = 'campaign-modalidad-input';
-      modalidadSelect.className = 'config-select';
-      ['Individual', 'Parejas', 'Equipos'].forEach(val => {
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = val;
-        modalidadSelect.appendChild(opt);
-      });
-      modalidadSelect.addEventListener('change', (e) => {
-        if (typeof options.alCambiarModalidad === 'function') options.alCambiarModalidad(e.target.value);
-      });
-      config.appendChild(modalidadSelect);
-
       section.appendChild(config);
-    } else {
-      const dificultadSelect = config.querySelector('#campaign-dificultad-input');
-      const duracionInput = config.querySelector('#campaign-duracion-input');
-      const nivelSelect = config.querySelector('#campaign-nivel-input');
-      const modalidadSelect = config.querySelector('#campaign-modalidad-input');
+    }
 
-      if (dificultadSelect && dificultadSelect.value !== (options.campaignDificultad || 'media')) {
-        dificultadSelect.value = options.campaignDificultad || 'media';
-      }
+    config.innerHTML = '';
 
-      if (duracionInput && duracionInput.value !== String(options.campaignDuracion || 0)) {
-        duracionInput.value = options.campaignDuracion || 0;
-      }
+    const indicators = options.campaignMissionIndicators || {};
+    const curriculum = indicators.curriculum || { label: 'Sin misiones', status: 'empty' };
+    const difficulty = Number(indicators.dificultadNivel) || 0;
+    const duration = Number(indicators.duracionTotal) || 0;
 
-      if (nivelSelect && nivelSelect.value !== (options.campaignNivel || '')) {
-        nivelSelect.value = options.campaignNivel || '';
-      }
+    const title = document.createElement('div');
+    title.className = 'config-title';
+    title.textContent = 'Estimación automática';
+    config.appendChild(title);
 
-      if (modalidadSelect && modalidadSelect.value !== (options.campaignModalidad || 'Individual')) {
-        modalidadSelect.value = options.campaignModalidad || 'Individual';
-      }
+    const help = document.createElement('p');
+    help.className = 'config-help';
+    help.textContent = 'CRIOS deriva estos datos de las misiones seleccionadas. No requieren carga manual del docente.';
+    config.appendChild(help);
+
+    const grid = document.createElement('div');
+    grid.className = 'derived-metadata-grid';
+
+    const difficultyItem = document.createElement('div');
+    difficultyItem.className = 'derived-metadata-item';
+    difficultyItem.innerHTML = '<span>Dificultad estimada de campaña</span><strong>' +
+      (difficulty > 0 ? difficulty.toFixed(1) + '/6' : '—') + '</strong>';
+
+    const durationItem = document.createElement('div');
+    durationItem.className = 'derived-metadata-item';
+    durationItem.innerHTML = '<span>Duración estimada</span><strong>' +
+      (duration > 0 ? String(duration) + ' min' : '—') + '</strong>';
+
+    grid.appendChild(difficultyItem);
+    grid.appendChild(durationItem);
+    config.appendChild(grid);
+
+    const curriculumTitle = document.createElement('div');
+    curriculumTitle.className = 'derived-curriculum-title';
+    curriculumTitle.textContent = 'Referencia curricular sugerida';
+    config.appendChild(curriculumTitle);
+
+    const curriculumValue = document.createElement('div');
+    curriculumValue.className = 'derived-curriculum-value derived-curriculum-' + String(curriculum.status || 'incomplete');
+    curriculumValue.textContent = String(curriculum.label || 'Metadatos curriculares no disponibles');
+    config.appendChild(curriculumValue);
+
+    if (curriculum.status === 'compatible' && Array.isArray(curriculum.subsistemas) && curriculum.subsistemas.length) {
+      const systems = document.createElement('div');
+      systems.className = 'derived-curriculum-detail';
+      systems.textContent = 'Subsistemas: ' + curriculum.subsistemas.join(' / ');
+      config.appendChild(systems);
     }
   }
 
@@ -338,6 +300,7 @@
     const draftMissions = Array.isArray(options.draftMissions) ? options.draftMissions : [];
     const onMove = typeof options.onMove === 'function' ? options.onMove : () => {};
     const onRemove = typeof options.onRemove === 'function' ? options.onRemove : () => {};
+    const onMissionNote = typeof options.onMissionNote === 'function' ? options.onMissionNote : () => false;
 
     const header = document.createElement('div');
     header.className = 'draft-header';
@@ -358,9 +321,35 @@
       const item = document.createElement('li');
       item.className = 'mini draft-item';
 
+      const body = document.createElement('div');
+      body.className = 'draft-mission-body';
+
       const title = document.createElement('div');
       title.className = 'mission-title';
       title.textContent = mission.nombreCorto || mission.titulo || mission.id;
+
+      const details = document.createElement('div');
+      details.className = 'draft-mission-details';
+      details.textContent = 'Dificultad de misión ' + String(mission.dificultadNivel || 0) + '/6 · ' +
+        String(mission.duracionMinutos || 0) + ' min · ' +
+        String(mission.curriculumLabel || 'Sin referencia curricular');
+
+      const noteLabel = document.createElement('label');
+      noteLabel.className = 'mission-note-label';
+      noteLabel.textContent = 'Nota docente (opcional)';
+
+      const note = document.createElement('textarea');
+      note.className = 'mission-note-input';
+      note.rows = 2;
+      note.maxLength = 500;
+      note.value = String(mission.notaDocente || '');
+      note.placeholder = 'Anotación específica para esta misión dentro de la campaña';
+      note.addEventListener('input', () => onMissionNote(mission.id, note.value));
+
+      noteLabel.appendChild(note);
+      body.appendChild(title);
+      body.appendChild(details);
+      body.appendChild(noteLabel);
 
       const controls = document.createElement('div');
       controls.className = 'draft-controls';
@@ -386,7 +375,7 @@
       controls.appendChild(down);
       controls.appendChild(remove);
 
-      item.appendChild(title);
+      item.appendChild(body);
       item.appendChild(controls);
       list.appendChild(item);
     });
@@ -402,10 +391,10 @@
     const draftMissions = Array.isArray(options.draftMissions) ? options.draftMissions : [];
     const name = String(options.campaignName || '').trim();
     const scenario = String(options.campaignScenario || 'Sin seleccionar').trim();
-    const dificultad = String(options.campaignDificultad || 'media');
-    const duracion = Number(options.campaignDuracion) || 0;
-    const nivel = String(options.campaignNivel || '');
-    const modalidad = String(options.campaignModalidad || 'Individual');
+    const indicators = options.campaignMissionIndicators || {};
+    const dificultad = Number(indicators.dificultadNivel) || 0;
+    const duracion = Number(indicators.duracionTotal) || 0;
+    const curriculum = indicators.curriculum || { label: 'Sin misiones', status: 'empty' };
     const validacion = options.validacion || { estado: 'correcto', errores: [], advertencias: [] };
     const tieneErrores = validacion.estado === 'con errores';
 
@@ -423,19 +412,15 @@
 
     const dificultadItem = document.createElement('div');
     dificultadItem.className = 'summary-item';
-    dificultadItem.textContent = 'Dificultad: ' + dificultad;
+    dificultadItem.textContent = 'Dificultad estimada de campaña: ' + (dificultad > 0 ? dificultad.toFixed(1) + '/6' : '—');
 
     const duracionItem = document.createElement('div');
     duracionItem.className = 'summary-item';
-    duracionItem.textContent = 'Duración: ' + (duracion > 0 ? duracion + ' min' : '(sin definir)');
+    duracionItem.textContent = 'Duración estimada: ' + (duracion > 0 ? duracion + ' min' : '—');
 
     const nivelItem = document.createElement('div');
     nivelItem.className = 'summary-item';
-    nivelItem.textContent = 'Nivel: ' + (nivel || '(sin seleccionar)');
-
-    const modalidadItem = document.createElement('div');
-    modalidadItem.className = 'summary-item';
-    modalidadItem.textContent = 'Modalidad: ' + modalidad;
+    nivelItem.textContent = 'Referencia curricular sugerida: ' + String(curriculum.label || 'Sin misiones');
 
     const items = document.createElement('div');
     items.className = 'summary-item';
@@ -451,7 +436,6 @@
     target.appendChild(dificultadItem);
     target.appendChild(duracionItem);
     target.appendChild(nivelItem);
-    target.appendChild(modalidadItem);
     target.appendChild(items);
     target.appendChild(status);
 
@@ -1011,27 +995,18 @@
       alCambiarEscenario: config.alCambiarEscenario
     });
     renderConfiguracion({
-      campaignDificultad: config.campaignDificultad,
-      campaignDuracion: config.campaignDuracion,
-      campaignNivel: config.campaignNivel,
-      campaignModalidad: config.campaignModalidad,
-      alCambiarDificultad: config.alCambiarDificultad,
-      alCambiarDuracion: config.alCambiarDuracion,
-      alCambiarNivel: config.alCambiarNivel,
-      alCambiarModalidad: config.alCambiarModalidad
+      campaignMissionIndicators: config.campaignMissionIndicators || {}
     });
     renderDraft({
       draftMissions: Array.isArray(config.draftMissions) ? config.draftMissions : [],
       onMove: config.onMove,
-      onRemove: config.onRemove
+      onRemove: config.onRemove,
+      onMissionNote: config.onMissionNote
     });
     renderSummary({
       campaignName: config.campaignName,
       campaignScenario: config.campaignScenario,
-      campaignDificultad: config.campaignDificultad,
-      campaignDuracion: config.campaignDuracion,
-      campaignNivel: config.campaignNivel,
-      campaignModalidad: config.campaignModalidad,
+      campaignMissionIndicators: config.campaignMissionIndicators || {},
       draftMissions: Array.isArray(config.draftMissions) ? config.draftMissions : [],
       validacion: config.validacion
     });

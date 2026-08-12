@@ -140,15 +140,15 @@ const stored2=leerPublicacionPorIdRemota(book,pub2.publicationId);eq(stored2.pub
 
 // activate first
 const a1=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub1.publicationId,'req-act-1');
-r=callRemote(a1);ok(r.success&&r.data.changed,'activate changed');validate(r,a1,'activate response');const ref1=r.data.reference;
+r=callRemote(a1);ok(r.success&&r.data.changed,'activate changed');validate(r,a1,'activate response');
 
-// public get exact active
+// public GET resolves the exact immutable publication and does not depend on active state
 const g1=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-a',pub1.publicationId,'req-get-1');
-r=callRemote(g1,'');ok(r.success,'public get active');validate(r,g1,'get response');eq(r.data.publication,pub1,'get publication exact');eq(r.data.activeReference,ref1,'get ref exact');
+r=callRemote(g1,'');ok(r.success,'public get exact publication');validate(r,g1,'get response');eq(r.data.publication,pub1,'get publication exact');eq(r.data.activeReference,{campaignId:pub1.campaignId,publicationId:pub1.publicationId,version:pub1.version,contentHash:pub1.contentHash,activatedAt:stored1.record.createdAt},'get compatibility reference derives from immutable publication');
 
-// inactive publication inaccessible
+// another publication remains readable even while a different version is active
 const g2=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-a',pub2.publicationId,'req-get-2');
-r=callRemote(g2,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','inactive not readable');validate(r,g2,'inactive get response');
+r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'inactive publication direct link remains readable');validate(r,g2,'inactive direct get response');
 
 // activate same with new request => unchanged no event
 const a1b=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub1.publicationId,'req-act-1b');
@@ -166,14 +166,14 @@ r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.public
 const eventRows=book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow();
 r=callRemote(a2);ok(r.success&&r.data.changed&&r.data.record.activationId==='req-act-2','activation replay');eq(book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow(),eventRows,'activation replay no event');validate(r,a2,'activation replay response');
 
-// old no longer readable; second readable
-r=callRemote(g1,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','old link expires after switch');
-r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'new link active');validate(r,g2,'new get response');
+// switching active state must not invalidate either direct immutable link
+r=callRemote(g1,'');ok(r.success&&r.data.publication.publicationId===pub1.publicationId,'old direct link survives active switch');validate(r,g1,'old direct get after switch');
+r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'new direct link remains readable');validate(r,g2,'new direct get response');
 
-// deactivation
+// deactivation changes legacy activation state but must not invalidate immutable links
 const d=CRIOS_REMOTE_PUBLICATION_CONTRACT.createDeactivateRequest('camp-a','req-deact-1');
 r=callRemote(d);ok(r.success&&r.data.changed&&r.data.reference===null,'deactivate');validate(r,d,'deactivate response');
-r=callRemote(g2,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','deactivated inaccessible');validate(r,g2,'deactivated get');
+r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'direct link survives deactivation');validate(r,g2,'direct get after deactivation');
 
 // replay deactivation
 const deRows=book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow();
@@ -197,13 +197,13 @@ r=callRemote(pf);ok(r.success,'formula campaign publish');const pubf=r.data.publ
 const af=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('=danger',pubf.publicationId,'req-form-act');r=callRemote(af);ok(r.success,'formula campaign activate');
 const gf=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('=danger',pubf.publicationId,'req-form-get');r=callRemote(gf,'');ok(r.success,'formula campaign get');validate(r,gf,'formula get response');
 
-// corrupt stored content is neutral/unavailable to student, not exposed as server internals
+// corrupt stored content is neutral/unavailable to readers, not exposed as server internals
 const chunkSheet=book.getSheetByName('CRIOS_PUBLICACION_BLOQUES');
 const chunkRows=chunkSheet.getRange(2,1,chunkSheet.getLastRow()-1,3).getDisplayValues();
 const corruptIndex=chunkRows.findIndex(row=>row[0]===pubf.publicationId);
 ok(corruptIndex>=0,'formula publication chunk located');
 chunkSheet.setCell(1+corruptIndex,2,"'not-valid-base64-@@");
-r=callRemote(gf,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','corrupt active publication is neutral unavailable');validate(r,gf,'corrupt get neutral response');
+r=callRemote(gf,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','corrupt publication is neutral unavailable');validate(r,gf,'corrupt get neutral response');
 
 // restore exact publication by leaving corruption isolated; doGet transport uses camp-a/pub2
 const gHttp=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-a',pub2.publicationId,'req-http-get');

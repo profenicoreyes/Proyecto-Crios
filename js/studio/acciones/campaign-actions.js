@@ -20,9 +20,16 @@
     return result && result.ok;
   }
 
+  function establecerNotaMision(id, nota) {
+    if (!window.CRIOS_CAMPAIGN_DRAFT) return false;
+    const result = window.CRIOS_CAMPAIGN_DRAFT.establecerNotaMision(id, nota);
+    return result && result.ok;
+  }
+
   window.CRIOS_CAMPAIGN_ACTIONS = {
     agregarMision: agregarMision,
     moverMision: moverMision,
-    quitarMision: quitarMision
+    quitarMision: quitarMision,
+    establecerNotaMision: establecerNotaMision
   };
 })();

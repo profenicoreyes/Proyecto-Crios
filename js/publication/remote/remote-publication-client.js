@@ -8,7 +8,8 @@
     TRANSPORT_FAILED: 'REMOTE_TRANSPORT_FAILED',
     HTTP_ERROR: 'REMOTE_HTTP_ERROR',
     RESPONSE_PARSE_FAILED: 'REMOTE_RESPONSE_PARSE_FAILED',
-    AUTH_UNAVAILABLE: 'WRITE_UNAUTHORIZED'
+    AUTH_UNAVAILABLE: 'WRITE_UNAUTHORIZED',
+    INSECURE_CONTEXT: 'INSECURE_CONTEXT'
   });
 
   function clone(value) {
@@ -205,10 +206,10 @@
         writeToken = await token();
       } catch (error) {
         return result(false, requestId, null, errorPayload(
-          ERROR_CODES.AUTH_UNAVAILABLE,
-          'Teacher write authorization is unavailable.',
+          text(error && error.code) === ERROR_CODES.INSECURE_CONTEXT ? ERROR_CODES.INSECURE_CONTEXT : ERROR_CODES.AUTH_UNAVAILABLE,
+          String(error && error.message || 'Teacher write authorization is unavailable.'),
           false,
-          { message: String(error && error.message || error) }
+          null
         ));
       }
 

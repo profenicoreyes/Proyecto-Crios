@@ -869,22 +869,31 @@ function procesarDesactivacionPublicacionRemota(libro, solicitud, requestHash) {
 }
 
 function procesarLecturaPublicacionRemota(libro, solicitud) {
-  const referencia = leerReferenciaActivaPublicacionRemota(libro, solicitud.payload.campaignId);
-  if (!referencia || referencia.publicationId !== solicitud.payload.publicationId) {
-    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.PUBLICATION_UNAVAILABLE, 'Publication is not active or is unavailable.', false);
+  const almacenada = leerPublicacionVerificadaRemota(libro, solicitud.payload.publicationId);
+  if (!almacenada || almacenada.publication.campaignId !== solicitud.payload.campaignId) {
+    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.PUBLICATION_UNAVAILABLE, 'Publication is unavailable.', false);
   }
 
-  const almacenada = leerPublicacionVerificadaRemota(libro, solicitud.payload.publicationId);
-  if (!almacenada ||
-      almacenada.publication.campaignId !== solicitud.payload.campaignId ||
-      almacenada.publication.version !== referencia.version ||
-      almacenada.publication.contentHash !== referencia.contentHash) {
-    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.PUBLICATION_UNAVAILABLE, 'Publication integrity or active identity is invalid.', false);
+  const createdAt = almacenada.record && cadenaNormalizadaPublicacionRemota(almacenada.record.createdAt, 80);
+  if (!createdAt) {
+    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.PUBLICATION_UNAVAILABLE, 'Publication metadata is unavailable.', false);
   }
+
+  // Transitional protocol compatibility: GET remains on protocol 1.0 while direct
+  // immutable links stop depending on CRIOS_PUBLICACION_ACTIVAS. The field keeps
+  // the legacy activeReference shape but is derived only from the requested
+  // immutable publication; activatedAt carries the publication creation time.
+  const referenciaCompatibilidad = {
+    campaignId: almacenada.publication.campaignId,
+    publicationId: almacenada.publication.publicationId,
+    version: almacenada.publication.version,
+    contentHash: almacenada.publication.contentHash,
+    activatedAt: createdAt
+  };
 
   return crearRespuestaPublicacionRemota(solicitud, true, {
     publication: almacenada.publication,
-    activeReference: referencia
+    activeReference: referenciaCompatibilidad
   });
 }
 

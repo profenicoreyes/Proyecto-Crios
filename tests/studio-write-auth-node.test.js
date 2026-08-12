@@ -7,8 +7,8 @@ const vm = require('vm');
 const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'));
 const source = fs.readFileSync(path.join(repo, 'js/studio/publication/studio-write-auth.js'), 'utf8');
 
-function load(promptImpl) {
-  const window = { prompt: promptImpl };
+function load(promptImpl, isSecureContext = true) {
+  const window = { prompt: promptImpl, isSecureContext };
   window.window = window;
   const context = vm.createContext({ window, Object, String, Boolean, Number, Array, RegExp, Error });
   vm.runInContext(source, context, { filename: 'studio-write-auth.js' });
@@ -70,6 +70,20 @@ const custom = api.createPromptProvider({
 });
 equal(custom(), customToken, 'provider preserves unrestricted valid token exactly');
 equal(customMessage, 'Autorización docente', 'custom prompt message respected');
+
+
+const insecureCalls = [];
+const insecureApi = load((message) => { insecureCalls.push(message); return tokenA; }, false);
+const insecureProvider = insecureApi.createPromptProvider();
+let insecureError = null;
+try {
+  insecureProvider();
+} catch (error) {
+  insecureError = error;
+}
+equal(insecureError && insecureError.code, 'INSECURE_CONTEXT', 'insecure browser context blocks teacher secret before prompt');
+check(Boolean(insecureError && /HTTPS|localhost/.test(insecureError.message)), 'insecure context explains secure origin requirement');
+equal(insecureCalls.length, 0, 'teacher prompt is never shown in insecure context');
 
 const noPrompt = load(undefined);
 const noPromptProvider = noPrompt.createPromptProvider({ promptImpl: null });

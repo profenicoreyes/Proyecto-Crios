@@ -155,11 +155,15 @@
 
     var service;
     try {
-      service = serviceFactory.createRemotePublicationService({
+      var serviceOptions = {
         core: core,
         remoteClient: client,
         store: store || undefined
-      });
+      };
+      if (typeof opts.readDraftRevision === 'function') {
+        serviceOptions.readDraftRevision = opts.readDraftRevision;
+      }
+      service = serviceFactory.createRemotePublicationService(serviceOptions);
     } catch (serviceError) {
       return selection(
         true,

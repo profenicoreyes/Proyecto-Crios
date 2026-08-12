@@ -424,3 +424,31 @@ They may be deleted only after:
 4. a current bundle is created and verified.
 
 Permanent architecture/rollback documentation is never part of temporary cleanup.
+
+## 19. B6A descriptive curriculum metadata boundary
+
+A3-003B6A enriches `content.misiones` with pedagogical metadata without changing the remote transport or executable mission contract.
+
+Each selected mission may now carry:
+
+- a canonical `curriculum` reference defined by CRIOS;
+- an optional campaign-specific `notaDocente`.
+
+Mission difficulty and estimated duration already belong to the base mission metadata. Studio derives campaign duration as the sum of mission durations and campaign difficulty as the arithmetic mean of mission difficulties. The suggested ANEP reference is derived from the compatible intersection of mission curriculum references.
+
+These fields are serialized inside publication content and therefore covered by the existing `contentHash`. They are not added to `runtimeExecutionManifest`, are not required by the declarative area handler and do not change `missionSpec`. The Runtime remote reader, publication identity contract and Apps Script persistence API remain unchanged.
+
+This boundary is intentional: curriculum and teacher notes are descriptive/publication metadata, while `missionSpec + handler` remains the executable boundary. A pre-B6A Runtime may ignore the additional mission fields without needing a publication migration.
+
+The permanent design and rollback contract is recorded in `docs/architecture/A3_CURRICULUM_METADATA_MODEL.md`.
+
+### B6C — navegador LAN HTTP, SHA-256 y frontera segura de Studio
+
+La validación cross-device B6 confirmó en Chrome 151 sobre Windows que un origen LAN `http://<ip>:<puerto>` no es un contexto seguro: `window.isSecureContext === false`, `crypto.subtle` no está disponible y `crypto.randomUUID` tampoco. En el mismo origen se verificó que tanto GET como POST hacia el Web App de Apps Script atraviesan correctamente la redirección a `script.googleusercontent.com` y que un POST con credencial deliberadamente inválida retorna `WRITE_UNAUTHORIZED` sin mutación.
+
+CRIOS mantiene dos fronteras distintas:
+
+- **Runtime/lectura publicada:** debe poder verificar `contentHash` también durante una validación cross-device sobre LAN HTTP. `publication-hash.js` conserva SHA-256 como algoritmo único, prefiere Web Crypto cuando está disponible y usa una implementación determinista equivalente solo cuando `crypto.subtle.digest` no existe.
+- **Studio/escritura docente autenticada:** la clave docente no debe solicitarse desde un contexto inseguro. `studio-write-auth.js` falla cerrado con `INSECURE_CONTEXT` antes de mostrar el prompt cuando `window.isSecureContext === false`. Para desarrollo local, `localhost`/`127.0.0.1` o HTTPS son la frontera admitida para introducir la clave. Producción debe servirse por HTTPS.
+
+El fallback SHA-256 no convierte HTTP en un canal seguro ni sustituye TLS. Solo preserva la verificación determinista de contenido donde el navegador no expone Web Crypto. La autoridad remota sigue recomputando `contentHash`, y las escrituras siguen requiriendo la clave docente efímera.

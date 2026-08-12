@@ -33,8 +33,20 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function createCampaignId() {
+    var suffix;
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      suffix = window.crypto.randomUUID();
+    } else {
+      suffix = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+    }
+    return 'campaign-' + suffix;
+  }
+
   function createDraft() {
-    return safeClone(defaultDraft);
+    var draft = safeClone(defaultDraft);
+    draft.id = createCampaignId();
+    return draft;
   }
 
   function normalizeId(value) {
@@ -107,6 +119,7 @@
     if (!missionCopy.missionSpec && _missionSpecCatalog) {
       missionCopy.missionSpec = _missionSpecCatalog.get(id);
     }
+    missionCopy.notaDocente = '';
     _draft.misiones.push(safeClone(missionCopy));
     return { ok: true };
   }
@@ -123,6 +136,23 @@
     const mid = normalizeId(id);
     const mission = (_draft.misiones || []).find(item => item && String(item.id) === mid);
     return mission && mission.missionSpec ? safeClone(mission.missionSpec) : null;
+  }
+
+  function establecerNotaMision(id, nota) {
+    const mid = normalizeId(id);
+    const mission = (_draft.misiones || []).find(item => item && String(item.id) === mid);
+    if (!mission) return { ok: false, motivo: 'no_encontrado' };
+
+    const value = nota === null || nota === undefined ? '' : String(nota);
+    if (value.length > 500) return { ok: false, motivo: 'nota_demasiado_larga' };
+    mission.notaDocente = value;
+    return { ok: true };
+  }
+
+  function obtenerNotaMision(id) {
+    const mid = normalizeId(id);
+    const mission = (_draft.misiones || []).find(item => item && String(item.id) === mid);
+    return mission ? String(mission.notaDocente || '') : '';
   }
 
   function establecerEvaluacionFinal(value) {
@@ -184,6 +214,8 @@
     establecerEscenario,
     establecerMissionSpec,
     obtenerMissionSpec,
+    establecerNotaMision,
+    obtenerNotaMision,
     establecerEvaluacionFinal,
     obtenerEvaluacionFinal,
     configurarCatalogoSpecs,

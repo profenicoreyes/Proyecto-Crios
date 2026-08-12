@@ -34,16 +34,40 @@
       }
     }
 
-    // Regla 4: Error - Duración inválida
-    const duracion = Number(draft.duracion) || 0;
-    if (duracion <= 0) {
-      errores.push('La duración debe ser mayor que cero.');
-    }
+    // Regla 4: metadatos pedagógicos definidos por CRIOS, no por el docente.
+    if (Array.isArray(draft.misiones)) {
+      draft.misiones.forEach((mission, index) => {
+        const dificultad = Number(mission && mission.clasificacion && mission.clasificacion.dificultad);
+        if (!Number.isInteger(dificultad) || dificultad < 1 || dificultad > 6) {
+          errores.push(`La misión ${index + 1} no tiene una dificultad CRIOS válida.`);
+        }
 
-    // Regla 5: Advertencia - Nivel no seleccionado
-    const nivel = String(draft.nivel || '').trim();
-    if (nivel === '') {
-      advertencias.push('Se recomienda indicar el nivel educativo.');
+        const duracion = Number(mission && mission.duracionEstimadaMinutos);
+        if (!Number.isInteger(duracion) || duracion <= 0) {
+          errores.push(`La misión ${index + 1} no tiene una duración estimada válida.`);
+        }
+
+        const curriculumApi = window.CRIOS_CURRICULUM;
+        const curriculumValidation = curriculumApi && typeof curriculumApi.validateMissionReference === 'function'
+          ? curriculumApi.validateMissionReference(mission && mission.curriculum)
+          : { valid: false };
+        if (!curriculumValidation.valid) {
+          errores.push(`La misión ${index + 1} no tiene una referencia curricular ANEP válida.`);
+        }
+
+        const nota = mission && mission.notaDocente !== undefined ? String(mission.notaDocente) : '';
+        if (nota.length > 500) {
+          errores.push(`La nota docente de la misión ${index + 1} supera los 500 caracteres.`);
+        }
+      });
+
+      const curriculumApi = window.CRIOS_CURRICULUM;
+      if (draft.misiones.length > 0 && curriculumApi && typeof curriculumApi.deriveCampaignReference === 'function') {
+        const reference = curriculumApi.deriveCampaignReference(draft.misiones);
+        if (reference.status === 'mixed') {
+          advertencias.push('Las misiones seleccionadas no comparten una única referencia curricular sugerida.');
+        }
+      }
     }
 
     return {

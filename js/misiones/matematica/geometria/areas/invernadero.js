@@ -7,6 +7,7 @@ REGISTRO_MISIONES.registrar({
   nombreCorto: 'Invernadero',
   mapa: Object.freeze({ titulo: 'Invernadero', subtitulo: 'Cultivos', clase: 'm-green' }),
   clasificacion: Object.freeze({ materia: 'matematica', tema: 'geometria', subtema: 'calculoAreas', nivel: 'educacion-media', dificultad: 2 }),
+  curriculum: CRIOS_CURRICULUM.createMissionReference('anep-ebi-matematica-t5-g7-areas'),
   narrativa: Object.freeze({ ubicacion: 'Invernadero', objetivo: 'Determinar la superficie que todavía puede destinarse a cultivos.' }),
   tipoActividad: 'respuesta-numerica-con-procedimiento',
   duracionEstimadaMinutos: 12,

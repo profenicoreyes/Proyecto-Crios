@@ -48,7 +48,7 @@
 
     const difficultyTotal = list.reduce((acc, mission) => acc + getMissionDifficulty(mission), 0);
     const averageDifficulty = missionCount > 0
-      ? Math.max(1, Math.min(6, Math.round(difficultyTotal / missionCount)))
+      ? Math.max(1, Math.min(6, Math.round((difficultyTotal / missionCount) * 10) / 10))
       : 0;
 
     return {

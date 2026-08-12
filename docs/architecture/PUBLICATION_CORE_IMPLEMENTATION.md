@@ -128,7 +128,7 @@ Se excluyen metadatos operativos y de record/publicación del contenido canónic
 
 `calculateContentHash(canonicalContent, options)`:
 - exige cadena;
-- usa SHA-256 (`crypto.subtle.digest` por defecto);
+- usa SHA-256; prefiere `crypto.subtle.digest` cuando Web Crypto está disponible y usa una implementación determinista equivalente cuando el navegador no expone `crypto.subtle`;
 - permite `options.digest` inyectable para tests;
 - devuelve hex minúsculo de 64 caracteres;
 - falla de forma controlada cuando no hay soporte criptográfico.

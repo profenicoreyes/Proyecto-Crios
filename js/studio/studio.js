@@ -85,9 +85,16 @@
   }
 
   function normalizarMisionVista(mision) {
+    const curriculum = mision && mision.curriculum ? mision.curriculum : null;
     return Object.assign({}, mision, {
       dificultadNivel: obtenerNivelDificultadMision(mision),
-      duracionMinutos: obtenerDuracionMision(mision)
+      duracionMinutos: obtenerDuracionMision(mision),
+      curriculumLabel: curriculum
+        ? String(curriculum.nivelCodigo || '') + ' · Tramo ' + String(curriculum.tramo || '') + ' · ' +
+          (Array.isArray(curriculum.gradosSugeridos)
+            ? curriculum.gradosSugeridos.map(grado => String(grado) + '.º grado').join(' / ')
+            : '') + ' · ' + String(curriculum.unidadCurricular || '')
+        : 'Sin referencia curricular'
     });
   }
 
@@ -99,10 +106,16 @@
     );
 
     const metadata = calculateReleaseMetadata(lista);
+    const curriculumApi = window.CRIOS_CURRICULUM;
+    const curriculum = curriculumApi && typeof curriculumApi.deriveCampaignReference === 'function'
+      ? curriculumApi.deriveCampaignReference(lista)
+      : { status: 'incomplete', compatible: false, label: 'Metadatos curriculares no disponibles', gradosSugeridos: [] };
+
     return {
       cantidad: Number(metadata.missionCount) || 0,
       duracionTotal: Number(metadata.estimatedDuration) || 0,
-      dificultadNivel: Number(metadata.averageDifficulty) || 0
+      dificultadNivel: Number(metadata.averageDifficulty) || 0,
+      curriculum
     };
   }
 
@@ -167,6 +180,9 @@
       onRemove: id => {
         const removed = window.CRIOS_CAMPAIGN_ACTIONS.quitarMision(id);
         if (removed) render(missions, campaigns, taxonomy);
+      },
+      onMissionNote: (id, note) => {
+        return window.CRIOS_CAMPAIGN_ACTIONS.establecerNotaMision(id, note);
       }
     };
   }
@@ -620,6 +636,7 @@
     var publicationStore = null;
     var activationStore = null;
     var remotePublicationSelection = null;
+    var publicationAdapter = null;
     var remoteActivationService = null;
     var recoveredCampaignId = '';
     var missionSpecAdapter = null;
@@ -674,7 +691,12 @@
         typeof remotePublicationBootstrapFactory.createServiceSelection === 'function') {
       remotePublicationSelection = remotePublicationBootstrapFactory.createServiceSelection({
         core: publicationCore,
-        store: publicationStore
+        store: publicationStore,
+        readDraftRevision: function(){
+          return publicationAdapter && typeof publicationAdapter.readDraftRevision === 'function'
+            ? publicationAdapter.readDraftRevision()
+            : '';
+        }
       });
     } else if (remotePublicationConfigPresent) {
       remotePublicationSelection = Object.freeze({
@@ -691,7 +713,7 @@
 
     if (publicationCore && publicationAdapterFactory && publicationControllerFactory) {
       try {
-        var publicationAdapter = publicationAdapterFactory.createStudioPublicationAdapter({
+        publicationAdapter = publicationAdapterFactory.createStudioPublicationAdapter({
           draftApi: window.CRIOS_CAMPAIGN_DRAFT
         });
         if (recoveredCampaignId) {

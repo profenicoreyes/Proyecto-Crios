@@ -22,6 +22,11 @@
       : 'Clave docente para publicar. No se guarda en este dispositivo.';
 
     return function provideWriteToken() {
+      if (window.isSecureContext === false) {
+        var insecureError = new Error('La clave docente solo puede ingresarse desde un contexto seguro (HTTPS o localhost).');
+        insecureError.code = 'INSECURE_CONTEXT';
+        throw insecureError;
+      }
       if (!promptImpl) return '';
       return normalizeToken(promptImpl(message));
     };

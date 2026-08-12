@@ -375,6 +375,22 @@ function createClient(tokenProvider) {
   equal(invalidContract.error.code, 'REMOTE_RESPONSE_INVALID', 'contract-invalid response code');
   check(!invalidContract.error.retryable, 'contract-invalid response non-retryable');
 
+  const insecureClient = api.createClient({
+    endpoint: 'https://example.invalid/exec',
+    contract,
+    writeTokenProvider: function(){
+      const error = new Error('La clave docente solo puede ingresarse desde un contexto seguro (HTTPS o localhost).');
+      error.code = 'INSECURE_CONTEXT';
+      throw error;
+    },
+    fetchImpl: async function(){ throw new Error('fetch must not run'); },
+    requestIdFactory: () => 'insecure-context-id'
+  });
+  const insecureResult = await insecureClient.deactivatePublication('camp-a');
+  check(!insecureResult.success, 'insecure auth provider blocks remote write');
+  equal(insecureResult.error.code, 'INSECURE_CONTEXT', 'auth provider error code preserved');
+  check(/HTTPS|localhost/.test(insecureResult.error.message), 'auth provider secure-context message preserved');
+
   const unavailableClient = api.createClient({ contract, endpoint: '', fetchImpl: fakeFetch, requestIdFactory: () => 'unavailable-id' });
   const unavailableClientResult = await unavailableClient.getPublication('camp-a', 'pub-a');
   check(!unavailableClientResult.success, 'missing endpoint fails safely');

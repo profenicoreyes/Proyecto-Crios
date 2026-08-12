@@ -76,15 +76,15 @@ function makeHarness(overrides) {
   return { calls, contract, core, store, service, clientFactory, serviceFactory };
 }
 
-function selection(api, harness, config) {
-  return api.createServiceSelection({
+function selection(api, harness, config, extra) {
+  return api.createServiceSelection(Object.assign({
     config,
     core: harness.core,
     store: harness.store,
     contract: harness.contract,
     clientFactory: harness.clientFactory,
     serviceFactory: harness.serviceFactory
-  });
+  }, extra || {}));
 }
 
 const api = global.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP;
@@ -147,6 +147,16 @@ delete global.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG;
   equal(result.configured, true, 'provider config selected');
   equal(providerCalls, 0, 'bootstrap never reads teacher credential');
   equal(h.calls.clientOptions.writeTokenProvider, provider, 'bootstrap passes provider by reference');
+}
+
+{
+  const h = makeHarness();
+  let revisionReads = 0;
+  const revisionReader = function(){ revisionReads += 1; return 'rev-live'; };
+  const result = selection(api, h, { endpoint: 'https://example.invalid/remote' }, { readDraftRevision: revisionReader });
+  equal(result.configured, true, 'revision-reader config selects remote mode');
+  equal(h.calls.serviceOptions.readDraftRevision, revisionReader, 'bootstrap forwards live draft revision reader by reference');
+  equal(revisionReads, 0, 'bootstrap does not read draft revision during composition');
 }
 
 {
@@ -284,6 +294,9 @@ check(scriptOrder.every(function(index, i){ return i === 0 || index > scriptOrde
 check(studioSource.includes('remotePublicationBootstrapFactory.createServiceSelection'), 'Studio calls remote bootstrap selection factory');
 check(studioSource.includes('remotePublicationSelection && remotePublicationSelection.configured'), 'Studio only injects publication service for explicit remote configuration');
 check(studioSource.includes('publicationControllerOptions.publicationService = remotePublicationSelection.service'), 'Studio forwards selected service through controller injection seam');
+check(studioSource.includes('var publicationAdapter = null;'), 'Studio shares one publication adapter across remote service and controller');
+check(studioSource.includes('readDraftRevision: function(){'), 'Studio supplies live draft revision reader to remote bootstrap');
+check(bootstrapSource.includes('serviceOptions.readDraftRevision = opts.readDraftRevision'), 'bootstrap forwards live revision reader into remote service');
 check(studioSource.includes("'CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG'"), 'Studio detects explicit remote configuration even if bootstrap module is unavailable');
 check(!studioSource.includes('script.google.com/macros/s/'), 'Studio wiring contains no fixed remote endpoint');
 check(!bootstrapSource.includes('script.google.com/macros/s/'), 'bootstrap contains no fixed remote endpoint');
@@ -409,6 +422,7 @@ async function runRealCompositionIntegration() {
   };
 
   try {
+    let revisionReads = 0;
     const selected = api.createServiceSelection({
       config: {
         endpoint: 'https://example.invalid/real-publication',
@@ -418,7 +432,11 @@ async function runRealCompositionIntegration() {
         }
       },
       core,
-      store
+      store,
+      readDraftRevision: function(){
+        revisionReads += 1;
+        return 'rev-real';
+      }
     });
 
     equal(selected.configured, true, 'real factories select remote mode');
@@ -427,7 +445,7 @@ async function runRealCompositionIntegration() {
     equal(providerCalls, 0, 'real factory composition does not read credential');
 
     const result = await selected.service.publishCampaign(
-      { campaignId: 'real-campaign', draftRevision: 'rev-real', nombre: 'Real composition' },
+      { campaignId: 'real-campaign', nombre: 'Real composition' },
       {
         campaignId: 'real-campaign',
         draftRevision: 'rev-real',
@@ -441,6 +459,7 @@ async function runRealCompositionIntegration() {
     equal(result.publication && result.publication.version, 7, 'server version remains authoritative');
     equal(result.record && result.record.createdAt, '2026-08-08T03:00:00.000Z', 'server createdAt remains authoritative');
     equal(providerCalls, 1, 'credential provider called exactly once for write');
+    equal(revisionReads, 2, 'live draft revision reader runs before build and immediately before remote write');
     equal(fetchCalls, 1, 'real client performs exactly one fake fetch');
     equal(observedUrl, 'https://example.invalid/real-publication', 'real client uses configured endpoint');
     equal(observedInit && observedInit.method, 'POST', 'real client uses POST for publication write');

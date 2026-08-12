@@ -401,3 +401,22 @@ body{position:static}
     scrollbar-gutter:auto;
   }
 }
+
+/* A3-003B6A — derived pedagogical metadata and mission notes. */
+.mission-meta-line,.mission-curriculum-line,.draft-mission-details{font-size:.78rem;line-height:1.35;color:var(--muted)}
+.mission-curriculum-line{color:rgba(190,236,255,.82)}
+.draft-mission-body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mission-note-label{display:flex;flex-direction:column;gap:5px;margin-top:4px;font-size:.78rem;color:var(--muted)}
+.mission-note-input{width:100%;min-height:54px;resize:vertical;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(0,0,0,.22);color:var(--text);padding:8px 9px;font:inherit;line-height:1.35}
+.mission-note-input:focus{outline:2px solid rgba(120,221,255,.18);box-shadow:0 0 0 3px rgba(120,221,255,.04)}
+.config-help{margin:0;color:var(--muted);font-size:.82rem;line-height:1.4}
+.derived-metadata-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.derived-metadata-item{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;background:rgba(120,221,255,.055);border:1px solid rgba(120,221,255,.12)}
+.derived-metadata-item span{font-size:.78rem;color:var(--muted)}
+.derived-metadata-item strong{color:var(--ice);font-size:1rem}
+.derived-curriculum-title{margin-top:2px;font-size:.78rem;color:var(--muted)}
+.derived-curriculum-value{font-size:.9rem;line-height:1.4;color:var(--text);padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.035)}
+.derived-curriculum-compatible{border-left:3px solid rgba(92,221,167,.75)}
+.derived-curriculum-mixed,.derived-curriculum-incomplete{border-left:3px solid rgba(255,182,46,.8)}
+.derived-curriculum-detail{font-size:.76rem;color:var(--muted)}
+@media(max-width:520px){.derived-metadata-grid{grid-template-columns:1fr}.draft-item{grid-template-columns:1fr}.draft-controls{justify-content:flex-end}}

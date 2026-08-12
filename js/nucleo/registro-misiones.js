@@ -9,8 +9,8 @@ const REGISTRO_MISIONES = (() => {
 
   function validarMision(mision) {
     const camposObligatorios = [
-      'id', 'numero', 'titulo', 'nombreCorto', 'mapa', 'clasificacion',
-      'narrativa', 'tipoActividad', 'etiquetas', 'generar', 'contenido'
+      'id', 'numero', 'titulo', 'nombreCorto', 'mapa', 'clasificacion', 'curriculum',
+      'narrativa', 'tipoActividad', 'duracionEstimadaMinutos', 'etiquetas', 'generar', 'contenido'
     ];
 
     camposObligatorios.forEach((campo) => {
@@ -21,6 +21,24 @@ const REGISTRO_MISIONES = (() => {
 
     if (catalogo.has(mision.id)) {
       throw new Error(`Ya existe una misión registrada con el id: ${mision.id}`);
+    }
+
+    const dificultad = Number(mision.clasificacion && mision.clasificacion.dificultad);
+    if (!Number.isInteger(dificultad) || dificultad < 1 || dificultad > 6) {
+      throw new Error(`La misión ${mision.id} debe definir una dificultad entera entre 1 y 6.`);
+    }
+
+    const duracion = Number(mision.duracionEstimadaMinutos);
+    if (!Number.isInteger(duracion) || duracion <= 0) {
+      throw new Error(`La misión ${mision.id} debe definir una duración estimada positiva en minutos.`);
+    }
+
+    if (!window.CRIOS_CURRICULUM || typeof window.CRIOS_CURRICULUM.validateMissionReference !== 'function') {
+      throw new Error('El catálogo curricular ANEP debe cargarse antes del registro de misiones.');
+    }
+    const curriculumValidation = window.CRIOS_CURRICULUM.validateMissionReference(mision.curriculum);
+    if (!curriculumValidation.valid) {
+      throw new Error(`La misión ${mision.id} tiene una referencia curricular inválida: ${curriculumValidation.issues.join(' ')}`);
     }
 
     if (typeof mision.generar !== 'function' || typeof mision.contenido !== 'function') {

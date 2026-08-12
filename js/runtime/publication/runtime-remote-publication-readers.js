@@ -79,7 +79,7 @@
     if (remoteCode === 'PUBLICATION_UNAVAILABLE') {
       return readerError(
         ERROR_CODES.PUBLICATION_UNAVAILABLE,
-        'Requested publication is not active or is unavailable.',
+        'Requested publication is unavailable.',
         { remoteCode: remoteCode }
       );
     }

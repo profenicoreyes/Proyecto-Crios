@@ -7,6 +7,7 @@ REGISTRO_MISIONES.registrar({
   nombreCorto: 'Banco de Hielo',
   mapa: Object.freeze({ titulo: 'Banco de Hielo', subtitulo: 'Muestras', clase: 'm-ice' }),
   clasificacion: Object.freeze({ materia: 'matematica', tema: 'geometria', subtema: 'calculoAreas', nivel: 'educacion-media', dificultad: 2 }),
+  curriculum: CRIOS_CURRICULUM.createMissionReference('anep-ebi-matematica-t5-g7-areas'),
   narrativa: Object.freeze({ ubicacion: 'Banco de Hielo', objetivo: 'Calcular la superficie exterior operativa alrededor de la cámara circular.' }),
   tipoActividad: 'respuesta-numerica-con-procedimiento',
   duracionEstimadaMinutos: 12,
