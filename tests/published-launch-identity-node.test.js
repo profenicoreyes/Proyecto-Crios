@@ -124,10 +124,9 @@ equal('publication alone stays runtime candidate', gate.resolveEntry('?publicati
 equal('missing publication stays runtime candidate', gate.resolveEntry('?source=published&campaignId=camp'), gate.routes.RUNTIME);
 
 check('studio launch api exists', Boolean(studio));
-equal('studio launch version', studio.version, '1.1.0');
+equal('studio launch version', studio.version, '2.0.0');
 const descriptor = studio.buildDescriptor({
-  activeReference: { campaignId: 'campaña uno', publicationId: 'publicación uno' },
-  persistenceState: { status: 'READY', activeReferenceCount: 1 },
+  publication: { campaignId: 'campaña uno', publicationId: 'publicación uno' },
   runtimePath: '../index.html'
 });
 check('studio descriptor available', descriptor.available === true);
@@ -136,11 +135,10 @@ equal('studio descriptor publication', descriptor.publicationId, 'publicación u
 equal('studio descriptor href', descriptor.href, '../index.html' + canonical);
 check('studio descriptor frozen', Object.isFrozen(descriptor));
 const invalidDescriptor = studio.buildDescriptor({
-  activeReference: { campaignId: 'camp', publicationId: 'p'.repeat(201) },
-  persistenceState: { status: 'READY', activeReferenceCount: 1 }
+  publication: { campaignId: 'camp', publicationId: 'p'.repeat(201) }
 });
 check('studio invalid publication blocked', invalidDescriptor.available === false);
-equal('studio invalid publication status', invalidDescriptor.status, 'INVALID_ACTIVE_REFERENCE');
+equal('studio invalid publication status', invalidDescriptor.status, 'INVALID_PUBLICATION');
 
 check('crios fallback carries publicationId', /campaignId:\s*null,\s*publicationId:\s*null,\s*error:/.test(criosSource));
 check('crios reads selected publicationId', criosSource.indexOf('const requestedPublishedPublicationId = runtimeLaunchState.publicationId;') >= 0);

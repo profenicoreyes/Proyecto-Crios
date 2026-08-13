@@ -483,81 +483,23 @@ function createService(remote, store, pubApi) {
     const contract = context.CRIOS_REMOTE_PUBLICATION_CONTRACT;
     const clientFactory = context.CRIOS_REMOTE_PUBLICATION_CLIENT;
     const transportCalls = [];
-    let serverActive = null;
-    let serverSequence = 0;
-
-    function envelope(request, data) {
-      return {
-        protocolVersion: '1.0',
-        operation: request.operation,
-        requestId: request.requestId,
-        success: true,
-        data,
-        error: null
-      };
-    }
-
-    async function fakeFetch(url, init) {
-      transportCalls.push({ url: String(url), init: init || {} });
-      let request;
-      if (init && init.method === 'POST') {
-        const outer = JSON.parse(init.body);
-        request = outer.request;
-        check(outer.writeToken === 'test-teacher-token', 'real client supplies injected write token to fake transport');
-        const campaignId = request.payload.campaignId;
-        if (request.operation === 'activatePublication') {
-          const publicationId = request.payload.publicationId;
-          const publication = publications[publicationId];
-          const previousId = serverActive ? serverActive.publicationId : null;
-          if (serverActive && serverActive.publicationId === publicationId) {
-            return { ok: true, status: 200, text: async function(){ return JSON.stringify(envelope(request, { changed: false, reference: serverActive, record: null })); } };
-          }
-          serverSequence += 1;
-          serverActive = {
-            campaignId,
-            publicationId,
-            version: publication.version,
-            contentHash: publication.contentHash,
-            activatedAt: '2026-08-08T13:0' + serverSequence + ':00.000Z'
-          };
-          const activationRecord = {
-            activationId: request.requestId,
-            action: 'ACTIVATE',
-            campaignId,
-            previousPublicationId: previousId,
-            nextPublicationId: publicationId,
-            occurredAt: serverActive.activatedAt
-          };
-          return { ok: true, status: 200, text: async function(){ return JSON.stringify(envelope(request, { changed: true, reference: serverActive, record: activationRecord })); } };
-        }
-        if (request.operation === 'deactivatePublication') {
-          const previousId = serverActive ? serverActive.publicationId : null;
-          if (!serverActive) {
-            return { ok: true, status: 200, text: async function(){ return JSON.stringify(envelope(request, { changed: false, reference: null, record: null })); } };
-          }
-          serverActive = null;
-          const activationRecord = {
-            activationId: request.requestId,
-            action: 'DEACTIVATE',
-            campaignId,
-            previousPublicationId: previousId,
-            nextPublicationId: null,
-            occurredAt: '2026-08-08T13:30:00.000Z'
-          };
-          return { ok: true, status: 200, text: async function(){ return JSON.stringify(envelope(request, { changed: true, reference: null, record: activationRecord })); } };
-        }
-      }
-      throw new Error('Unexpected fake transport call: ' + String(url));
-    }
+    let tokenReads = 0;
 
     const realClient = clientFactory.createClient({
       contract,
       endpoint: 'https://example.invalid/remote-activation',
-      fetchImpl: fakeFetch,
-      writeTokenProvider: function(){ return 'test-teacher-token'; },
-      requestIdFactory: function(operation){ return 'real-' + operation + '-' + String(transportCalls.length + 1); },
+      fetchImpl: async function(url, init){
+        transportCalls.push({ url: String(url), init: init || {} });
+        throw new Error('retired activation transport must not run');
+      },
+      writeTokenProvider: function(){ tokenReads += 1; return 'test-teacher-token'; },
+      requestIdFactory: function(operation){ return 'real-' + operation + '-1'; },
       timeoutMs: 5000
     });
+
+    equal(typeof realClient.activatePublication, 'undefined', 'real publication client exposes no activate method');
+    equal(typeof realClient.deactivatePublication, 'undefined', 'real publication client exposes no deactivate method');
+
     const store = makeStore();
     const service = api.createRemoteActivationService({
       activationApi: serviceActivationApi,
@@ -566,29 +508,17 @@ function createService(remote, store, pubApi) {
       store
     });
 
-    const first = await service.activatePublication('camp-1', 'pub-1', { requestId: 'real-activate-1' });
-    check(first.success && first.changed, 'real remote client + contract activates through fake transport');
-    equal(first.reference.publicationId, 'pub-1', 'real client activation server reference preserved');
-    equal(first.record.activationId, 'real-activate-1', 'real client activation request id preserved as server record id');
-    equal(transportCalls.length, 1, 'real client activation performs one fake transport call');
-    equal(transportCalls[0].init.method, 'POST', 'real client activation uses POST');
-    equal(store.commits.length, 1, 'real client activation is cached consistently');
+    const on = await service.activatePublication('camp-1', 'pub-1', { requestId: 'retired-activate' });
+    equal(on.success, false, 'legacy activation service fails closed with retired real client');
+    equal(on.error.code, 'REMOTE_ACTIVATION_UNAVAILABLE', 'retired real client maps activate to unavailable');
 
-    const second = await service.activatePublication('camp-1', 'pub-3', { requestId: 'real-activate-3' });
-    check(second.success && second.changed, 'second real client activation succeeds');
-    equal(second.reference.version, 3, 'server version remains authority through real client');
-    equal(second.record.previousPublicationId, 'pub-1', 'server previous publication preserved');
+    const off = await service.deactivatePublication('camp-1', { requestId: 'retired-deactivate' });
+    equal(off.success, false, 'legacy deactivation service fails closed with retired real client');
+    equal(off.error.code, 'REMOTE_ACTIVATION_UNAVAILABLE', 'retired real client maps deactivate to unavailable');
 
-    const rollback = await service.rollbackPublication('camp-1', 'pub-1', { requestId: 'real-rollback-1' });
-    check(rollback.success && rollback.changed, 'rollback uses real remote activate transport');
-    equal(rollback.reference.publicationId, 'pub-1', 'rollback real transport activates older publication');
-    equal(rollback.record.action, 'ACTIVATE', 'rollback retains protocol ACTIVATE record action');
-
-    const off = await service.deactivatePublication('camp-1', { requestId: 'real-deactivate-1' });
-    check(off.success && off.changed, 'real client deactivation succeeds');
-    equal(off.reference, null, 'real client deactivation clears authoritative reference');
-    equal(off.record.action, 'DEACTIVATE', 'real client deactivation record preserved');
-    equal(transportCalls.length, 4, 'activation, activation, rollback and deactivation use four fake transport calls');
+    equal(transportCalls.length, 0, 'retired mutable operations perform no real-client transport');
+    equal(tokenReads, 0, 'retired mutable operations never request teacher write token');
+    equal(store.commits.length, 0, 'retired real-client path writes no activation cache');
   }
 
   const source = fs.readFileSync(path.join(repo, 'js/studio/publication/studio-remote-activation-service.js'), 'utf8');
@@ -601,10 +531,11 @@ function createService(remote, store, pubApi) {
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_TEST_STATUS=' + (failed === 0 ? 'PASS' : 'FAIL'));
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_TEST_TOTAL=' + total);
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_TEST_FAILED=' + failed);
-  console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_REMOTE_AUTHORITY=true');
+  console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_REMOTE_AUTHORITY=LEGACY_FAKE_ONLY');
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_LOCAL_CACHE_BEST_EFFORT=true');
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_STALE_CACHE_DOES_NOT_OVERRIDE_REMOTE=true');
-  console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_ROLLBACK_USES_REMOTE_ACTIVATE=true');
+  console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_REAL_CLIENT_MUTABLE_OPERATIONS=false');
+  console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_REAL_CLIENT_FAILS_CLOSED=true');
   console.log('STUDIO_REMOTE_ACTIVATION_SERVICE_REAL_NETWORK=false');
   process.exitCode = failed === 0 ? 0 : 1;
 })().catch(function(error){

@@ -5,7 +5,6 @@
   function el(id){ return document.getElementById(id); }
 
   var studioPublicationController = null;
-  var studioActivationController = null;
   var studioPersistenceController = null;
   var studioMissionSpecController = null;
   var studioRuntimeLaunchApi = null;
@@ -383,12 +382,12 @@
     };
   }
 
-  function buildStudioRuntimeLaunchState(activationState, persistenceState) {
+  function buildStudioRuntimeLaunchState(publication) {
     var factory = window.CRIOS_STUDIO_RUNTIME_LAUNCH;
     if (!factory || typeof factory.buildDescriptor !== 'function') {
       return Object.freeze({
         available: false,
-        status: 'PERSISTENCE_UNAVAILABLE',
+        status: 'NO_PUBLICATION',
         message: 'El acceso a Runtime no está disponible.',
         campaignId: null,
         publicationId: null,
@@ -399,32 +398,8 @@
     }
 
     return factory.buildDescriptor({
-      activeReference: activationState && activationState.activeReference,
-      activationBusy: Boolean(activationState && activationState.busy),
-      persistenceState: persistenceState,
+      publication: publication || null,
       runtimePath: '../index.html'
-    });
-  }
-
-  function createReloadSafeActivationStore(store) {
-    return Object.freeze({
-      commit: function(reference, record, options){
-        var history = store.listHistory(record.campaignId);
-        var ids = new Set(history.map(function(item){ return item.activationId; }));
-        var storedRecord = record;
-        if (ids.has(record.activationId)) {
-          var next = history.reduce(function(max, item){
-            var match = /^activation-(\d+)$/.exec(item.activationId);
-            return match ? Math.max(max, Number(match[1])) : max;
-          }, 0) + 1;
-          while (ids.has('activation-' + next)) next += 1;
-          storedRecord = Object.freeze(Object.assign({}, record, { activationId: 'activation-' + next }));
-        }
-        return store.commit(reference, storedRecord, options);
-      },
-      getActiveReference: store.getActiveReference,
-      listHistory: store.listHistory,
-      snapshot: store.snapshot
     });
   }
 
@@ -457,33 +432,16 @@
       })
       : [];
 
-    const currentCampaignId = publicationState.currentCampaignId ||
-      (publicationHistory[0] && publicationHistory[0].campaignId) || '';
-
-    if (studioActivationController) {
-      studioActivationController.setCurrentCampaign(currentCampaignId);
-    }
-    const activationState = studioActivationController
-      ? studioActivationController.getState()
-      : { status: 'IDLE', busy: false, currentCampaignId: '', activeReference: null, history: [], lastResult: null, lastError: null };
-    const activationHistory = studioActivationController && currentCampaignId
-      ? studioActivationController.listHistory(currentCampaignId)
-      : [];
     const persistenceState = studioPersistenceController
       ? studioPersistenceController.getStatus()
       : { status: 'UNAVAILABLE', busy: false, storageKey: '', schemaVersion: 1, stateRevision: 0, updatedAt: null, serializedBytes: 0, publicationCount: 0, activeReferenceCount: 0, activationRecordCount: 0, lastError: null };
     const missionSpecState = studioMissionSpecController
       ? studioMissionSpecController.getState()
       : { status: 'IDLE', busy: false, missionCount: 0, validSpecCount: 0, invalidSpecCount: 0, requiredHandlers: [], manifest: null, issues: [], lastValidation: null };
-    const runtimeLaunchState = buildStudioRuntimeLaunchState(activationState, persistenceState);
-    const publicationActivationHistory = publicationHistory.map(function(publication){
-      return Object.assign({}, publication, {
-        isActive: Boolean(activationState.activeReference && activationState.activeReference.publicationId === publication.publicationId),
-        canActivate: !activationState.activeReference || activationState.activeReference.publicationId !== publication.publicationId,
-        canRollback: studioActivationController ? studioActivationController.canRollback(publication) : false
-      });
-    });
-
+    const latestPublication = publicationHistory.length
+      ? publicationHistory[publicationHistory.length - 1]
+      : null;
+    const runtimeLaunchState = buildStudioRuntimeLaunchState(latestPublication);
     const renderConfig = Object.assign(
       {},
       renderMissionBank(missionsVista),
@@ -492,7 +450,7 @@
       {
         publication: {
           state: publicationState,
-          history: publicationActivationHistory,
+          history: publicationHistory,
           actions: {
             onValidate: function(){
               if (!studioPublicationController) return;
@@ -510,30 +468,6 @@
           }
         },
         missionSpecs: { state: missionSpecState },
-        activation: {
-          state: activationState,
-          history: activationHistory,
-          actions: {
-            onActivate: function(campaignId, publicationId){
-              if (!studioActivationController) return;
-              studioActivationController.activatePublication(campaignId, publicationId).then(function(){
-                render(missions, campaigns, taxonomy);
-              });
-            },
-            onDeactivate: function(campaignId){
-              if (!studioActivationController) return;
-              studioActivationController.deactivatePublication(campaignId).then(function(){
-                render(missions, campaigns, taxonomy);
-              });
-            },
-            onRollback: function(campaignId, publicationId){
-              if (!studioActivationController) return;
-              studioActivationController.rollbackPublication(campaignId, publicationId).then(function(){
-                render(missions, campaigns, taxonomy);
-              });
-            }
-          }
-        },
         runtimeLaunch: {
           state: runtimeLaunchState
         },
@@ -620,24 +554,18 @@
     var publicationAdapterFactory = window.CRIOS_STUDIO_PUBLICATION_ADAPTER;
     var publicationControllerFactory = window.CRIOS_STUDIO_PUBLICATION_CONTROLLER;
     var remotePublicationBootstrapFactory = window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP;
-    var remoteActivationServiceFactory = window.CRIOS_STUDIO_REMOTE_ACTIVATION_SERVICE;
-    var activationApi = window.CRIOS_PUBLICATION_ACTIVATION;
-    var activationControllerFactory = window.CRIOS_STUDIO_ACTIVATION_CONTROLLER;
     var persistenceApi = window.CRIOS_PUBLICATION_PERSISTENCE;
     var persistenceControllerFactory = window.CRIOS_STUDIO_PERSISTENCE_CONTROLLER;
     var missionCatalog = window.CRIOS_STUDIO_GEOMETRY_AREA_SPEC_CATALOG;
     var missionAdapterFactory = window.CRIOS_STUDIO_MISSION_SPEC_ADAPTER;
     var missionControllerFactory = window.CRIOS_STUDIO_MISSION_SPEC_CONTROLLER;
     var studioPublicationApi = null;
-    var studioActivationApi = null;
     var studioPersistenceApi = null;
     var studioMissionSpecsApi = null;
     var persistenceCoordinator = null;
     var publicationStore = null;
-    var activationStore = null;
     var remotePublicationSelection = null;
     var publicationAdapter = null;
-    var remoteActivationService = null;
     var recoveredCampaignId = '';
     var missionSpecAdapter = null;
 
@@ -668,14 +596,10 @@
         var persistenceStatus = persistenceCoordinator.getStatus();
         if (persistenceStatus.status === 'EMPTY' || persistenceStatus.status === 'READY') {
           publicationStore = persistenceCoordinator.publicationStore;
-          activationStore = createReloadSafeActivationStore(persistenceCoordinator.activationStore);
-          var activationSnapshot = activationStore.snapshot();
           var publicationSnapshot = publicationStore.snapshot();
-          recoveredCampaignId = activationSnapshot.activeReferences[0]
-            ? activationSnapshot.activeReferences[0].campaignId
-            : (publicationSnapshot.publications.length
-              ? publicationSnapshot.publications[publicationSnapshot.publications.length - 1].campaignId
-              : '');
+          recoveredCampaignId = publicationSnapshot.publications.length
+            ? publicationSnapshot.publications[publicationSnapshot.publications.length - 1].campaignId
+            : '';
         }
       } catch (persistenceError) {
         persistenceCoordinator = null;
@@ -786,52 +710,6 @@
       });
     }
 
-    if (activationApi && activationControllerFactory && publicationCore && studioPublicationApi) {
-      var activationControllerOptions = {
-        publicationApi: studioPublicationApi,
-        activationApi: activationApi,
-        core: publicationCore,
-        activationStore: activationStore,
-        onStateChange: function(){
-          render(missions, campaigns, taxonomy);
-        }
-      };
-
-      if (remotePublicationSelection && remotePublicationSelection.configured) {
-        if (studioPublicationController &&
-            remotePublicationSelection.service &&
-            remotePublicationSelection.client &&
-            remoteActivationServiceFactory &&
-            typeof remoteActivationServiceFactory.createRemoteActivationService === 'function') {
-          try {
-            remoteActivationService = remoteActivationServiceFactory.createRemoteActivationService({
-              activationApi: activationApi,
-              publicationApi: studioPublicationApi,
-              remoteClient: remotePublicationSelection.client,
-              store: activationStore || undefined
-            });
-          } catch (remoteActivationError) {
-            remoteActivationService = null;
-          }
-        }
-        activationControllerOptions.activationService = remoteActivationService;
-      }
-
-      studioActivationController = activationControllerFactory.createStudioActivationController(
-        activationControllerOptions
-      );
-      studioActivationApi = Object.freeze({
-        version: '1.0.0',
-        activatePublication: studioActivationController.activatePublication,
-        deactivatePublication: studioActivationController.deactivatePublication,
-        rollbackPublication: studioActivationController.rollbackPublication,
-        getActiveReference: studioActivationController.getActiveReference,
-        resolveActivePublication: studioActivationController.resolveActivePublication,
-        listHistory: studioActivationController.listHistory,
-        getState: studioActivationController.getState
-      });
-    }
-
     if (persistenceCoordinator && persistenceControllerFactory) {
       studioPersistenceController = persistenceControllerFactory.createStudioPersistenceController({
         coordinator: persistenceCoordinator,
@@ -856,11 +734,13 @@
     }
 
     studioRuntimeLaunchApi = Object.freeze({
-      version: '1.0.0',
+      version: '2.0.0',
       getState: function(){
+        var publications = studioPublicationController
+          ? studioPublicationController.listPublications()
+          : [];
         return buildStudioRuntimeLaunchState(
-          studioActivationController ? studioActivationController.getState() : null,
-          studioPersistenceController ? studioPersistenceController.getStatus() : null
+          publications.length ? publications[publications.length - 1] : null
         );
       }
     });
@@ -882,7 +762,6 @@
     window.CRIOS_STUDIO = Object.freeze(Object.assign({}, window.CRIOS_STUDIO || {}, {
       publishCampaign,
       publication: studioPublicationApi,
-      activation: studioActivationApi,
       persistence: studioPersistenceApi,
       runtimeLaunch: studioRuntimeLaunchApi,
       missionSpecs: studioMissionSpecsApi
@@ -892,10 +771,8 @@
     try { delete window.CRIOS_STUDIO_PUBLICATION_CONTROLLER; } catch (ignoreC) {}
     try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_BOOTSTRAP; } catch (ignoreRemoteBootstrap) {}
     try { delete window.CRIOS_STUDIO_REMOTE_PUBLICATION_SERVICE; } catch (ignoreRemoteService) {}
-    try { delete window.CRIOS_STUDIO_REMOTE_ACTIVATION_SERVICE; } catch (ignoreRemoteActivationService) {}
     try { delete window.CRIOS_REMOTE_PUBLICATION_CLIENT; } catch (ignoreRemoteClient) {}
     try { delete window.CRIOS_REMOTE_PUBLICATION_CONTRACT; } catch (ignoreRemoteContract) {}
-    try { delete window.CRIOS_STUDIO_ACTIVATION_CONTROLLER; } catch (ignoreActivation) {}
     try { delete window.CRIOS_STUDIO_PERSISTENCE_CONTROLLER; } catch (ignorePersistence) {}
     try { delete window.CRIOS_STUDIO_GEOMETRY_AREA_SPEC_CATALOG; } catch (ignoreCatalog) {}
     try { delete window.CRIOS_STUDIO_MISSION_SPEC_ADAPTER; } catch (ignoreMissionAdapter) {}

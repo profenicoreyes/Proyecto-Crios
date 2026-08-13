@@ -113,6 +113,10 @@ function operacionPublicacionRemotaConocida(valor) {
   return Object.keys(CRIOS_PUBLICATION_OPERATIONS).some(clave => CRIOS_PUBLICATION_OPERATIONS[clave] === valor);
 }
 
+function operacionPublicacionRemotaHabilitada(valor) {
+  return valor === CRIOS_PUBLICATION_OPERATIONS.PUBLISH || valor === CRIOS_PUBLICATION_OPERATIONS.GET;
+}
+
 function validarValorSerializablePublicacionRemota(valor, vistos, ruta) {
   if (valor === null || typeof valor === 'string' || typeof valor === 'boolean') return;
   if (typeof valor === 'number') {
@@ -225,7 +229,7 @@ function validarSolicitudPublicacionRemota(solicitud) {
   if (solicitud.protocolVersion !== CRIOS_PUBLICATION_PROTOCOL_VERSION) {
     return {ok: false, code: CRIOS_PUBLICATION_ERROR_CODES.UNSUPPORTED_PROTOCOL, message: 'Remote protocolVersion is unsupported.'};
   }
-  if (!operacionPublicacionRemotaConocida(solicitud.operation)) {
+  if (!operacionPublicacionRemotaConocida(solicitud.operation) || !operacionPublicacionRemotaHabilitada(solicitud.operation)) {
     return {ok: false, code: CRIOS_PUBLICATION_ERROR_CODES.UNSUPPORTED_OPERATION, message: 'Remote operation is unsupported.'};
   }
   if (cadenaNormalizadaPublicacionRemota(solicitud.requestId, 160) !== solicitud.requestId) {
@@ -254,17 +258,6 @@ function validarSolicitudPublicacionRemota(solicitud) {
       }
     } catch (errorContenido) {
       return {ok: false, code: CRIOS_PUBLICATION_ERROR_CODES.INVALID_REQUEST, message: String(errorContenido && errorContenido.message || errorContenido)};
-    }
-  } else if (solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.ACTIVATE) {
-    if (!clavesExactasPublicacionRemota(payload, ['campaignId', 'publicationId']) ||
-        cadenaNormalizadaPublicacionRemota(payload.campaignId, 160) !== payload.campaignId ||
-        cadenaNormalizadaPublicacionRemota(payload.publicationId, 200) !== payload.publicationId) {
-      return {ok: false, code: CRIOS_PUBLICATION_ERROR_CODES.INVALID_REQUEST, message: 'activatePublication payload is invalid.'};
-    }
-  } else if (solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.DEACTIVATE) {
-    if (!clavesExactasPublicacionRemota(payload, ['campaignId']) ||
-        cadenaNormalizadaPublicacionRemota(payload.campaignId, 160) !== payload.campaignId) {
-      return {ok: false, code: CRIOS_PUBLICATION_ERROR_CODES.INVALID_REQUEST, message: 'deactivatePublication payload is invalid.'};
     }
   } else if (solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.GET) {
     if (!clavesExactasPublicacionRemota(payload, ['campaignId', 'publicationId']) ||
@@ -903,7 +896,7 @@ function procesarSolicitudPublicacionRemota(solicitud, contexto) {
     return crearRespuestaPublicacionRemota(solicitud, false, null, validacion.code, validacion.message, false);
   }
 
-  const escritura = solicitud.operation !== CRIOS_PUBLICATION_OPERATIONS.GET;
+  const escritura = solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.PUBLISH;
   if (escritura && !autorizarEscrituraPublicacionRemota(contexto)) {
     return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.WRITE_UNAUTHORIZED, 'Teacher write authorization is required.', false);
   }
@@ -917,8 +910,7 @@ function procesarSolicitudPublicacionRemota(solicitud, contexto) {
 
     const requestHash = hashSolicitudPublicacionRemota(solicitud);
     if (solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.PUBLISH) return procesarPublicacionNuevaRemota(libro, solicitud, requestHash);
-    if (solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.ACTIVATE) return procesarActivacionPublicacionRemota(libro, solicitud, requestHash);
-    return procesarDesactivacionPublicacionRemota(libro, solicitud, requestHash);
+    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.UNSUPPORTED_OPERATION, 'Remote operation is unsupported.', false);
   } catch (error) {
     return crearRespuestaPublicacionRemota(
       solicitud,

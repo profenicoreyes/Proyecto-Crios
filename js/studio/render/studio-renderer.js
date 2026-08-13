@@ -581,24 +581,7 @@
 
     const runtimeLimit = document.createElement('p');
     runtimeLimit.className = 'studio-publication-memory-notice';
-    runtimeLimit.textContent = 'Runtime puede abrir una publicación activa guardada en este mismo navegador.';
-
-    const activationTitle = document.createElement('h4');
-    activationTitle.className = 'studio-publication-history-title';
-    activationTitle.textContent = 'Activación';
-
-    const activationNotice = document.createElement('p');
-    activationNotice.id = 'studioActivationPersistenceNotice';
-    activationNotice.className = 'studio-publication-memory-notice';
-    activationNotice.textContent = 'Activación en memoria. Se pierde al recargar.';
-
-    const activationStatus = document.createElement('div');
-    activationStatus.id = 'studioActivationStatus';
-    activationStatus.className = 'studio-publication-status';
-
-    const activeDetails = document.createElement('div');
-    activeDetails.id = 'studioActivationActiveDetails';
-    activeDetails.className = 'studio-publication-result';
+    runtimeLimit.textContent = 'Cada publicación tiene un enlace propio e inmutable. Publicar otra versión no modifica los enlaces anteriores.';
 
     const runtimeLaunchTitle = document.createElement('h4');
     runtimeLaunchTitle.className = 'studio-publication-history-title';
@@ -613,20 +596,6 @@
     runtimeLaunchLink.className = 'btn studio-btn studio-runtime-launch-link';
     runtimeLaunchLink.textContent = 'Abrir campaña en CRIOS';
     runtimeLaunchLink.hidden = true;
-
-    const deactivateButton = document.createElement('button');
-    deactivateButton.id = 'studioActivationDeactivateButton';
-    deactivateButton.className = 'btn studio-btn danger';
-    deactivateButton.type = 'button';
-    deactivateButton.textContent = 'Desactivar';
-
-    const activationHistoryTitle = document.createElement('h4');
-    activationHistoryTitle.className = 'studio-publication-history-title';
-    activationHistoryTitle.textContent = 'Historial de activaciones';
-
-    const activationHistory = document.createElement('ul');
-    activationHistory.id = 'studioActivationHistory';
-    activationHistory.className = 'studio-publication-activation-history';
 
     const historyTitle = document.createElement('h4');
     historyTitle.className = 'studio-publication-history-title';
@@ -655,7 +624,7 @@
     persistenceCheckbox.id = 'studioPersistenceClearConsent';
     persistenceCheckbox.type = 'checkbox';
     const persistenceConsentText = document.createElement('span');
-    persistenceConsentText.textContent = 'Acepto borrar publicaciones, activaciones e historial local.';
+    persistenceConsentText.textContent = 'Acepto borrar los datos locales de publicación.';
     persistenceConsent.appendChild(persistenceCheckbox);
     persistenceConsent.appendChild(persistenceConsentText);
 
@@ -682,16 +651,9 @@
     panel.appendChild(compatibilityMissions);
     panel.appendChild(compatibilityIssues);
     panel.appendChild(runtimeLimit);
-    panel.appendChild(activationTitle);
-    panel.appendChild(activationNotice);
-    panel.appendChild(activationStatus);
-    panel.appendChild(activeDetails);
     panel.appendChild(runtimeLaunchTitle);
     panel.appendChild(runtimeLaunchStatus);
     panel.appendChild(runtimeLaunchLink);
-    panel.appendChild(deactivateButton);
-    panel.appendChild(activationHistoryTitle);
-    panel.appendChild(activationHistory);
     panel.appendChild(historyTitle);
     panel.appendChild(notice);
     panel.appendChild(history);
@@ -732,12 +694,8 @@
     const issues = validation && Array.isArray(validation.issues) ? validation.issues : [];
     const history = Array.isArray(publication.history) ? publication.history : [];
     const actions = publication.actions || {};
-    const activation = config && config.activation ? config.activation : {};
-    const activationState = activation.state || { status: 'IDLE', busy: false, activeReference: null };
-    const activationRecords = Array.isArray(activation.history) ? activation.history : [];
     const runtimeLaunch = config && config.runtimeLaunch ? config.runtimeLaunch : {};
-    const runtimeLaunchState = runtimeLaunch.state || { available: false, status: 'NO_ACTIVE_PUBLICATION', message: 'Activá una publicación para habilitar su acceso en CRIOS.', href: null, target: null, rel: null };
-    const activationActions = activation.actions || {};
+    const runtimeLaunchState = runtimeLaunch.state || { available: false, status: 'NO_PUBLICATION', message: 'Publicá una versión para habilitar su enlace en CRIOS.', href: null, target: null, rel: null };
     const persistence = config && config.persistence ? config.persistence : {};
     const persistenceState = persistence.state || { status: 'UNAVAILABLE', busy: false };
     const persistenceActions = persistence.actions || {};
@@ -752,13 +710,8 @@
     const issuesNode = panel.querySelector('#studioPublicationIssues');
     const resultNode = panel.querySelector('#studioPublicationLastResult');
     const historyNode = panel.querySelector('#studioPublicationHistory');
-    const activationStatusNode = panel.querySelector('#studioActivationStatus');
-    const activeDetailsNode = panel.querySelector('#studioActivationActiveDetails');
     const runtimeLaunchStatusNode = panel.querySelector('#studioRuntimeLaunchStatus');
     const runtimeLaunchLinkNode = panel.querySelector('#studioRuntimeLaunchLink');
-    const deactivateButton = panel.querySelector('#studioActivationDeactivateButton');
-    const activationHistoryNode = panel.querySelector('#studioActivationHistory');
-    const activationNoticeNode = panel.querySelector('#studioActivationPersistenceNotice');
     const publicationNoticeNode = panel.querySelector('#studioPublicationPersistenceNotice');
     const persistenceNoticeNode = panel.querySelector('#studioPersistenceNotice');
     const persistenceDetailsNode = panel.querySelector('#studioPersistenceDetails');
@@ -797,7 +750,6 @@
     const persistenceMessage = persistenceReady
       ? 'Guardado solo en este navegador. No se sincroniza con la nube.'
       : 'Persistencia no disponible. Studio continúa en memoria y los cambios se pierden al recargar.';
-    activationNoticeNode.textContent = persistenceMessage;
     publicationNoticeNode.textContent = persistenceMessage;
     persistenceNoticeNode.textContent = persistenceMessage;
     persistenceNoticeNode.className = 'studio-publication-memory-notice' + (persistenceReady ? '' : ' studio-persistence-warning');
@@ -806,8 +758,6 @@
     persistenceDetailsNode.appendChild(createPublicationRow('Última actualización', String(persistenceState.updatedAt || 'Sin datos')));
     persistenceDetailsNode.appendChild(createPublicationRow('Tamaño', String(persistenceState.serializedBytes || 0) + ' bytes'));
     persistenceDetailsNode.appendChild(createPublicationRow('Publicaciones', String(persistenceState.publicationCount || 0)));
-    persistenceDetailsNode.appendChild(createPublicationRow('Referencias activas', String(persistenceState.activeReferenceCount || 0)));
-    persistenceDetailsNode.appendChild(createPublicationRow('Activaciones', String(persistenceState.activationRecordCount || 0)));
     if (persistenceState.lastError) {
       persistenceDetailsNode.appendChild(createPublicationRow('Error', String(persistenceState.lastError.code || 'PERSISTENCE_ERROR') + ': ' + String(persistenceState.lastError.message || 'Error de persistencia.')));
     }
@@ -826,17 +776,6 @@
 
     validateButton.disabled = Boolean(state.busy);
     publishButton.disabled = Boolean(state.busy);
-    activationStatusNode.textContent = 'Estado de activación: ' + String(activationState.status || 'IDLE');
-
-    activeDetailsNode.innerHTML = '';
-    if (activationState.activeReference) {
-      activeDetailsNode.appendChild(createPublicationRow('Publicación activa', 'v' + String(activationState.activeReference.version || '')));
-      activeDetailsNode.appendChild(createPublicationRow('publicationId', String(activationState.activeReference.publicationId || '')));
-      activeDetailsNode.appendChild(createPublicationRow('contentHash', String(activationState.activeReference.contentHash || '').slice(0, 12)));
-    } else {
-      activeDetailsNode.textContent = 'Ninguna publicación activa.';
-    }
-
     runtimeLaunchStatusNode.textContent = String(runtimeLaunchState.message || '');
     runtimeLaunchStatusNode.dataset.status = String(runtimeLaunchState.status || '');
     runtimeLaunchLinkNode.hidden = !runtimeLaunchState.available;
@@ -854,31 +793,6 @@
       delete runtimeLaunchLinkNode.dataset.publicationId;
     }
 
-    deactivateButton.hidden = !activationState.activeReference;
-    deactivateButton.disabled = Boolean(activationState.busy);
-    deactivateButton.onclick = function(){
-      if (activationState.activeReference && typeof activationActions.onDeactivate === 'function') {
-        activationActions.onDeactivate(activationState.activeReference.campaignId);
-      }
-    };
-
-    activationHistoryNode.innerHTML = '';
-    if (activationRecords.length === 0) {
-      const emptyActivation = document.createElement('li');
-      emptyActivation.className = 'studio-publication-history-empty';
-      emptyActivation.textContent = 'Sin activaciones en esta sesión.';
-      activationHistoryNode.appendChild(emptyActivation);
-    } else {
-      activationRecords.forEach(record => {
-        const activationItem = document.createElement('li');
-        activationItem.className = 'studio-publication-history-item';
-        activationItem.textContent = String(record.action || '') + ' · ' +
-          String(record.previousPublicationId || 'sin activa') + ' → ' +
-          String(record.nextPublicationId || 'sin activa') + ' · ' +
-          String(record.occurredAt || '');
-        activationHistoryNode.appendChild(activationItem);
-      });
-    }
     validateButton.onclick = function(){ if (typeof actions.onValidate === 'function') actions.onValidate(); };
     publishButton.onclick = function(){ if (typeof actions.onPublish === 'function') actions.onPublish(); };
 
@@ -940,38 +854,6 @@
         publicationText.textContent = 'v' + String(item.version || '') + ' · ' + String(item.publicationId || '') + ' · ' + shortHash + ' · ' + String(item.contentHash || '') + ' · rev ' + String(item.sourceDraftRevision || '') + ' · ' + String(item.createdAt || '');
         row.appendChild(publicationText);
 
-        if (item.isActive) {
-          const activeBadge = document.createElement('span');
-          activeBadge.className = 'studio-publication-active-badge';
-          activeBadge.textContent = 'Activa';
-          row.appendChild(activeBadge);
-        }
-
-        const entryActions = document.createElement('div');
-        entryActions.className = 'studio-publication-entry-actions';
-        if (item.canActivate) {
-          const activateButton = document.createElement('button');
-          activateButton.type = 'button';
-          activateButton.className = 'btn studio-btn small';
-          activateButton.textContent = 'Activar';
-          activateButton.disabled = Boolean(activationState.busy);
-          activateButton.onclick = function(){
-            if (typeof activationActions.onActivate === 'function') activationActions.onActivate(item.campaignId, item.publicationId);
-          };
-          entryActions.appendChild(activateButton);
-        }
-        if (item.canRollback) {
-          const rollbackButton = document.createElement('button');
-          rollbackButton.type = 'button';
-          rollbackButton.className = 'btn studio-btn small';
-          rollbackButton.textContent = 'Volver a esta versión';
-          rollbackButton.disabled = Boolean(activationState.busy);
-          rollbackButton.onclick = function(){
-            if (typeof activationActions.onRollback === 'function') activationActions.onRollback(item.campaignId, item.publicationId);
-          };
-          entryActions.appendChild(rollbackButton);
-        }
-        if (entryActions.childNodes.length) row.appendChild(entryActions);
         historyNode.appendChild(row);
       });
     }
@@ -1013,7 +895,6 @@
 
     renderPublicationPanel({
       publication: config.publication || null,
-      activation: config.activation || null,
       runtimeLaunch: config.runtimeLaunch || null,
       persistence: config.persistence || null
     });

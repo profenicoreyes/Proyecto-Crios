@@ -93,6 +93,8 @@ function makePub(content,campaign='camp-a',draft='rev-1',id='req-pub-1'){
 const TEACHER_TOKEN='teacher-token-ssssssssssssssssssssssssssssssssssssssss';
 function callRemote(req,token=TEACHER_TOKEN){return procesarSolicitudPublicacionRemota(req,{writeToken:token})}
 function validate(resp,req,msg){const r=CRIOS_REMOTE_PUBLICATION_CONTRACT.validateResponse(resp,req);ok(r.valid,msg+' '+JSON.stringify(r.issues));}
+function retiredRequest(operation,payload,id){return {protocolVersion:'1.0',operation,requestId:id,payload};}
+function validateRetired(resp,req,msg){ok(resp&&resp.protocolVersion==='1.0',msg+' protocol');eq(resp.operation,req.operation,msg+' operation');eq(resp.requestId,req.requestId,msg+' requestId');eq(resp.success,false,msg+' success false');eq(resp.data,null,msg+' data null');eq(resp.error&&resp.error.code,'UNSUPPORTED_OPERATION',msg+' unsupported');eq(resp.error&&resp.error.retryable,false,msg+' nonretryable');}
 
 props.set('CRIOS_PUBLICATION_WRITE_TOKEN_SHA256',crypto.createHash('sha256').update(TEACHER_TOKEN,'utf8').digest('hex'));
 
@@ -138,63 +140,37 @@ const c2={text:'á'.repeat(65000),mission:{z:1,a:2}};const p2=makePub(c2,'camp-a
 r=callRemote(p2);ok(r.success,'second publish');validate(r,p2,'second publish response');const pub2=r.data.publication;eq(pub2.version,2,'server version authority');
 const stored2=leerPublicacionPorIdRemota(book,pub2.publicationId);eq(stored2.publication.content,c2,'unicode chunk roundtrip');ok(stored2.contentBytes===Buffer.byteLength(JSON.stringify(c2)),'utf8 byte count');ok(book.getSheetByName('CRIOS_PUBLICACION_BLOQUES').getLastRow()>3,'multiple chunks stored');
 
-// activate first
-const a1=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub1.publicationId,'req-act-1');
-r=callRemote(a1);ok(r.success&&r.data.changed,'activate changed');validate(r,a1,'activate response');
+// legacy mutable activation operations are retired from the remote normal path
+const sheetsBeforeRetiredOps=[...book.sheets.keys()].sort();
+const waitsBeforeRetiredOps=lockWaits;
+const a1=retiredRequest('activatePublication',{campaignId:'camp-a',publicationId:pub1.publicationId},'req-act-retired');
+eq(CRIOS_REMOTE_PUBLICATION_CONTRACT.validateRequest(a1).issues[0].code,'UNSUPPORTED_OPERATION','JS contract retires activate');
+r=callRemote(a1);eq(r.error.code,'UNSUPPORTED_OPERATION','activate is retired');validateRetired(r,a1,'retired activate response');
+const d1=retiredRequest('deactivatePublication',{campaignId:'camp-a'},'req-deact-retired');
+eq(CRIOS_REMOTE_PUBLICATION_CONTRACT.validateRequest(d1).issues[0].code,'UNSUPPORTED_OPERATION','JS contract retires deactivate');
+r=callRemote(d1);eq(r.error.code,'UNSUPPORTED_OPERATION','deactivate is retired');validateRetired(r,d1,'retired deactivate response');
+eq([...book.sheets.keys()].sort(),sheetsBeforeRetiredOps,'retired mutable operations create no sheets');
+eq(lockWaits,waitsBeforeRetiredOps,'retired mutable operations acquire no write lock');
+ok(!book.getSheetByName('CRIOS_PUBLICACION_ACTIVAS'),'active sheet is not created');
+ok(!book.getSheetByName('CRIOS_PUBLICACION_EVENTOS'),'activation event sheet is not created');
 
-// public GET resolves the exact immutable publication and does not depend on active state
+// direct immutable GET works for every exact publication without activation
 const g1=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-a',pub1.publicationId,'req-get-1');
-r=callRemote(g1,'');ok(r.success,'public get exact publication');validate(r,g1,'get response');eq(r.data.publication,pub1,'get publication exact');eq(r.data.activeReference,{campaignId:pub1.campaignId,publicationId:pub1.publicationId,version:pub1.version,contentHash:pub1.contentHash,activatedAt:stored1.record.createdAt},'get compatibility reference derives from immutable publication');
-
-// another publication remains readable even while a different version is active
+r=callRemote(g1,'');ok(r.success,'first immutable publication readable');validate(r,g1,'first direct get response');eq(r.data.publication,pub1,'first direct publication exact');eq(r.data.activeReference,{campaignId:pub1.campaignId,publicationId:pub1.publicationId,version:pub1.version,contentHash:pub1.contentHash,activatedAt:stored1.record.createdAt},'first compatibility reference derives from immutable publication');
 const g2=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-a',pub2.publicationId,'req-get-2');
-r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'inactive publication direct link remains readable');validate(r,g2,'inactive direct get response');
+r=callRemote(g2,'');ok(r.success,'second immutable publication readable');validate(r,g2,'second direct get response');eq(r.data.publication,pub2,'second direct publication exact');
 
-// activate same with new request => unchanged no event
-const a1b=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub1.publicationId,'req-act-1b');
-r=callRemote(a1b);ok(r.success&&!r.data.changed&&r.data.record===null,'same activation unchanged');validate(r,a1b,'unchanged activation response');
-
-// activate second
-const a2=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub2.publicationId,'req-act-2');
-r=callRemote(a2);ok(r.success&&r.data.changed&&r.data.record.previousPublicationId===pub1.publicationId,'activate second previous identity');validate(r,a2,'activate second response');
-
-// replay of the earlier no-op activation must remain a no-op even after state changed
-r=callRemote(a1b);ok(r.success&&!r.data.changed&&r.data.reference.publicationId===pub1.publicationId,'no-op activation replay preserves original response');validate(r,a1b,'no-op activation replay response');
-r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'no-op activation replay does not change current active publication');
-
-// replay activation returns same original effect
-const eventRows=book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow();
-r=callRemote(a2);ok(r.success&&r.data.changed&&r.data.record.activationId==='req-act-2','activation replay');eq(book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow(),eventRows,'activation replay no event');validate(r,a2,'activation replay response');
-
-// switching active state must not invalidate either direct immutable link
-r=callRemote(g1,'');ok(r.success&&r.data.publication.publicationId===pub1.publicationId,'old direct link survives active switch');validate(r,g1,'old direct get after switch');
-r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'new direct link remains readable');validate(r,g2,'new direct get response');
-
-// deactivation changes legacy activation state but must not invalidate immutable links
-const d=CRIOS_REMOTE_PUBLICATION_CONTRACT.createDeactivateRequest('camp-a','req-deact-1');
-r=callRemote(d);ok(r.success&&r.data.changed&&r.data.reference===null,'deactivate');validate(r,d,'deactivate response');
-r=callRemote(g2,'');ok(r.success&&r.data.publication.publicationId===pub2.publicationId,'direct link survives deactivation');validate(r,g2,'direct get after deactivation');
-
-// replay deactivation
-const deRows=book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow();
-r=callRemote(d);ok(r.success&&r.data.changed&&r.data.record.activationId==='req-deact-1','deactivation replay');eq(book.getSheetByName('CRIOS_PUBLICACION_EVENTOS').getLastRow(),deRows,'deactivation replay no event');validate(r,d,'deactivate replay response');
-
-// unchanged deactivation is durable/idempotent even if campaign becomes active later
-const dNoop=CRIOS_REMOTE_PUBLICATION_CONTRACT.createDeactivateRequest('camp-a','req-deact-noop');
-r=callRemote(dNoop);ok(r.success&&!r.data.changed&&r.data.reference===null&&r.data.record===null,'deactivation no-op recorded');validate(r,dNoop,'deactivation no-op response');
-const a3=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('camp-a',pub2.publicationId,'req-act-3');
-r=callRemote(a3);ok(r.success&&r.data.changed,'reactivate after no-op deactivation');validate(r,a3,'reactivation response');
-r=callRemote(dNoop);ok(r.success&&!r.data.changed&&r.data.reference===null&&r.data.record===null,'deactivation no-op replay preserves original response');validate(r,dNoop,'deactivation no-op replay response');
-r=callRemote(g2,'');ok(r.success,'deactivation no-op replay does not deactivate later state');
-
-// request id collision activation vs deactivation
-const collision=CRIOS_REMOTE_PUBLICATION_CONTRACT.createDeactivateRequest('camp-a','req-act-2');
-r=callRemote(collision);eq(r.error.code,'WRITE_CONFLICT','cross activation request conflict');validate(r,collision,'cross activation conflict response');
+// activation/deactivation remain retired even with invalid teacher authorization
+r=procesarSolicitudPublicacionRemota(a1,{writeToken:'bad'});eq(r.error.code,'UNSUPPORTED_OPERATION','retired activate is rejected before auth');validateRetired(r,a1,'retired activate bad auth response');
+r=procesarSolicitudPublicacionRemota(d1,{writeToken:''});eq(r.error.code,'UNSUPPORTED_OPERATION','retired deactivate is rejected before auth');validateRetired(r,d1,'retired deactivate no auth response');
+const waitsBeforeHttpRetired=lockWaits;
+r=JSON.parse(doPost({postData:{contents:JSON.stringify({request:a1,writeToken:TEACHER_TOKEN})}}).text);eq(r.error.code,'UNSUPPORTED_OPERATION','doPost activate is retired');validateRetired(r,a1,'doPost retired activate response');
+r=JSON.parse(doPost({postData:{contents:JSON.stringify({request:d1,writeToken:TEACHER_TOKEN})}}).text);eq(r.error.code,'UNSUPPORTED_OPERATION','doPost deactivate is retired');validateRetired(r,d1,'doPost retired deactivate response');
+eq(lockWaits,waitsBeforeHttpRetired,'retired doPost operations acquire no write lock');
 
 // formula-safe campaign id survives sheet roundtrip
 const cf={x:'formula'};const pf=makePub(cf,'=danger','rev-form','req-form-pub');
 r=callRemote(pf);ok(r.success,'formula campaign publish');const pubf=r.data.publication;eq(leerPublicacionPorIdRemota(book,pubf.publicationId).publication.campaignId,'=danger','formula campaign roundtrip');
-const af=CRIOS_REMOTE_PUBLICATION_CONTRACT.createActivateRequest('=danger',pubf.publicationId,'req-form-act');r=callRemote(af);ok(r.success,'formula campaign activate');
 const gf=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('=danger',pubf.publicationId,'req-form-get');r=callRemote(gf,'');ok(r.success,'formula campaign get');validate(r,gf,'formula get response');
 
 // corrupt stored content is neutral/unavailable to readers, not exposed as server internals

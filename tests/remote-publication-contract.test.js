@@ -84,19 +84,6 @@
     return value;
   }
 
-  function activationRecord(action, change){
-    var value = {
-      activationId: 'activation-7',
-      action: action,
-      campaignId: 'campana-remota',
-      previousPublicationId: action === 'ACTIVATE' ? null : 'publication-7',
-      nextPublicationId: action === 'ACTIVATE' ? 'publication-7' : null,
-      occurredAt: timestamp()
-    };
-    if (change) change(value);
-    return value;
-  }
-
   function response(operation, requestId, success, data, error){
     return { protocolVersion:'1.0', operation:operation, requestId:requestId, success:success, data:data, error:error };
   }
@@ -107,11 +94,11 @@
   function expectResponseFailure(value, request, code){ var result = api().validateResponse(value, request); assert(!result.valid, 'Expected response validation failure'); assert(result.issues.some(function(issue){ return issue.code === code; }), 'Expected response code ' + code); return result; }
 
   test('001 API pública exacta y congelada', function(){
-    exactKeys(api(), ['version','constants','createPublishRequest','createActivateRequest','createDeactivateRequest','createGetPublicationRequest','validateRequest','validateResponse','parseResponse','isRequest','isResponse','isParsedResponse','measureJsonBytes']);
+    exactKeys(api(), ['version','constants','createPublishRequest','createGetPublicationRequest','validateRequest','validateResponse','parseResponse','isRequest','isResponse','isParsedResponse','measureJsonBytes']);
     assert(Object.isFrozen(api())); equal(api().version, '1.0.0');
   });
   test('002 constantes exactas', function(){ exactKeys(api().constants, ['protocolVersion','operations','errorCodes','limits']); equal(api().constants.protocolVersion, '1.0'); assert(Object.isFrozen(api().constants)); });
-  test('003 operaciones exactas', function(){ deepEqual(api().constants.operations, {PUBLISH:'publishPublication',ACTIVATE:'activatePublication',DEACTIVATE:'deactivatePublication',GET:'getPublication'}); });
+  test('003 operaciones exactas', function(){ deepEqual(api().constants.operations, {PUBLISH:'publishPublication',GET:'getPublication'}); });
   test('004 límites explícitos', function(){ equal(api().constants.limits.MAX_CAMPAIGN_ID_LENGTH,160); equal(api().constants.limits.MAX_CONTENT_BYTES,524288); assert(Object.isFrozen(api().constants.limits)); });
   test('005 códigos incluyen neutral unavailable', function(){ equal(api().constants.errorCodes.PUBLICATION_UNAVAILABLE,'PUBLICATION_UNAVAILABLE'); });
 
@@ -126,21 +113,21 @@
   test('014 publish requiere hash lowercase SHA-256', function(){ var thrown=null;try{api().createPublishRequest(publishInput(function(value){value.contentHash=hash('A');}),'req-1');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
   test('015 publish requiere content object', function(){ var thrown=null;try{api().createPublishRequest(publishInput(function(value){value.content=[];}),'req-1');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
 
-  test('016 activate request canónico', function(){ deepEqual(api().createActivateRequest('campana-remota','publication-7','req-2'),{protocolVersion:'1.0',operation:'activatePublication',requestId:'req-2',payload:{campaignId:'campana-remota',publicationId:'publication-7'}}); });
-  test('017 deactivate request canónico', function(){ deepEqual(api().createDeactivateRequest('campana-remota','req-3'),{protocolVersion:'1.0',operation:'deactivatePublication',requestId:'req-3',payload:{campaignId:'campana-remota'}}); });
-  test('018 get request canónico', function(){ deepEqual(api().createGetPublicationRequest('campana-remota','publication-7','req-4'),{protocolVersion:'1.0',operation:'getPublication',requestId:'req-4',payload:{campaignId:'campana-remota',publicationId:'publication-7'}}); });
-  test('019 activate rechaza publicationId vacío', function(){ var thrown=null;try{api().createActivateRequest('campana-remota','','req-2');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
+  test('016 get request canónico', function(){ deepEqual(api().createGetPublicationRequest('campana-remota','publication-7','req-4'),{protocolVersion:'1.0',operation:'getPublication',requestId:'req-4',payload:{campaignId:'campana-remota',publicationId:'publication-7'}}); });
+  test('017 get rechaza publicationId vacío', function(){ var thrown=null;try{api().createGetPublicationRequest('campana-remota','','req-4');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
+  test('018 builder activate retirado', function(){ equal(typeof api().createActivateRequest,'undefined'); });
+  test('019 builder deactivate retirado', function(){ equal(typeof api().createDeactivateRequest,'undefined'); });
   test('020 get rechaza campaignId sobre límite', function(){ var thrown=null;try{api().createGetPublicationRequest('x'.repeat(161),'publication-7','req-4');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
   test('021 ids Unicode son válidos', function(){ var request=api().createGetPublicationRequest('campaña ártica','publicación 7','req-4');equal(request.payload.campaignId,'campaña ártica');equal(request.payload.publicationId,'publicación 7'); });
   test('022 controles en ids son inválidos', function(){ var thrown=null;try{api().createGetPublicationRequest('campana\nremota','publication-7','req-4');}catch(error){thrown=error;}equal(thrown&&thrown.code,'INVALID_REQUEST'); });
 
-  test('023 validateRequest rechaza claves extra envelope', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.extra=true;expectRequestFailure(request,'INVALID_REQUEST'); });
-  test('024 validateRequest rechaza protocolo desconocido', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.protocolVersion='2.0';expectRequestFailure(request,'UNSUPPORTED_PROTOCOL'); });
-  test('025 validateRequest rechaza operación desconocida', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.operation='deletePublication';expectRequestFailure(request,'UNSUPPORTED_OPERATION'); });
-  test('026 validateRequest rechaza payload extra', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.payload.extra=true;expectRequestFailure(request,'INVALID_REQUEST'); });
-  test('027 validateRequest requiere payload object', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.payload=null;expectRequestFailure(request,'INVALID_REQUEST'); });
-  test('028 validateRequest exige valor ya normalizado', function(){ var request=clone(api().createDeactivateRequest('campana-remota','req-3'));request.payload.campaignId=' campana-remota ';expectRequestFailure(request,'INVALID_REQUEST'); });
-  test('029 isRequest rechaza copia mutable válida', function(){ var mutable=clone(api().createDeactivateRequest('campana-remota','req-3'));assert(api().validateRequest(mutable).valid);assert(!api().isRequest(mutable)); });
+  test('023 validateRequest rechaza claves extra envelope', function(){ var request=clone(api().createGetPublicationRequest('campana-remota','publication-7','req-4'));request.extra=true;expectRequestFailure(request,'INVALID_REQUEST'); });
+  test('024 validateRequest rechaza protocolo desconocido', function(){ var request=clone(api().createGetPublicationRequest('campana-remota','publication-7','req-4'));request.protocolVersion='2.0';expectRequestFailure(request,'UNSUPPORTED_PROTOCOL'); });
+  test('025 validateRequest rechaza activate retirado', function(){ var request={protocolVersion:'1.0',operation:'activatePublication',requestId:'req-2',payload:{campaignId:'campana-remota',publicationId:'publication-7'}};expectRequestFailure(request,'UNSUPPORTED_OPERATION'); });
+  test('026 validateRequest rechaza deactivate retirado', function(){ var request={protocolVersion:'1.0',operation:'deactivatePublication',requestId:'req-3',payload:{campaignId:'campana-remota'}};expectRequestFailure(request,'UNSUPPORTED_OPERATION'); });
+  test('027 validateRequest rechaza operación desconocida', function(){ var request={protocolVersion:'1.0',operation:'deletePublication',requestId:'req-x',payload:{}};expectRequestFailure(request,'UNSUPPORTED_OPERATION'); });
+  test('028 validateRequest requiere payload object', function(){ var request=clone(api().createGetPublicationRequest('campana-remota','publication-7','req-4'));request.payload=null;expectRequestFailure(request,'INVALID_REQUEST'); });
+  test('029 isRequest rechaza copia mutable válida', function(){ var mutable=clone(api().createGetPublicationRequest('campana-remota','publication-7','req-4'));assert(api().validateRequest(mutable).valid);assert(!api().isRequest(mutable)); });
 
   test('030 measureJsonBytes ASCII exacto', function(){ equal(api().measureJsonBytes({a:'x'}),9); });
   test('031 measureJsonBytes UTF-8', function(){ equal(api().measureJsonBytes({a:'á'}),10); });
@@ -162,16 +149,15 @@
   test('046 publication shape exacta', function(){ var request=api().createPublishRequest(publishInput(),'req-1');var p=publication();p.extra=true;var value=response('publishPublication','req-1',true,{publication:p,record:publicationRecord()},null);expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
   test('047 publication record timestamp canónico', function(){ var request=api().createPublishRequest(publishInput(),'req-1');var value=response('publishPublication','req-1',true,{publication:publication(),record:publicationRecord(function(item){item.createdAt='2026-08-07';})},null);expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
 
-  test('048 activate response changed válido', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',true,{changed:true,reference:activeReference(),record:activationRecord('ACTIVATE')},null);assert(api().validateResponse(value,request).valid); });
-  test('049 activate response no-op válido', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',true,{changed:false,reference:activeReference(),record:null},null);assert(api().validateResponse(value,request).valid); });
-  test('050 activate changed requiere record', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',true,{changed:true,reference:activeReference(),record:null},null);expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
-  test('051 activate reference debe coincidir con request', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',true,{changed:false,reference:activeReference(function(item){item.publicationId='publication-8';}),record:null},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
-  test('052 activate record debe apuntar a reference', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',true,{changed:true,reference:activeReference(),record:activationRecord('ACTIVATE',function(item){item.nextPublicationId='publication-8';})},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
-
-  test('053 deactivate response changed válido', function(){ var request=api().createDeactivateRequest('campana-remota','req-3');var value=response('deactivatePublication','req-3',true,{changed:true,reference:null,record:activationRecord('DEACTIVATE')},null);assert(api().validateResponse(value,request).valid); });
-  test('054 deactivate response no-op válido', function(){ var request=api().createDeactivateRequest('campana-remota','req-3');var value=response('deactivatePublication','req-3',true,{changed:false,reference:null,record:null},null);assert(api().validateResponse(value,request).valid); });
-  test('055 deactivate no puede devolver active reference', function(){ var request=api().createDeactivateRequest('campana-remota','req-3');var value=response('deactivatePublication','req-3',true,{changed:false,reference:activeReference(),record:null},null);expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
-  test('056 deactivate record debe ser DEACTIVATE', function(){ var request=api().createDeactivateRequest('campana-remota','req-3');var value=response('deactivatePublication','req-3',true,{changed:true,reference:null,record:activationRecord('ACTIVATE')},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
+  test('048 response activate retirado se rechaza', function(){ var value=response('activatePublication','req-2',false,null,remoteError('UNSUPPORTED_OPERATION'));expectResponseFailure(value,null,'UNSUPPORTED_OPERATION'); });
+  test('049 response deactivate retirado se rechaza', function(){ var value=response('deactivatePublication','req-3',false,null,remoteError('UNSUPPORTED_OPERATION'));expectResponseFailure(value,null,'UNSUPPORTED_OPERATION'); });
+  test('050 operaciones públicas no incluyen ACTIVATE', function(){ assert(!Object.prototype.hasOwnProperty.call(api().constants.operations,'ACTIVATE')); });
+  test('051 operaciones públicas no incluyen DEACTIVATE', function(){ assert(!Object.prototype.hasOwnProperty.call(api().constants.operations,'DEACTIVATE')); });
+  test('052 contrato no expone builder activate', function(){ assert(!Object.prototype.hasOwnProperty.call(api(),'createActivateRequest')); });
+  test('053 contrato no expone builder deactivate', function(){ assert(!Object.prototype.hasOwnProperty.call(api(),'createDeactivateRequest')); });
+  test('054 operation set permanece congelado', function(){ assert(Object.isFrozen(api().constants.operations)); });
+  test('055 publish sigue siendo operación conocida', function(){ var request=api().createPublishRequest(publishInput(),'req-1');assert(api().validateRequest(request).valid); });
+  test('056 get sigue siendo operación conocida', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');assert(api().validateRequest(request).valid); });
 
   test('057 get response válido y activo', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference()},null);assert(api().validateResponse(value,request).valid); });
   test('058 get activeReference debe coincidir con publication', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference(function(item){item.version=8;})},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
@@ -179,12 +165,12 @@
   test('060 get no acepta publication sin activeReference', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:null},null);expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
 
   test('061 failure neutral PUBLICATION_UNAVAILABLE válido', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',false,null,remoteError('PUBLICATION_UNAVAILABLE'));assert(api().validateResponse(value,request).valid); });
-  test('062 failure WRITE_UNAUTHORIZED válido', function(){ var request=api().createActivateRequest('campana-remota','publication-7','req-2');var value=response('activatePublication','req-2',false,null,remoteError('WRITE_UNAUTHORIZED'));assert(api().validateResponse(value,request).valid); });
+  test('062 failure WRITE_UNAUTHORIZED válido para publish', function(){ var request=api().createPublishRequest(publishInput(),'req-1');var value=response('publishPublication','req-1',false,null,remoteError('WRITE_UNAUTHORIZED'));assert(api().validateResponse(value,request).valid); });
   test('063 failure no puede incluir data', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',false,{},remoteError('PUBLICATION_UNAVAILABLE'));expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
   test('064 failure requiere error conocido', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',false,null,remoteError('SECRET_INTERNAL_ERROR'));expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
   test('065 success requiere error null', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference()},remoteError('SERVER_ERROR'));expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
   test('066 requestId de response debe coincidir', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-other',true,{publication:publication(),activeReference:activeReference()},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
-  test('067 operation de response debe coincidir', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('activatePublication','req-4',true,{changed:false,reference:activeReference(),record:null},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
+  test('067 operation de response debe coincidir', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('publishPublication','req-4',true,{publication:publication(),record:publicationRecord()},null);expectResponseFailure(value,request,'REMOTE_IDENTITY_MISMATCH'); });
   test('068 protocolo de response debe coincidir', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference()},null);value.protocolVersion='2.0';expectResponseFailure(value,request,'UNSUPPORTED_PROTOCOL'); });
   test('069 response envelope no admite extra', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var value=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference()},null);value.extra=true;expectResponseFailure(value,request,'REMOTE_RESPONSE_INVALID'); });
 
@@ -193,7 +179,7 @@
   test('072 parseResponse separa identity mismatch', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var raw=response('getPublication','otro',true,{publication:publication(),activeReference:activeReference()},null);var parsed=api().parseResponse(raw,request);assert(!parsed.accepted);equal(parsed.error.code,'REMOTE_IDENTITY_MISMATCH'); });
   test('073 isResponse exige congelado', function(){ var request=api().createGetPublicationRequest('campana-remota','publication-7','req-4');var raw=response('getPublication','req-4',true,{publication:publication(),activeReference:activeReference()},null);assert(api().validateResponse(raw,request).valid);assert(!api().isResponse(raw,request));assert(api().isResponse(deepFreeze(raw),request)); });
   test('074 validateResponse rechaza expected request inválido', function(){ var raw=response('getPublication','req-4',false,null,remoteError('PUBLICATION_UNAVAILABLE'));var badRequest=clone(api().createGetPublicationRequest('campana-remota','publication-7','req-4'));badRequest.payload.extra=true;expectResponseFailure(raw,badRequest,'INVALID_REQUEST'); });
-  test('075 API no genera requestId ni identidad server-side', function(){ var source=[api().createPublishRequest,api().createActivateRequest,api().createDeactivateRequest,api().createGetPublicationRequest].join('\n');assert(source.indexOf('randomUUID')<0);assert(source.indexOf('getNextVersion')<0);assert(source.indexOf('publicationIdFactory')<0); });
+  test('075 API no genera requestId ni identidad server-side', function(){ var source=[api().createPublishRequest,api().createGetPublicationRequest].join('\n');assert(source.indexOf('randomUUID')<0);assert(source.indexOf('getNextVersion')<0);assert(source.indexOf('publicationIdFactory')<0); });
   test('076 funciones públicas no contienen red/storage/DOM/timers', function(){ var source=Object.keys(api()).filter(function(key){return typeof api()[key]==='function';}).map(function(key){return api()[key].toString();}).join('\n');['fetch(','XMLHttpRequest','localStorage','sessionStorage','indexedDB','document.','querySelector','getElementById','setTimeout','setInterval','sendBeacon'].forEach(function(token){assert(source.indexOf(token)<0,'Unexpected dependency: '+token);}); });
   test('077 builders no tocan red, storage ni timers', function(){
     var counters={fetch:0,storage:0,timeout:0,interval:0};
@@ -203,7 +189,7 @@
     window.fetch=function(){counters.fetch+=1;return Promise.reject(new Error('unexpected'));};
     if(storagePrototype) storagePrototype.getItem=function(){counters.storage+=1;return null;};
     window.setTimeout=function(){counters.timeout+=1;return 0;};window.setInterval=function(){counters.interval+=1;return 0;};
-    try{api().createPublishRequest(publishInput(),'req-1');api().createActivateRequest('campana-remota','publication-7','req-2');api().createDeactivateRequest('campana-remota','req-3');api().createGetPublicationRequest('campana-remota','publication-7','req-4');}
+    try{api().createPublishRequest(publishInput(),'req-1');api().createGetPublicationRequest('campana-remota','publication-7','req-4');}
     finally{window.fetch=originalFetch;if(storagePrototype)storagePrototype.getItem=originalStorageGet;window.setTimeout=originalTimeout;window.setInterval=originalInterval;}
     deepEqual(counters,{fetch:0,storage:0,timeout:0,interval:0});
   });

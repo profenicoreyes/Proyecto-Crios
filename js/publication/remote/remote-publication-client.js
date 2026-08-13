@@ -87,8 +87,6 @@
     function available() {
       return Boolean(contract && endpoint && fetchImpl &&
         typeof contract.createPublishRequest === 'function' &&
-        typeof contract.createActivateRequest === 'function' &&
-        typeof contract.createDeactivateRequest === 'function' &&
         typeof contract.createGetPublicationRequest === 'function' &&
         typeof contract.parseResponse === 'function');
     }
@@ -280,42 +278,6 @@
       return executeWrite(request);
     }
 
-    async function activatePublication(campaignId, publicationId, callOptions) {
-      var optsCall = callOptions && typeof callOptions === 'object' ? callOptions : {};
-      var requestId;
-      try {
-        requestId = createRequestId('activate', optsCall.requestId);
-      } catch (error) {
-        return result(false, '', null, errorPayload(ERROR_CODES.CLIENT_UNAVAILABLE, error.message, false, null));
-      }
-      if (!available()) return clientUnavailable(requestId);
-      var request;
-      try {
-        request = contract.createActivateRequest(campaignId, publicationId, requestId);
-      } catch (errorRequest) {
-        return result(false, requestId, null, errorPayload('INVALID_REQUEST', String(errorRequest && errorRequest.message || errorRequest), false, null));
-      }
-      return executeWrite(request);
-    }
-
-    async function deactivatePublication(campaignId, callOptions) {
-      var optsCall = callOptions && typeof callOptions === 'object' ? callOptions : {};
-      var requestId;
-      try {
-        requestId = createRequestId('deactivate', optsCall.requestId);
-      } catch (error) {
-        return result(false, '', null, errorPayload(ERROR_CODES.CLIENT_UNAVAILABLE, error.message, false, null));
-      }
-      if (!available()) return clientUnavailable(requestId);
-      var request;
-      try {
-        request = contract.createDeactivateRequest(campaignId, requestId);
-      } catch (errorRequest) {
-        return result(false, requestId, null, errorPayload('INVALID_REQUEST', String(errorRequest && errorRequest.message || errorRequest), false, null));
-      }
-      return executeWrite(request);
-    }
-
     async function getPublication(campaignId, publicationId, callOptions) {
       var optsCall = callOptions && typeof callOptions === 'object' ? callOptions : {};
       var requestId;
@@ -336,8 +298,6 @@
 
     return Object.freeze({
       publishPublication: publishPublication,
-      activatePublication: activatePublication,
-      deactivatePublication: deactivatePublication,
       getPublication: getPublication
     });
   }

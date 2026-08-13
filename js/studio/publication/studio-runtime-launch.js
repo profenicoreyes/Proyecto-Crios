@@ -1,14 +1,11 @@
-/* CRIOS Studio - persisted published runtime launch descriptor */
+/* CRIOS Studio - immutable published runtime launch descriptor */
 (function(){
   'use strict';
 
   var STATUS = Object.freeze({
     AVAILABLE: 'AVAILABLE',
-    NO_ACTIVE_PUBLICATION: 'NO_ACTIVE_PUBLICATION',
-    PERSISTENCE_UNAVAILABLE: 'PERSISTENCE_UNAVAILABLE',
-    ACTIVE_REFERENCE_NOT_PERSISTED: 'ACTIVE_REFERENCE_NOT_PERSISTED',
-    ACTIVATION_BUSY: 'ACTIVATION_BUSY',
-    INVALID_ACTIVE_REFERENCE: 'INVALID_ACTIVE_REFERENCE'
+    NO_PUBLICATION: 'NO_PUBLICATION',
+    INVALID_PUBLICATION: 'INVALID_PUBLICATION'
   });
 
   function text(value) {
@@ -21,13 +18,13 @@
     return Object.freeze(value);
   }
 
-  function unavailable(status, message, activeReference) {
+  function unavailable(status, message, publication) {
     return frozen({
       available: false,
       status: status,
       message: message,
-      campaignId: text(activeReference && activeReference.campaignId) || null,
-      publicationId: text(activeReference && activeReference.publicationId) || null,
+      campaignId: text(publication && publication.campaignId) || null,
+      publicationId: text(publication && publication.publicationId) || null,
       href: null,
       target: null,
       rel: null
@@ -46,70 +43,42 @@
 
   function buildDescriptor(options) {
     var opts = options && typeof options === 'object' ? options : {};
-    var activeReference = opts.activeReference && typeof opts.activeReference === 'object'
-      ? opts.activeReference
+    var publication = opts.publication && typeof opts.publication === 'object'
+      ? opts.publication
       : null;
-    var persistenceState = opts.persistenceState && typeof opts.persistenceState === 'object'
-      ? opts.persistenceState
-      : {};
     var runtimePath = text(opts.runtimePath) || '../index.html';
 
-    if (Boolean(opts.activationBusy)) {
+    if (!publication) {
       return unavailable(
-        STATUS.ACTIVATION_BUSY,
-        'Esperá a que termine la operación de activación.',
-        activeReference
-      );
-    }
-
-    if (!activeReference) {
-      return unavailable(
-        STATUS.NO_ACTIVE_PUBLICATION,
-        'Activá una publicación para habilitar su acceso en CRIOS.',
+        STATUS.NO_PUBLICATION,
+        'Publicá una versión para habilitar su enlace en CRIOS.',
         null
       );
     }
 
-    var campaignId = text(activeReference.campaignId);
-    var publicationId = text(activeReference.publicationId);
+    var campaignId = text(publication.campaignId);
+    var publicationId = text(publication.publicationId);
     if (!campaignId || !publicationId) {
       return unavailable(
-        STATUS.INVALID_ACTIVE_REFERENCE,
-        'La referencia activa no contiene los identificadores necesarios.',
-        activeReference
-      );
-    }
-
-    if (persistenceState.status !== 'READY') {
-      return unavailable(
-        STATUS.PERSISTENCE_UNAVAILABLE,
-        'La publicación activa debe quedar guardada localmente antes de abrirla en CRIOS.',
-        activeReference
-      );
-    }
-
-    var activeReferenceCount = Number(persistenceState.activeReferenceCount);
-    if (!Number.isFinite(activeReferenceCount) || activeReferenceCount < 1) {
-      return unavailable(
-        STATUS.ACTIVE_REFERENCE_NOT_PERSISTED,
-        'La referencia activa todavía no figura en la persistencia local.',
-        activeReference
+        STATUS.INVALID_PUBLICATION,
+        'La publicación no contiene los identificadores necesarios.',
+        publication
       );
     }
 
     var launchSearch = buildPublishedLaunchSearch(campaignId, publicationId);
     if (!launchSearch) {
       return unavailable(
-        STATUS.INVALID_ACTIVE_REFERENCE,
-        'La referencia activa contiene identificadores de publicación inválidos.',
-        activeReference
+        STATUS.INVALID_PUBLICATION,
+        'La publicación contiene identificadores inválidos para Runtime.',
+        publication
       );
     }
 
     return frozen({
       available: true,
       status: STATUS.AVAILABLE,
-      message: 'La campaña está activa y guardada en este navegador.',
+      message: 'Esta publicación tiene un enlace propio e inmutable para abrirla en CRIOS.',
       campaignId: campaignId,
       publicationId: publicationId,
       href: runtimePath + launchSearch,
@@ -119,7 +88,7 @@
   }
 
   window.CRIOS_STUDIO_RUNTIME_LAUNCH = Object.freeze({
-    version: '1.1.0',
+    version: '2.0.0',
     status: STATUS,
     buildDescriptor: buildDescriptor
   });

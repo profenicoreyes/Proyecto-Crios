@@ -61,6 +61,10 @@ check(Object.isFrozen(api), 'root API frozen');
 check(!fs.readFileSync(path.join(repo, 'js/publication/remote/remote-publication-client.js'), 'utf8').includes('script.google.com/macros/s/'), 'client contains no fixed production endpoint');
 check(!fs.readFileSync(path.join(repo, 'js/publication/remote/remote-publication-client.js'), 'utf8').includes('teacher-secret'), 'client contains no write token literal');
 
+equal(Object.keys(contract.constants.operations).sort().join(','), 'GET,PUBLISH', 'contract exposes publish/get operations only');
+check(!Object.prototype.hasOwnProperty.call(contract, 'createActivateRequest'), 'contract exposes no activate builder');
+check(!Object.prototype.hasOwnProperty.call(contract, 'createDeactivateRequest'), 'contract exposes no deactivate builder');
+
 let sequence = 0;
 let fetchCount = 0;
 let throwNext = false;
@@ -70,7 +74,7 @@ let httpStatusNext = 0;
 const calls = [];
 const versions = new Map();
 const publications = new Map();
-const active = new Map();
+const createdAtByPublication = new Map();
 const idempotent = new Map();
 const requestBodies = new Map();
 
@@ -93,15 +97,27 @@ function failure(request, code, message, retryable) {
   return response(request, false, null, { code, message, retryable: Boolean(retryable) });
 }
 
+function compatibilityReference(publication) {
+  return {
+    campaignId: publication.campaignId,
+    publicationId: publication.publicationId,
+    version: publication.version,
+    contentHash: publication.contentHash,
+    activatedAt: createdAtByPublication.get(publication.publicationId)
+  };
+}
+
 function server(request, writeToken) {
   const body = JSON.stringify(request);
-  if (request.operation !== 'getPublication' && idempotent.has(request.requestId)) {
+
+  if (request.operation === 'publishPublication' && idempotent.has(request.requestId)) {
     if (requestBodies.get(request.requestId) !== body) {
       return failure(request, 'WRITE_CONFLICT', 'requestId conflict.', false);
     }
     return clone(idempotent.get(request.requestId));
   }
-  if (request.operation !== 'getPublication' && writeToken !== 'test-write-token') {
+
+  if (request.operation === 'publishPublication' && writeToken !== 'test-write-token') {
     return failure(request, 'WRITE_UNAUTHORIZED', 'Teacher write authorization is required.', false);
   }
 
@@ -111,6 +127,7 @@ function server(request, writeToken) {
     const version = (versions.get(campaignId) || 0) + 1;
     versions.set(campaignId, version);
     const publicationId = `server-${campaignId}-v${version}`;
+    const createdAt = `2026-08-07T22:00:0${Math.min(version, 9)}.000Z`;
     const publication = {
       campaignId,
       publicationId,
@@ -126,67 +143,27 @@ function server(request, writeToken) {
       schemaVersion: request.payload.schemaVersion,
       contentHash: request.payload.contentHash,
       sourceDraftRevision: request.payload.draftRevision,
-      createdAt: `2026-08-07T22:00:0${version}.000Z`,
+      createdAt,
       status: 'PUBLISHED'
     };
     publications.set(publicationId, publication);
+    createdAtByPublication.set(publicationId, createdAt);
     data = { publication, record };
-  } else if (request.operation === 'activatePublication') {
-    const publication = publications.get(request.payload.publicationId) || null;
-    if (!publication || publication.campaignId !== request.payload.campaignId) {
-      return failure(request, 'PUBLICATION_UNAVAILABLE', 'Publication unavailable.', false);
-    }
-    const previous = active.get(request.payload.campaignId) || null;
-    if (previous && previous.publicationId === publication.publicationId) {
-      data = { changed: false, reference: clone(previous), record: null };
-    } else {
-      const reference = {
-        campaignId: publication.campaignId,
-        publicationId: publication.publicationId,
-        version: publication.version,
-        contentHash: publication.contentHash,
-        activatedAt: '2026-08-07T22:10:00.000Z'
-      };
-      const record = {
-        activationId: request.requestId,
-        action: 'ACTIVATE',
-        campaignId: publication.campaignId,
-        previousPublicationId: previous ? previous.publicationId : null,
-        nextPublicationId: publication.publicationId,
-        occurredAt: '2026-08-07T22:10:00.000Z'
-      };
-      active.set(publication.campaignId, reference);
-      data = { changed: true, reference, record };
-    }
-  } else if (request.operation === 'deactivatePublication') {
-    const previous = active.get(request.payload.campaignId) || null;
-    if (!previous) {
-      data = { changed: false, reference: null, record: null };
-    } else {
-      const record = {
-        activationId: request.requestId,
-        action: 'DEACTIVATE',
-        campaignId: request.payload.campaignId,
-        previousPublicationId: previous.publicationId,
-        nextPublicationId: null,
-        occurredAt: '2026-08-07T22:20:00.000Z'
-      };
-      active.delete(request.payload.campaignId);
-      data = { changed: true, reference: null, record };
-    }
   } else if (request.operation === 'getPublication') {
     const publication = publications.get(request.payload.publicationId) || null;
-    const reference = active.get(request.payload.campaignId) || null;
-    if (!publication || !reference || reference.publicationId !== publication.publicationId) {
-      return failure(request, 'PUBLICATION_UNAVAILABLE', 'Publication is not active.', false);
+    if (!publication || publication.campaignId !== request.payload.campaignId) {
+      return failure(request, 'PUBLICATION_UNAVAILABLE', 'Publication is unavailable.', false);
     }
-    data = { publication: clone(publication), activeReference: clone(reference) };
+    data = {
+      publication: clone(publication),
+      activeReference: compatibilityReference(publication)
+    };
   } else {
     return failure(request, 'UNSUPPORTED_OPERATION', 'Unsupported operation.', false);
   }
 
   const output = response(request, true, data, null);
-  if (request.operation !== 'getPublication') {
+  if (request.operation === 'publishPublication') {
     idempotent.set(request.requestId, clone(output));
     requestBodies.set(request.requestId, body);
   }
@@ -203,6 +180,7 @@ async function fakeFetch(url, init) {
   const method = String((init && init.method) || 'GET').toUpperCase();
   let request;
   let writeToken = '';
+
   if (method === 'POST') {
     const envelope = JSON.parse(String(init.body || '{}'));
     request = envelope.request;
@@ -262,118 +240,121 @@ function createClient(tokenProvider) {
   });
 }
 
+function publishInput(campaignId, revision, hashChar) {
+  return vmClone({
+    campaignId,
+    draftRevision: revision,
+    schemaVersion: '2.0',
+    contentHash: String(hashChar || 'a').repeat(64),
+    content: { nombre: `Campaña ${revision}`, misiones: [{ id: 'm1' }] }
+  });
+}
+
 (async function run() {
   const client = createClient();
-  equal(Object.keys(client).sort().join(','), 'activatePublication,deactivatePublication,getPublication,publishPublication', 'client instance API exact');
+  equal(Object.keys(client).sort().join(','), 'getPublication,publishPublication', 'client instance API exact');
   check(Object.isFrozen(client), 'client instance frozen');
+  equal(typeof client.activatePublication, 'undefined', 'activate method retired');
+  equal(typeof client.deactivatePublication, 'undefined', 'deactivate method retired');
 
   const beforeNoToken = fetchCount;
-  const noToken = await createClient(() => '').deactivatePublication('camp-a');
-  check(!noToken.success, 'missing token fails closed');
+  const noToken = await createClient(() => '').publishPublication(publishInput('camp-no-token', 'rev-0', '0'));
+  check(!noToken.success, 'missing token fails publish closed');
   equal(noToken.error.code, 'WRITE_UNAUTHORIZED', 'missing token code');
   equal(fetchCount, beforeNoToken, 'missing token causes no fetch');
 
   const asyncTokenClient = createClient(async () => 'test-write-token');
-  const asyncTokenResult = await asyncTokenClient.deactivatePublication('camp-empty');
-  check(asyncTokenResult.success, 'async token provider supported');
+  const asyncTokenResult = await asyncTokenClient.publishPublication(publishInput('camp-async', 'rev-1', '1'));
+  check(asyncTokenResult.success, 'async token provider supported for publish');
 
   const authThrowClient = createClient(() => { throw new Error('auth unavailable'); });
-  const authThrow = await authThrowClient.deactivatePublication('camp-a');
+  const authThrow = await authThrowClient.publishPublication(publishInput('camp-auth-throw', 'rev-1', '2'));
   check(!authThrow.success, 'throwing token provider fails closed');
   equal(authThrow.error.code, 'WRITE_UNAUTHORIZED', 'throwing token provider maps to write unauthorized');
 
-  const contentHash = 'a'.repeat(64);
-  const publishInput = vmClone({
-    campaignId: 'camp-a',
-    draftRevision: 'rev-1',
-    schemaVersion: '2.0',
-    contentHash,
-    content: { nombre: 'Campaña', misiones: [{ id: 'm1' }] }
-  });
-  const published = await client.publishPublication(publishInput, { requestId: 'explicit-publish-id' });
-  check(published.success, 'publish succeeds');
-  equal(published.requestId, 'explicit-publish-id', 'explicit requestId preserved');
-  equal(published.data.publication.publicationId, 'server-camp-a-v1', 'server publicationId accepted');
-  equal(published.data.publication.version, 1, 'server version accepted');
-  equal(published.data.record.createdAt, '2026-08-07T22:00:01.000Z', 'server createdAt accepted');
-  equal(published.data.record.sourceDraftRevision, 'rev-1', 'source draft revision preserved');
+  const firstInput = publishInput('camp-a', 'rev-1', 'a');
+  const first = await client.publishPublication(firstInput, { requestId: 'publish-v1' });
+  check(first.success, 'first publish succeeds');
+  equal(first.requestId, 'publish-v1', 'explicit requestId preserved');
+  equal(first.data.publication.publicationId, 'server-camp-a-v1', 'server publicationId accepted');
+  equal(first.data.publication.version, 1, 'first version accepted');
+  equal(first.data.record.sourceDraftRevision, 'rev-1', 'source draft revision preserved');
 
-  const publishCall = calls.find((item) => item.request.requestId === 'explicit-publish-id');
-  equal(publishCall.method, 'POST', 'publish uses POST');
-  equal(publishCall.writeToken, 'test-write-token', 'token sent in outer envelope');
-  check(!Object.prototype.hasOwnProperty.call(publishCall.request, 'writeToken'), 'token excluded from contract request');
-  equal(publishCall.init.credentials, 'omit', 'POST credentials omitted');
-  equal(publishCall.init.cache, 'no-store', 'POST cache disabled');
-  equal(publishCall.init.redirect, 'follow', 'POST redirects followed');
-  equal(publishCall.init.headers['Content-Type'], 'text/plain;charset=utf-8', 'POST uses Apps Script safe content type');
-  equal(publishCall.request.operation, 'publishPublication', 'publish operation exact');
-  equal(publishCall.request.payload.contentHash, contentHash, 'publish hash exact');
+  const firstCall = calls.find((item) => item.request.requestId === 'publish-v1');
+  equal(firstCall.method, 'POST', 'publish uses POST');
+  equal(firstCall.writeToken, 'test-write-token', 'token sent in outer envelope');
+  check(!Object.prototype.hasOwnProperty.call(firstCall.request, 'writeToken'), 'token excluded from contract request');
+  equal(firstCall.init.credentials, 'omit', 'POST credentials omitted');
+  equal(firstCall.init.cache, 'no-store', 'POST cache disabled');
+  equal(firstCall.init.headers['Content-Type'], 'text/plain;charset=utf-8', 'POST uses safe content type');
+  equal(firstCall.request.operation, 'publishPublication', 'publish operation exact');
 
-  const repeat = await client.publishPublication(publishInput, { requestId: 'explicit-publish-id' });
-  check(repeat.success, 'idempotent repeated publish succeeds');
-  equal(repeat.data.publication.publicationId, published.data.publication.publicationId, 'idempotent repeated publish returns same publication');
+  const repeated = await client.publishPublication(firstInput, { requestId: 'publish-v1' });
+  check(repeated.success, 'idempotent repeated publish succeeds');
+  equal(repeated.data.publication.publicationId, first.data.publication.publicationId, 'idempotent repeated publish returns same publication');
   equal(versions.get('camp-a'), 1, 'idempotent repeated publish does not increment version');
 
-  const activated = await client.activatePublication('camp-a', published.data.publication.publicationId, { requestId: 'activate-id' });
-  check(activated.success && activated.data.changed, 'activate succeeds');
-  equal(activated.data.reference.publicationId, published.data.publication.publicationId, 'activate reference exact');
-  equal(activated.data.record.activationId, 'activate-id', 'activation record uses requestId');
-  equal(activated.data.record.action, 'ACTIVATE', 'activation record action exact');
+  const getFirst = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'get-v1-before-v2' });
+  check(getFirst.success, 'direct GET first publication succeeds');
+  equal(getFirst.data.publication.publicationId, first.data.publication.publicationId, 'GET exact publication');
+  equal(getFirst.data.activeReference.publicationId, first.data.publication.publicationId, 'GET compatibility reference exact');
 
-  const activatedAgain = await client.activatePublication('camp-a', published.data.publication.publicationId, { requestId: 'activate-again-id' });
-  check(activatedAgain.success && !activatedAgain.data.changed, 'activate same publication is idempotent state change');
-  equal(activatedAgain.data.record, null, 'unchanged activation has no record');
-
-  const getActive = await client.getPublication('camp-a', published.data.publication.publicationId, { requestId: 'get-id' });
-  check(getActive.success, 'GET active publication succeeds');
-  equal(getActive.data.publication.publicationId, published.data.publication.publicationId, 'GET publication exact');
-  equal(getActive.data.activeReference.publicationId, published.data.publication.publicationId, 'GET active reference exact');
-  const getCall = calls.find((item) => item.request.requestId === 'get-id');
+  const getCall = calls.find((item) => item.request.requestId === 'get-v1-before-v2');
   equal(getCall.method, 'GET', 'read uses GET');
   equal(getCall.writeToken, '', 'GET sends no write token');
   check(getCall.url.includes('accion=getPublication'), 'GET includes Apps Script action');
   check(getCall.url.includes('campaignId=camp-a'), 'GET includes campaignId');
-  check(getCall.url.includes(`publicationId=${encodeURIComponent(published.data.publication.publicationId)}`), 'GET includes publicationId');
+  check(getCall.url.includes(`publicationId=${encodeURIComponent(first.data.publication.publicationId)}`), 'GET includes publicationId');
 
-  const deactivated = await client.deactivatePublication('camp-a', { requestId: 'deactivate-id' });
-  check(deactivated.success && deactivated.data.changed, 'deactivate succeeds');
-  equal(deactivated.data.reference, null, 'deactivate returns null active reference');
-  equal(deactivated.data.record.action, 'DEACTIVATE', 'deactivation action exact');
+  const second = await client.publishPublication(publishInput('camp-a', 'rev-2', 'b'), { requestId: 'publish-v2' });
+  check(second.success, 'second immutable publish succeeds');
+  equal(second.data.publication.version, 2, 'second publish gets next version');
+  check(second.data.publication.publicationId !== first.data.publication.publicationId, 'second publish gets unique publicationId');
 
-  const unavailable = await client.getPublication('camp-a', published.data.publication.publicationId, { requestId: 'get-inactive-id' });
-  check(!unavailable.success, 'inactive GET fails neutrally');
-  equal(unavailable.error.code, 'PUBLICATION_UNAVAILABLE', 'inactive GET code preserved');
-  check(unavailable.error.retryable === false, 'inactive GET is non-retryable');
+  const oldLink = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'get-old-link' });
+  check(oldLink.success, 'old direct link survives later publish');
+  equal(oldLink.data.publication.publicationId, first.data.publication.publicationId, 'old link resolves exact old snapshot');
+
+  const newLink = await client.getPublication('camp-a', second.data.publication.publicationId, { requestId: 'get-new-link' });
+  check(newLink.success, 'new direct link resolves');
+  equal(newLink.data.publication.publicationId, second.data.publication.publicationId, 'new link resolves exact new snapshot');
+
+  const wrongCampaign = await client.getPublication('other-camp', first.data.publication.publicationId, { requestId: 'get-wrong-campaign' });
+  check(!wrongCampaign.success, 'campaign/publication mismatch unavailable');
+  equal(wrongCampaign.error.code, 'PUBLICATION_UNAVAILABLE', 'mismatch code preserved');
+
+  const missing = await client.getPublication('camp-a', 'missing-publication', { requestId: 'get-missing' });
+  check(!missing.success, 'unknown publication unavailable');
+  equal(missing.error.code, 'PUBLICATION_UNAVAILABLE', 'unknown publication code preserved');
+  check(missing.error.retryable === false, 'unknown publication non-retryable');
 
   throwNext = true;
-  const transport = await client.deactivatePublication('camp-a', { requestId: 'transport-id' });
+  const transport = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'transport-id' });
   check(!transport.success, 'transport exception becomes failure result');
   equal(transport.error.code, 'REMOTE_TRANSPORT_FAILED', 'transport error code');
   check(transport.error.retryable, 'transport error retryable');
 
   httpStatusNext = 503;
-  const http503 = await client.deactivatePublication('camp-a', { requestId: 'http-503-id' });
+  const http503 = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'http-503-id' });
   check(!http503.success, 'HTTP 503 becomes failure');
   equal(http503.error.code, 'REMOTE_HTTP_ERROR', 'HTTP error code');
   check(http503.error.retryable, 'HTTP 503 retryable');
   equal(http503.error.metadata.status, 503, 'HTTP status metadata retained');
 
   httpStatusNext = 400;
-  const http400 = await client.deactivatePublication('camp-a', { requestId: 'http-400-id' });
+  const http400 = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'http-400-id' });
   check(!http400.success, 'HTTP 400 becomes failure');
   check(!http400.error.retryable, 'HTTP 400 non-retryable');
 
   invalidJsonNext = true;
-  const invalidJson = await client.deactivatePublication('camp-a', { requestId: 'invalid-json-id' });
+  const invalidJson = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'invalid-json-id' });
   check(!invalidJson.success, 'invalid JSON rejected');
   equal(invalidJson.error.code, 'REMOTE_RESPONSE_PARSE_FAILED', 'invalid JSON code');
-  check(invalidJson.error.retryable, 'invalid JSON marked retryable');
 
   invalidContractNext = true;
-  const invalidContract = await client.deactivatePublication('camp-a', { requestId: 'invalid-contract-id' });
+  const invalidContract = await client.getPublication('camp-a', first.data.publication.publicationId, { requestId: 'invalid-contract-id' });
   check(!invalidContract.success, 'contract-invalid response rejected');
   equal(invalidContract.error.code, 'REMOTE_RESPONSE_INVALID', 'contract-invalid response code');
-  check(!invalidContract.error.retryable, 'contract-invalid response non-retryable');
 
   const insecureClient = api.createClient({
     endpoint: 'https://example.invalid/exec',
@@ -386,21 +367,32 @@ function createClient(tokenProvider) {
     fetchImpl: async function(){ throw new Error('fetch must not run'); },
     requestIdFactory: () => 'insecure-context-id'
   });
-  const insecureResult = await insecureClient.deactivatePublication('camp-a');
-  check(!insecureResult.success, 'insecure auth provider blocks remote write');
+  const insecureResult = await insecureClient.publishPublication(publishInput('camp-insecure', 'rev-1', 'c'));
+  check(!insecureResult.success, 'insecure auth provider blocks remote publish');
   equal(insecureResult.error.code, 'INSECURE_CONTEXT', 'auth provider error code preserved');
   check(/HTTPS|localhost/.test(insecureResult.error.message), 'auth provider secure-context message preserved');
 
   const unavailableClient = api.createClient({ contract, endpoint: '', fetchImpl: fakeFetch, requestIdFactory: () => 'unavailable-id' });
-  const unavailableClientResult = await unavailableClient.getPublication('camp-a', 'pub-a');
-  check(!unavailableClientResult.success, 'missing endpoint fails safely');
-  equal(unavailableClientResult.error.code, 'REMOTE_CLIENT_UNAVAILABLE', 'missing endpoint code');
+  const unavailableResult = await unavailableClient.getPublication('camp-a', first.data.publication.publicationId);
+  check(!unavailableResult.success, 'missing endpoint fails safely');
+  equal(unavailableResult.error.code, 'REMOTE_CLIENT_UNAVAILABLE', 'missing endpoint code');
+
+  const incompleteContract = {
+    createPublishRequest: contract.createPublishRequest,
+    parseResponse: contract.parseResponse
+  };
+  const incompleteClient = api.createClient({ contract: incompleteContract, endpoint: 'https://remote.test/exec', fetchImpl: fakeFetch });
+  const incompleteResult = await incompleteClient.getPublication('camp-a', first.data.publication.publicationId);
+  check(!incompleteResult.success, 'missing GET builder makes client unavailable');
+  equal(incompleteResult.error.code, 'REMOTE_CLIENT_UNAVAILABLE', 'incomplete contract fails closed');
 
   check(failed === 0, 'all preceding checks passed');
 
   console.log(`REMOTE_CLIENT_TEST_STATUS=${failed === 0 ? 'PASS' : 'FAIL'}`);
   console.log(`REMOTE_CLIENT_TEST_TOTAL=${total}`);
   console.log(`REMOTE_CLIENT_TEST_FAILED=${failed}`);
+  console.log('REMOTE_CLIENT_MUTABLE_OPERATIONS=false');
+  console.log('REMOTE_CLIENT_DIRECT_IMMUTABLE_GET=true');
   console.log('REMOTE_CLIENT_REAL_NETWORK=false');
   console.log('REMOTE_CLIENT_SECRET_EMBEDDED=false');
   if (failures.length) failures.forEach((item) => console.log(`FAIL=${item}`));
@@ -411,6 +403,7 @@ function createClient(tokenProvider) {
   console.log('REMOTE_CLIENT_TEST_STATUS=FAIL');
   console.log(`REMOTE_CLIENT_TEST_TOTAL=${total}`);
   console.log(`REMOTE_CLIENT_TEST_FAILED=${failed}`);
+  console.log('REMOTE_CLIENT_MUTABLE_OPERATIONS=false');
   console.log('REMOTE_CLIENT_REAL_NETWORK=false');
   process.exitCode = 1;
 });

@@ -6,8 +6,6 @@
   var PROTOCOL_VERSION = '1.0';
   var OPERATIONS = Object.freeze({
     PUBLISH: 'publishPublication',
-    ACTIVATE: 'activatePublication',
-    DEACTIVATE: 'deactivatePublication',
     GET: 'getPublication'
   });
   var ERROR_CODES = Object.freeze({
@@ -43,15 +41,11 @@
   var RESPONSE_KEYS = ['protocolVersion', 'operation', 'requestId', 'success', 'data', 'error'];
   var ERROR_KEYS = ['code', 'message', 'retryable'];
   var PUBLISH_REQUEST_KEYS = ['campaignId', 'draftRevision', 'schemaVersion', 'contentHash', 'content'];
-  var ACTIVATE_REQUEST_KEYS = ['campaignId', 'publicationId'];
-  var DEACTIVATE_REQUEST_KEYS = ['campaignId'];
   var GET_REQUEST_KEYS = ['campaignId', 'publicationId'];
   var PUBLICATION_KEYS = ['campaignId', 'publicationId', 'version', 'schemaVersion', 'contentHash', 'content'];
   var PUBLICATION_RECORD_KEYS = ['publicationId', 'campaignId', 'version', 'schemaVersion', 'contentHash', 'sourceDraftRevision', 'createdAt', 'status'];
   var ACTIVE_REFERENCE_KEYS = ['campaignId', 'publicationId', 'version', 'contentHash', 'activatedAt'];
-  var ACTIVATION_RECORD_KEYS = ['activationId', 'action', 'campaignId', 'previousPublicationId', 'nextPublicationId', 'occurredAt'];
   var PUBLISH_DATA_KEYS = ['publication', 'record'];
-  var ACTIVATION_DATA_KEYS = ['changed', 'reference', 'record'];
   var GET_DATA_KEYS = ['publication', 'activeReference'];
   var ISSUE_KEYS = ['code', 'message', 'path'];
   var PARSED_RESPONSE_KEYS = ['accepted', 'response', 'error'];
@@ -149,10 +143,8 @@
     var timestamp = Date.parse(value);
     return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
   }
-  function validNullablePublicationId(value) { return value === null || normalizedPublicationId(value) === value; }
-
   function operationKnown(value) {
-    return value === OPERATIONS.PUBLISH || value === OPERATIONS.ACTIVATE || value === OPERATIONS.DEACTIVATE || value === OPERATIONS.GET;
+    return value === OPERATIONS.PUBLISH || value === OPERATIONS.GET;
   }
 
   function errorCodeKnown(value) {
@@ -212,23 +204,6 @@
     inspectContent(payload.content, issues, '$.payload.content');
   }
 
-  function validateActivatePayload(payload, issues) {
-    if (!exactKeys(payload, ACTIVATE_REQUEST_KEYS)) {
-      issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'activatePublication payload shape is invalid.', '$.payload'));
-      return;
-    }
-    if (normalizedCampaignId(payload.campaignId) !== payload.campaignId) issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'campaignId is invalid or not normalized.', '$.payload.campaignId'));
-    if (normalizedPublicationId(payload.publicationId) !== payload.publicationId) issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'publicationId is invalid or not normalized.', '$.payload.publicationId'));
-  }
-
-  function validateDeactivatePayload(payload, issues) {
-    if (!exactKeys(payload, DEACTIVATE_REQUEST_KEYS)) {
-      issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'deactivatePublication payload shape is invalid.', '$.payload'));
-      return;
-    }
-    if (normalizedCampaignId(payload.campaignId) !== payload.campaignId) issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'campaignId is invalid or not normalized.', '$.payload.campaignId'));
-  }
-
   function validateGetPayload(payload, issues) {
     if (!exactKeys(payload, GET_REQUEST_KEYS)) {
       issues.push(createIssue(ERROR_CODES.INVALID_REQUEST, 'getPublication payload shape is invalid.', '$.payload'));
@@ -251,8 +226,6 @@
       return validation(issues);
     }
     if (value.operation === OPERATIONS.PUBLISH) validatePublishPayload(value.payload, issues);
-    else if (value.operation === OPERATIONS.ACTIVATE) validateActivatePayload(value.payload, issues);
-    else if (value.operation === OPERATIONS.DEACTIVATE) validateDeactivatePayload(value.payload, issues);
     else if (value.operation === OPERATIONS.GET) validateGetPayload(value.payload, issues);
     return validation(issues);
   }
@@ -285,19 +258,6 @@
       schemaVersion: String(source.schemaVersion == null ? '' : source.schemaVersion).trim(),
       contentHash: String(source.contentHash == null ? '' : source.contentHash).trim(),
       content: source.content
-    });
-  }
-
-  function createActivateRequest(campaignId, publicationId, requestId) {
-    return buildRequest(OPERATIONS.ACTIVATE, requestId, {
-      campaignId: String(campaignId == null ? '' : campaignId).trim(),
-      publicationId: String(publicationId == null ? '' : publicationId).trim()
-    });
-  }
-
-  function createDeactivateRequest(campaignId, requestId) {
-    return buildRequest(OPERATIONS.DEACTIVATE, requestId, {
-      campaignId: String(campaignId == null ? '' : campaignId).trim()
     });
   }
 
@@ -336,15 +296,6 @@
       validPositiveVersion(value.version) && validContentHash(value.contentHash) && validIsoUtc(value.activatedAt);
   }
 
-  function validActivationRecord(value) {
-    return exactKeys(value, ACTIVATION_RECORD_KEYS) &&
-      normalizedRequestId(value.activationId) === value.activationId &&
-      (value.action === 'ACTIVATE' || value.action === 'DEACTIVATE') &&
-      normalizedCampaignId(value.campaignId) === value.campaignId &&
-      validNullablePublicationId(value.previousPublicationId) && validNullablePublicationId(value.nextPublicationId) &&
-      validIsoUtc(value.occurredAt);
-  }
-
   function validRemoteError(value) {
     return exactKeys(value, ERROR_KEYS) && errorCodeKnown(value.code) && typeof value.message === 'string' && value.message.trim() !== '' && typeof value.retryable === 'boolean';
   }
@@ -368,45 +319,6 @@
       if (publication.schemaVersion !== request.payload.schemaVersion) pushIdentityIssue(issues, 'Published schemaVersion does not match request.', '$.data.publication.schemaVersion');
       if (publication.contentHash !== request.payload.contentHash) pushIdentityIssue(issues, 'Published contentHash does not match request.', '$.data.publication.contentHash');
       if (record.sourceDraftRevision !== request.payload.draftRevision) pushIdentityIssue(issues, 'PublicationRecord sourceDraftRevision does not match request.', '$.data.record.sourceDraftRevision');
-    }
-  }
-
-  function validateActivationData(data, request, operation, issues) {
-    if (!exactKeys(data, ACTIVATION_DATA_KEYS) || typeof data.changed !== 'boolean' || data.reference !== null && !validActiveReference(data.reference) || data.record !== null && !validActivationRecord(data.record)) {
-      issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, operation + ' response data is invalid.', '$.data'));
-      return;
-    }
-    if (data.changed && data.record === null) {
-      issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'Changed activation response requires a record.', '$.data.record'));
-      return;
-    }
-    if (!data.changed && data.record !== null) {
-      issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'Unchanged activation response must not contain a record.', '$.data.record'));
-      return;
-    }
-    if (operation === OPERATIONS.ACTIVATE) {
-      if (data.reference === null) {
-        issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'activatePublication success requires an active reference.', '$.data.reference'));
-        return;
-      }
-      if (request && (data.reference.campaignId !== request.payload.campaignId || data.reference.publicationId !== request.payload.publicationId)) {
-        pushIdentityIssue(issues, 'Active reference does not match activation request.', '$.data.reference');
-      }
-      if (data.record) {
-        if (data.record.action !== 'ACTIVATE' || data.record.campaignId !== data.reference.campaignId || data.record.nextPublicationId !== data.reference.publicationId) {
-          pushIdentityIssue(issues, 'ActivationRecord does not match active reference.', '$.data.record');
-        }
-      }
-    } else {
-      if (data.reference !== null) {
-        issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'deactivatePublication success must return a null active reference.', '$.data.reference'));
-        return;
-      }
-      if (data.record) {
-        if (data.record.action !== 'DEACTIVATE' || request && data.record.campaignId !== request.payload.campaignId || data.record.nextPublicationId !== null) {
-          pushIdentityIssue(issues, 'DeactivationRecord does not match deactivation request.', '$.data.record');
-        }
-      }
     }
   }
 
@@ -445,8 +357,6 @@
       if (value.error !== null || !isPlainObject(value.data)) {
         issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'Successful response requires data and null error.', '$'));
       } else if (value.operation === OPERATIONS.PUBLISH) validatePublishData(value.data, expectedRequest && expectedRequest.operation === OPERATIONS.PUBLISH ? expectedRequest : null, issues);
-      else if (value.operation === OPERATIONS.ACTIVATE) validateActivationData(value.data, expectedRequest && expectedRequest.operation === OPERATIONS.ACTIVATE ? expectedRequest : null, OPERATIONS.ACTIVATE, issues);
-      else if (value.operation === OPERATIONS.DEACTIVATE) validateActivationData(value.data, expectedRequest && expectedRequest.operation === OPERATIONS.DEACTIVATE ? expectedRequest : null, OPERATIONS.DEACTIVATE, issues);
       else if (value.operation === OPERATIONS.GET) validateGetData(value.data, expectedRequest && expectedRequest.operation === OPERATIONS.GET ? expectedRequest : null, issues);
     } else if (value.success === false) {
       if (value.data !== null || !validRemoteError(value.error)) issues.push(createIssue(ERROR_CODES.REMOTE_RESPONSE_INVALID, 'Failed response requires null data and a valid error.', '$'));
@@ -483,8 +393,6 @@
     version: VERSION,
     constants: CONSTANTS,
     createPublishRequest: createPublishRequest,
-    createActivateRequest: createActivateRequest,
-    createDeactivateRequest: createDeactivateRequest,
     createGetPublicationRequest: createGetPublicationRequest,
     validateRequest: validateRequest,
     validateResponse: validateResponse,
