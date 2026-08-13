@@ -30,6 +30,10 @@ function doPost(e) {
     return responder({ok: false, error: String(errorParseo)});
   }
 
+  if (typeof esEnvelopePostLiveRoomRemota === 'function' && esEnvelopePostLiveRoomRemota(datos)) {
+    return responder(procesarSolicitudLiveRoomRemota(datos.liveRoomRequest));
+  }
+
   if (typeof esEnvelopePostPublicacionRemota === 'function' && esEnvelopePostPublicacionRemota(datos)) {
     return responder(procesarSolicitudPublicacionRemota(datos.request, {}));
   }
