@@ -7,9 +7,7 @@
     CLIENT_UNAVAILABLE: 'REMOTE_CLIENT_UNAVAILABLE',
     TRANSPORT_FAILED: 'REMOTE_TRANSPORT_FAILED',
     HTTP_ERROR: 'REMOTE_HTTP_ERROR',
-    RESPONSE_PARSE_FAILED: 'REMOTE_RESPONSE_PARSE_FAILED',
-    AUTH_UNAVAILABLE: 'WRITE_UNAUTHORIZED',
-    INSECURE_CONTEXT: 'INSECURE_CONTEXT'
+    RESPONSE_PARSE_FAILED: 'REMOTE_RESPONSE_PARSE_FAILED'
   });
 
   function clone(value) {
@@ -74,9 +72,6 @@
     var fetchImpl = typeof opts.fetchImpl === 'function'
       ? opts.fetchImpl
       : (typeof window.fetch === 'function' ? window.fetch.bind(window) : null);
-    var writeTokenProvider = typeof opts.writeTokenProvider === 'function'
-      ? opts.writeTokenProvider
-      : function(){ return ''; };
     var requestIdFactory = typeof opts.requestIdFactory === 'function'
       ? opts.requestIdFactory
       : defaultRequestIdFactory;
@@ -97,12 +92,6 @@
       var generated = text(requestIdFactory(operation));
       if (!generated) throw new Error('requestIdFactory returned an empty id.');
       return generated;
-    }
-
-    async function token() {
-      var value = writeTokenProvider();
-      if (value && typeof value.then === 'function') value = await value;
-      return text(value);
     }
 
     function clientUnavailable(requestId) {
@@ -199,34 +188,13 @@
       var requestId = request && request.requestId ? request.requestId : '';
       if (!available()) return clientUnavailable(requestId);
 
-      var writeToken;
-      try {
-        writeToken = await token();
-      } catch (error) {
-        return result(false, requestId, null, errorPayload(
-          text(error && error.code) === ERROR_CODES.INSECURE_CONTEXT ? ERROR_CODES.INSECURE_CONTEXT : ERROR_CODES.AUTH_UNAVAILABLE,
-          String(error && error.message || 'Teacher write authorization is unavailable.'),
-          false,
-          null
-        ));
-      }
-
-      if (!writeToken) {
-        return result(false, requestId, null, errorPayload(
-          ERROR_CODES.AUTH_UNAVAILABLE,
-          'Teacher write authorization is required.',
-          false,
-          null
-        ));
-      }
-
       var transport = await fetchText(endpoint, {
         method: 'POST',
         credentials: 'omit',
         cache: 'no-store',
         redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ request: request, writeToken: writeToken })
+        body: JSON.stringify({ request: request })
       });
 
       if (!transport.ok) return result(false, requestId, null, transport.error);

@@ -4,6 +4,10 @@ const CRIOS_PUBLICATION_WRITE_TOKEN_MIN_LENGTH = 8;
 const CRIOS_PUBLICATION_WRITE_TOKEN_MAX_LENGTH = 256;
 const CRIOS_PUBLICATION_MAX_CONTENT_BYTES = 524288;
 const CRIOS_PUBLICATION_CHUNK_SIZE = 30000;
+const CRIOS_PUBLICATION_ANONYMOUS_RATE_LIMIT = 30;
+const CRIOS_PUBLICATION_ANONYMOUS_RATE_WINDOW_SECONDS = 60;
+const CRIOS_PUBLICATION_MAX_STORED_PUBLICATIONS = 5000;
+const CRIOS_PUBLICATION_RATE_CACHE_PREFIX = 'CRIOS_PUBLICATION_ANON_PUBLISH_';
 
 const CRIOS_PUBLICATION_OPERATIONS = Object.freeze({
   PUBLISH: 'publishPublication',
@@ -19,6 +23,8 @@ const CRIOS_PUBLICATION_ERROR_CODES = Object.freeze({
   CONTENT_TOO_LARGE: 'CONTENT_TOO_LARGE',
   WRITE_UNAUTHORIZED: 'WRITE_UNAUTHORIZED',
   WRITE_CONFLICT: 'WRITE_CONFLICT',
+  WRITE_RATE_LIMITED: 'WRITE_RATE_LIMITED',
+  WRITE_CAPACITY_REACHED: 'WRITE_CAPACITY_REACHED',
   PUBLICATION_UNAVAILABLE: 'PUBLICATION_UNAVAILABLE',
   SERVER_VALIDATION_FAILED: 'SERVER_VALIDATION_FAILED',
   SERVER_HASH_MISMATCH: 'SERVER_HASH_MISMATCH',
@@ -673,6 +679,53 @@ function responderReplayPublicacionRemota(libro, solicitud, requestHash, procesa
   });
 }
 
+function contarPublicacionesAlmacenadasRemotas(libro) {
+  const hoja = obtenerHojaLecturaPublicacionRemota(
+    libro,
+    CRIOS_PUBLICATION_SHEETS.PUBLICATIONS,
+    CRIOS_PUBLICATION_HEADERS.PUBLICATIONS
+  );
+  return hoja ? Math.max(0, hoja.getLastRow() - 1) : 0;
+}
+
+function consumirCupoPublicacionAnonimaRemota() {
+  const ventanaMs = CRIOS_PUBLICATION_ANONYMOUS_RATE_WINDOW_SECONDS * 1000;
+  const bucket = Math.floor(Date.now() / ventanaMs);
+  const clave = CRIOS_PUBLICATION_RATE_CACHE_PREFIX + bucket;
+  const cache = CacheService.getScriptCache();
+  const actual = Number(cache.get(clave) || 0);
+  if (!Number.isFinite(actual) || actual < 0) return false;
+  if (actual >= CRIOS_PUBLICATION_ANONYMOUS_RATE_LIMIT) return false;
+  cache.put(clave, String(actual + 1), CRIOS_PUBLICATION_ANONYMOUS_RATE_WINDOW_SECONDS + 5);
+  return true;
+}
+
+function validarCupoNuevaPublicacionRemota(libro) {
+  if (contarPublicacionesAlmacenadasRemotas(libro) >= CRIOS_PUBLICATION_MAX_STORED_PUBLICATIONS) {
+    return {
+      ok: false,
+      code: CRIOS_PUBLICATION_ERROR_CODES.WRITE_CAPACITY_REACHED,
+      message: 'Remote publication storage capacity has been reached.'
+    };
+  }
+  try {
+    if (!consumirCupoPublicacionAnonimaRemota()) {
+      return {
+        ok: false,
+        code: CRIOS_PUBLICATION_ERROR_CODES.WRITE_RATE_LIMITED,
+        message: 'Remote publication rate limit has been reached.'
+      };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      code: CRIOS_PUBLICATION_ERROR_CODES.SERVER_ERROR,
+      message: 'Remote publication abuse guard is unavailable.'
+    };
+  }
+  return {ok: true};
+}
+
 function procesarPublicacionNuevaRemota(libro, solicitud, requestHash) {
   const procesada = leerSolicitudProcesadaPublicacionRemota(libro, solicitud.requestId);
   if (procesada) return responderReplayPublicacionRemota(libro, solicitud, requestHash, procesada);
@@ -689,6 +742,11 @@ function procesarPublicacionNuevaRemota(libro, solicitud, requestHash) {
       event: null
     });
     return crearRespuestaPublicacionRemota(solicitud, true, {publication: recuperada.publication, record: recuperada.record});
+  }
+
+  const cupo = validarCupoNuevaPublicacionRemota(libro);
+  if (!cupo.ok) {
+    return crearRespuestaPublicacionRemota(solicitud, false, null, cupo.code, cupo.message, cupo.code === CRIOS_PUBLICATION_ERROR_CODES.WRITE_RATE_LIMITED);
   }
 
   const canonical = canonicalizarContenidoPublicacionRemota(solicitud.payload.schemaVersion, solicitud.payload.content);
@@ -897,10 +955,6 @@ function procesarSolicitudPublicacionRemota(solicitud, contexto) {
   }
 
   const escritura = solicitud.operation === CRIOS_PUBLICATION_OPERATIONS.PUBLISH;
-  if (escritura && !autorizarEscrituraPublicacionRemota(contexto)) {
-    return crearRespuestaPublicacionRemota(solicitud, false, null, CRIOS_PUBLICATION_ERROR_CODES.WRITE_UNAUTHORIZED, 'Teacher write authorization is required.', false);
-  }
-
   const bloqueo = escritura ? LockService.getScriptLock() : null;
   if (bloqueo) bloqueo.waitLock(10000);
 
@@ -926,9 +980,12 @@ function procesarSolicitudPublicacionRemota(solicitud, contexto) {
 }
 
 function esEnvelopePostPublicacionRemota(datos) {
-  return esObjetoPlanoPublicacionRemota(datos) &&
-    clavesExactasPublicacionRemota(datos, ['request', 'writeToken']) &&
-    esObjetoPlanoPublicacionRemota(datos.request) &&
+  if (!esObjetoPlanoPublicacionRemota(datos) || !esObjetoPlanoPublicacionRemota(datos.request)) return false;
+  const claves = Object.keys(datos).sort();
+  if (claves.length === 1 && claves[0] === 'request') return true;
+  return claves.length === 2 &&
+    claves[0] === 'request' &&
+    claves[1] === 'writeToken' &&
     typeof datos.writeToken === 'string';
 }
 

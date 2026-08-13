@@ -6,6 +6,8 @@ B5 turns the structurally complete remote publication path into a deployable pat
 
 This document is permanent rollback and deployment documentation.
 
+> **Current state after A3-003B7D2:** the teacher publication key described below is historical deployment documentation. Normal Studio publication no longer prompts for or transports a teacher credential. The deployed B7D1 backend is anonymous create-only and applies validation, size, rate and storage limits; B7D2 sends `{ request }` only.
+
 ## Security model
 
 Student publication reads are public and read-only.

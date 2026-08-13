@@ -31,7 +31,7 @@ function doPost(e) {
   }
 
   if (typeof esEnvelopePostPublicacionRemota === 'function' && esEnvelopePostPublicacionRemota(datos)) {
-    return responder(procesarSolicitudPublicacionRemota(datos.request, {writeToken: datos.writeToken}));
+    return responder(procesarSolicitudPublicacionRemota(datos.request, {}));
   }
 
   const bloqueo = LockService.getScriptLock();

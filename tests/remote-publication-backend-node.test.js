@@ -58,9 +58,11 @@ const path=require('path');
 const repo=path.resolve(process.argv[2]||path.join(__dirname,'..'));
 const book=new MockBook();
 const props=new Map();
+const cacheValues=new Map();
 let lockHeld=0, lockWaits=0, lockReleases=0, uuid=0;
 global.SpreadsheetApp={getActiveSpreadsheet:()=>book};
 global.PropertiesService={getScriptProperties:()=>({getProperty:k=>props.get(k)||null})};
+global.CacheService={getScriptCache:()=>({get:k=>cacheValues.get(k)||null,put:(k,v)=>cacheValues.set(k,String(v))})};
 global.LockService={getScriptLock:()=>({waitLock(){lockHeld++;lockWaits++;},releaseLock(){lockHeld--;lockReleases++;}})};
 global.Utilities={
   DigestAlgorithm:{SHA_256:'sha256'}, Charset:{UTF_8:'utf8'},
@@ -98,31 +100,28 @@ function validateRetired(resp,req,msg){ok(resp&&resp.protocolVersion==='1.0',msg
 
 props.set('CRIOS_PUBLICATION_WRITE_TOKEN_SHA256',crypto.createHash('sha256').update(TEACHER_TOKEN,'utf8').digest('hex'));
 
-// unauthorized
 const c1={mission:{text:'Hola'},arr:[3,1],nested:{b:2,a:1}};
 const p1=makePub(c1);
-let r=procesarSolicitudPublicacionRemota(p1,{writeToken:'bad'});
-eq(r.error.code,'WRITE_UNAUTHORIZED','wrong token denied'); validate(r,p1,'unauthorized response contract');
-ok(book.sheets.size===0,'unauthorized creates no sheets');
+let r;
 
 // public GET on an empty backend is side-effect free
 const emptyGet=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('missing-campaign','missing-publication','req-empty-get');
 r=callRemote(emptyGet,'');eq(r.error.code,'PUBLICATION_UNAVAILABLE','empty public get unavailable');validate(r,emptyGet,'empty get response contract');ok(book.sheets.size===0,'empty public get creates no sheets');
 
-// direct malicious content rejected server-side even if client contract is bypassed
+// direct malicious content rejected server-side before anonymous write work
 const dangerousContent=JSON.parse('{"constructor":{"x":1}}');
 const dangerousReq={protocolVersion:'1.0',operation:'publishPublication',requestId:'req-danger',payload:{campaignId:'camp-danger',draftRevision:'rev-danger',schemaVersion:'2.0',contentHash:hash('2.0',dangerousContent),content:dangerousContent}};
-r=callRemote(dangerousReq);eq(r.error.code,'INVALID_REQUEST','dangerous content rejected');ok(book.sheets.size===0,'invalid dangerous content creates no sheets');
+r=procesarSolicitudPublicacionRemota(dangerousReq,{});eq(r.error.code,'INVALID_REQUEST','dangerous content rejected');ok(book.sheets.size===0,'invalid dangerous content creates no sheets');
 
-// hash mismatch
+// hash mismatch is rejected even without authorization
 const bad={...p1,payload:{...p1.payload,contentHash:'0'.repeat(64)}};
-r=callRemote(bad); eq(r.error.code,'SERVER_HASH_MISMATCH','server recalculates hash');validate(r,bad,'hash mismatch response');
+r=procesarSolicitudPublicacionRemota(bad,{}); eq(r.error.code,'SERVER_HASH_MISMATCH','server recalculates hash');validate(r,bad,'hash mismatch response');
 
-// publish
-r=callRemote(p1);ok(r.success,'publish success');validate(r,p1,'publish response contract');
+// anonymous create-only publish: no teacher token required
+r=procesarSolicitudPublicacionRemota(p1,{});ok(r.success,'anonymous publish success');validate(r,p1,'anonymous publish response contract');
 const pub1=r.data.publication;eq(pub1.version,1,'first version');eq(pub1.campaignId,'camp-a','campaign');eq(pub1.content,c1,'content roundtrip response');
 ok(r.data.record.createdAt.endsWith('Z'),'createdAt iso');
-ok(lockHeld===0&&lockWaits===2&&lockReleases===2,'locks balanced incl hash mismatch write');
+ok(lockHeld===0&&lockWaits===2&&lockReleases===2,'anonymous write locks balanced incl hash mismatch');
 
 // storage sheets and chunk reconstruction
 const stored1=leerPublicacionPorIdRemota(book,pub1.publicationId);eq(stored1.publication,pub1,'stored publication roundtrip');ok(verificarIntegridadPublicacionRemota(pub1),'stored hash integrity');
@@ -188,9 +187,13 @@ const gHttp=CRIOS_REMOTE_PUBLICATION_CONTRACT.createGetPublicationRequest('camp-
 r=JSON.parse(doGet({parameter:{accion:'getPublication',protocolVersion:'1.0',requestId:'req-http-get',campaignId:'camp-a',publicationId:pub2.publicationId}}).text);
 ok(r.success,'doGet remote');validate(r,gHttp,'doGet response contract');
 
-// doPost transport publish
+// doPost anonymous transport publish uses request-only envelope
 const c3={p:3};const p3=makePub(c3,'camp-http','rev-http','req-http-pub');
-r=JSON.parse(doPost({postData:{contents:JSON.stringify({request:p3,writeToken:TEACHER_TOKEN})}}).text);ok(r.success,'doPost remote publish');validate(r,p3,'doPost remote contract');
+r=JSON.parse(doPost({postData:{contents:JSON.stringify({request:p3})}}).text);ok(r.success,'doPost anonymous remote publish');validate(r,p3,'doPost anonymous remote contract');
+
+// transitional legacy envelope remains accepted during backend/frontend rollout
+const pLegacy=makePub({legacy:true},'camp-legacy-envelope','rev-legacy','req-legacy-envelope');
+r=JSON.parse(doPost({postData:{contents:JSON.stringify({request:pLegacy,writeToken:'ignored-legacy-token'})}}).text);ok(r.success,'legacy writeToken envelope remains rollout-compatible');validate(r,pLegacy,'legacy envelope response contract');
 
 // legacy doPost still works
 const legacy={idSesion:'sess-1',grupo:'8A',nombre:'Ana',variante:'v',horaInicio:'1',horaFin:'2',tiempoSegundos:1,respuestas:{},aciertos:1,intentos:1,pistas:0,puntaje:10,notaSugerida:8,devolucion:'ok',version:'1',personaje:'x'};
@@ -200,8 +203,25 @@ r=JSON.parse(doPost({postData:{contents:JSON.stringify(legacy)}}).text);ok(r.ok&
 const cfg=book.insertSheet('CONFIG');cfg.getRange(1,1,3,1).setValues([['GRUPO'],['8A'],['8B']]);
 r=JSON.parse(doGet({parameter:{accion:'grupos'}}).text);eq(r.grupos,['8A','8B'],'groups get preserved');
 
-// no configured write token fail closed
-props.delete('CRIOS_PUBLICATION_WRITE_TOKEN_SHA256');const p4=makePub({z:4},'camp-no-token','rev','req-no-token');r=callRemote(p4,TEACHER_TOKEN);eq(r.error.code,'WRITE_UNAUTHORIZED','missing server token fails closed');
+// server-side teacher token configuration no longer gates publication
+props.delete('CRIOS_PUBLICATION_WRITE_TOKEN_SHA256');
+const p4=makePub({z:4},'camp-no-token','rev','req-no-token');
+r=procesarSolicitudPublicacionRemota(p4,{});ok(r.success,'publish succeeds without configured teacher token');validate(r,p4,'no-token server config response');
+
+// valid new writes are globally rate-limited; idempotent replay still bypasses the new-write guard
+const cacheServiceNormal=global.CacheService;
+global.CacheService={getScriptCache:()=>({get:()=>String(30),put(){throw new Error('put must not run at limit');}})};
+const pRate=makePub({rate:true},'camp-rate','rev-rate','req-rate');
+r=procesarSolicitudPublicacionRemota(pRate,{});eq(r.error.code,'WRITE_RATE_LIMITED','anonymous new write rate limited');validate(r,pRate,'rate limited response contract');ok(r.error.retryable===true,'rate limit is retryable');
+r=procesarSolicitudPublicacionRemota(p1,{});ok(r.success&&r.data.publication.publicationId===pub1.publicationId,'idempotent replay survives rate limit');validate(r,p1,'idempotent replay under rate limit');
+global.CacheService=cacheServiceNormal;
+
+// hard storage capacity guard is explicit and independent from transport auth
+const capacityBook=new MockBook();
+const capacitySheet=capacityBook.insertSheet('CRIOS_PUBLICACIONES');
+capacitySheet.getRange(1,1,1,12).setValues([['PUBLICATION_ID','CAMPAIGN_ID','VERSION','SCHEMA_VERSION','CONTENT_HASH','SOURCE_DRAFT_REVISION','CREATED_AT','STATUS','CONTENT_BYTES','CHUNK_COUNT','REQUEST_ID','REQUEST_HASH']]);
+capacitySheet.getLastRow=()=>5001;
+const capacity=validarCupoNuevaPublicacionRemota(capacityBook);eq(capacity.code,'WRITE_CAPACITY_REACHED','storage capacity guard blocks new publication');
 
 ok(lockHeld===0,'all locks released');
 console.log('BACKEND_TEST_STATUS=PASS');
@@ -209,6 +229,8 @@ console.log('BACKEND_TEST_TOTAL='+total);
 console.log('BACKEND_TEST_FAILED=0');
 console.log('BACKEND_TEST_SHEETS='+[...book.sheets.keys()].join('|'));
 console.log('BACKEND_LOCKS_BALANCED='+(lockHeld===0));
-console.log('BACKEND_HASHED_WRITE_AUTH=true');
+console.log('BACKEND_ANONYMOUS_CREATE_ONLY=true');
+console.log('BACKEND_RATE_LIMIT=30_PER_60_SECONDS');
+console.log('BACKEND_STORAGE_LIMIT=5000_PUBLICATIONS');
 console.log('BACKEND_PUBLIC_GET_SECRET_FREE=true');
 console.log('BACKEND_LEGACY_RESULTS_PRESERVED=true');

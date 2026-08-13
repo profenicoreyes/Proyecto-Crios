@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const repo = path.resolve(__dirname, '..');
+const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'));
 let total = 0;
 let failed = 0;
 const failures = [];
@@ -16,21 +16,11 @@ function check(condition, name) {
     failures.push(name);
   }
 }
-
 function equal(actual, expected, name) {
   check(actual === expected, `${name} | actual=${String(actual)} expected=${String(expected)}`);
 }
 
-const context = {
-  console,
-  setTimeout,
-  clearTimeout,
-  AbortController,
-  TextEncoder,
-  URL,
-  URLSearchParams,
-  performance
-};
+const context = { console, setTimeout, clearTimeout, AbortController, TextEncoder, URL, URLSearchParams, performance };
 context.window = context;
 context.crypto = { randomUUID: () => 'uuid-fallback' };
 vm.createContext(context);
@@ -39,12 +29,14 @@ function load(rel) {
   const filename = path.join(repo, rel);
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
 }
-
 function vmClone(value) {
   context.__cloneJson = JSON.stringify(value);
   const cloned = vm.runInContext('JSON.parse(__cloneJson)', context);
   delete context.__cloneJson;
   return cloned;
+}
+function clone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
 load('js/publication/remote/remote-publication-contract.js');
@@ -52,15 +44,18 @@ load('js/publication/remote/remote-publication-client.js');
 
 const contract = context.CRIOS_REMOTE_PUBLICATION_CONTRACT;
 const api = context.CRIOS_REMOTE_PUBLICATION_CLIENT;
+const clientSource = fs.readFileSync(path.join(repo, 'js/publication/remote/remote-publication-client.js'), 'utf8');
 
 check(Boolean(contract), 'remote contract loads');
 check(Boolean(api), 'remote client loads');
 equal(api.version, '1.0.0', 'remote client version');
 equal(Object.keys(api).sort().join(','), 'createClient,errorCodes,version', 'root API exact');
 check(Object.isFrozen(api), 'root API frozen');
-check(!fs.readFileSync(path.join(repo, 'js/publication/remote/remote-publication-client.js'), 'utf8').includes('script.google.com/macros/s/'), 'client contains no fixed production endpoint');
-check(!fs.readFileSync(path.join(repo, 'js/publication/remote/remote-publication-client.js'), 'utf8').includes('teacher-secret'), 'client contains no write token literal');
-
+check(!clientSource.includes('script.google.com/macros/s/'), 'client contains no fixed production endpoint');
+check(!clientSource.includes('writeToken'), 'client contains no teacher write-token transport');
+check(!clientSource.includes('INSECURE_CONTEXT'), 'client contains no secure-context auth gate');
+check(!Object.prototype.hasOwnProperty.call(api.errorCodes, 'AUTH_UNAVAILABLE'), 'auth-unavailable client error retired');
+check(!Object.prototype.hasOwnProperty.call(api.errorCodes, 'INSECURE_CONTEXT'), 'insecure-context client error retired');
 equal(Object.keys(contract.constants.operations).sort().join(','), 'GET,PUBLISH', 'contract exposes publish/get operations only');
 check(!Object.prototype.hasOwnProperty.call(contract, 'createActivateRequest'), 'contract exposes no activate builder');
 check(!Object.prototype.hasOwnProperty.call(contract, 'createDeactivateRequest'), 'contract exposes no deactivate builder');
@@ -78,10 +73,6 @@ const createdAtByPublication = new Map();
 const idempotent = new Map();
 const requestBodies = new Map();
 
-function clone(value) {
-  return value == null ? value : JSON.parse(JSON.stringify(value));
-}
-
 function response(request, success, data, error) {
   return {
     protocolVersion: '1.0',
@@ -92,11 +83,9 @@ function response(request, success, data, error) {
     error: success ? null : error
   };
 }
-
 function failure(request, code, message, retryable) {
   return response(request, false, null, { code, message, retryable: Boolean(retryable) });
 }
-
 function compatibilityReference(publication) {
   return {
     campaignId: publication.campaignId,
@@ -106,8 +95,7 @@ function compatibilityReference(publication) {
     activatedAt: createdAtByPublication.get(publication.publicationId)
   };
 }
-
-function server(request, writeToken) {
+function server(request) {
   const body = JSON.stringify(request);
 
   if (request.operation === 'publishPublication' && idempotent.has(request.requestId)) {
@@ -117,17 +105,13 @@ function server(request, writeToken) {
     return clone(idempotent.get(request.requestId));
   }
 
-  if (request.operation === 'publishPublication' && writeToken !== 'test-write-token') {
-    return failure(request, 'WRITE_UNAUTHORIZED', 'Teacher write authorization is required.', false);
-  }
-
   let data;
   if (request.operation === 'publishPublication') {
     const campaignId = request.payload.campaignId;
     const version = (versions.get(campaignId) || 0) + 1;
     versions.set(campaignId, version);
     const publicationId = `server-${campaignId}-v${version}`;
-    const createdAt = `2026-08-07T22:00:0${Math.min(version, 9)}.000Z`;
+    const createdAt = `2026-08-13T20:00:0${Math.min(version, 9)}.000Z`;
     const publication = {
       campaignId,
       publicationId,
@@ -154,10 +138,7 @@ function server(request, writeToken) {
     if (!publication || publication.campaignId !== request.payload.campaignId) {
       return failure(request, 'PUBLICATION_UNAVAILABLE', 'Publication is unavailable.', false);
     }
-    data = {
-      publication: clone(publication),
-      activeReference: compatibilityReference(publication)
-    };
+    data = { publication: clone(publication), activeReference: compatibilityReference(publication) };
   } else {
     return failure(request, 'UNSUPPORTED_OPERATION', 'Unsupported operation.', false);
   }
@@ -179,12 +160,11 @@ async function fakeFetch(url, init) {
 
   const method = String((init && init.method) || 'GET').toUpperCase();
   let request;
-  let writeToken = '';
+  let envelope = null;
 
   if (method === 'POST') {
-    const envelope = JSON.parse(String(init.body || '{}'));
+    envelope = JSON.parse(String(init.body || '{}'));
     request = envelope.request;
-    writeToken = envelope.writeToken || '';
   } else {
     const parsed = new URL(String(url));
     request = {
@@ -202,7 +182,7 @@ async function fakeFetch(url, init) {
     method,
     url: String(url),
     request: clone(request),
-    writeToken,
+    envelope: clone(envelope),
     init: {
       method: init && init.method,
       credentials: init && init.credentials,
@@ -225,21 +205,18 @@ async function fakeFetch(url, init) {
     invalidContractNext = false;
     return { ok: true, status: 200, text: async () => JSON.stringify({ bad: true }) };
   }
-
-  return { ok: true, status: 200, text: async () => JSON.stringify(server(request, writeToken)) };
+  return { ok: true, status: 200, text: async () => JSON.stringify(server(request)) };
 }
 
-function createClient(tokenProvider) {
-  return api.createClient({
+function createClient(extra) {
+  return api.createClient(Object.assign({
     contract,
     endpoint: 'https://remote.test/exec',
     fetchImpl: fakeFetch,
-    writeTokenProvider: tokenProvider || (() => 'test-write-token'),
     requestIdFactory: (operation) => `req-${operation}-${++sequence}`,
     timeoutMs: 5000
-  });
+  }, extra || {}));
 }
-
 function publishInput(campaignId, revision, hashChar) {
   return vmClone({
     campaignId,
@@ -257,24 +234,20 @@ function publishInput(campaignId, revision, hashChar) {
   equal(typeof client.activatePublication, 'undefined', 'activate method retired');
   equal(typeof client.deactivatePublication, 'undefined', 'deactivate method retired');
 
-  const beforeNoToken = fetchCount;
-  const noToken = await createClient(() => '').publishPublication(publishInput('camp-no-token', 'rev-0', '0'));
-  check(!noToken.success, 'missing token fails publish closed');
-  equal(noToken.error.code, 'WRITE_UNAUTHORIZED', 'missing token code');
-  equal(fetchCount, beforeNoToken, 'missing token causes no fetch');
-
-  const asyncTokenClient = createClient(async () => 'test-write-token');
-  const asyncTokenResult = await asyncTokenClient.publishPublication(publishInput('camp-async', 'rev-1', '1'));
-  check(asyncTokenResult.success, 'async token provider supported for publish');
-
-  const authThrowClient = createClient(() => { throw new Error('auth unavailable'); });
-  const authThrow = await authThrowClient.publishPublication(publishInput('camp-auth-throw', 'rev-1', '2'));
-  check(!authThrow.success, 'throwing token provider fails closed');
-  equal(authThrow.error.code, 'WRITE_UNAUTHORIZED', 'throwing token provider maps to write unauthorized');
+  let retiredProviderCalls = 0;
+  const clientWithStaleProvider = createClient({
+    writeTokenProvider() {
+      retiredProviderCalls += 1;
+      throw new Error('stale provider must never run');
+    }
+  });
+  const staleProviderPublish = await clientWithStaleProvider.publishPublication(publishInput('camp-stale-provider', 'rev-1', '0'), { requestId: 'publish-stale-provider' });
+  check(staleProviderPublish.success, 'stale writeTokenProvider option cannot gate anonymous publish');
+  equal(retiredProviderCalls, 0, 'stale writeTokenProvider option is ignored and never read');
 
   const firstInput = publishInput('camp-a', 'rev-1', 'a');
   const first = await client.publishPublication(firstInput, { requestId: 'publish-v1' });
-  check(first.success, 'first publish succeeds');
+  check(first.success, 'anonymous first publish succeeds');
   equal(first.requestId, 'publish-v1', 'explicit requestId preserved');
   equal(first.data.publication.publicationId, 'server-camp-a-v1', 'server publicationId accepted');
   equal(first.data.publication.version, 1, 'first version accepted');
@@ -282,8 +255,8 @@ function publishInput(campaignId, revision, hashChar) {
 
   const firstCall = calls.find((item) => item.request.requestId === 'publish-v1');
   equal(firstCall.method, 'POST', 'publish uses POST');
-  equal(firstCall.writeToken, 'test-write-token', 'token sent in outer envelope');
-  check(!Object.prototype.hasOwnProperty.call(firstCall.request, 'writeToken'), 'token excluded from contract request');
+  equal(Object.keys(firstCall.envelope).sort().join(','), 'request', 'publish POST envelope contains request only');
+  check(!Object.prototype.hasOwnProperty.call(firstCall.envelope, 'writeToken'), 'publish sends no writeToken');
   equal(firstCall.init.credentials, 'omit', 'POST credentials omitted');
   equal(firstCall.init.cache, 'no-store', 'POST cache disabled');
   equal(firstCall.init.headers['Content-Type'], 'text/plain;charset=utf-8', 'POST uses safe content type');
@@ -301,7 +274,7 @@ function publishInput(campaignId, revision, hashChar) {
 
   const getCall = calls.find((item) => item.request.requestId === 'get-v1-before-v2');
   equal(getCall.method, 'GET', 'read uses GET');
-  equal(getCall.writeToken, '', 'GET sends no write token');
+  equal(getCall.envelope, null, 'GET has no write envelope');
   check(getCall.url.includes('accion=getPublication'), 'GET includes Apps Script action');
   check(getCall.url.includes('campaignId=camp-a'), 'GET includes campaignId');
   check(getCall.url.includes(`publicationId=${encodeURIComponent(first.data.publication.publicationId)}`), 'GET includes publicationId');
@@ -356,31 +329,12 @@ function publishInput(campaignId, revision, hashChar) {
   check(!invalidContract.success, 'contract-invalid response rejected');
   equal(invalidContract.error.code, 'REMOTE_RESPONSE_INVALID', 'contract-invalid response code');
 
-  const insecureClient = api.createClient({
-    endpoint: 'https://example.invalid/exec',
-    contract,
-    writeTokenProvider: function(){
-      const error = new Error('La clave docente solo puede ingresarse desde un contexto seguro (HTTPS o localhost).');
-      error.code = 'INSECURE_CONTEXT';
-      throw error;
-    },
-    fetchImpl: async function(){ throw new Error('fetch must not run'); },
-    requestIdFactory: () => 'insecure-context-id'
-  });
-  const insecureResult = await insecureClient.publishPublication(publishInput('camp-insecure', 'rev-1', 'c'));
-  check(!insecureResult.success, 'insecure auth provider blocks remote publish');
-  equal(insecureResult.error.code, 'INSECURE_CONTEXT', 'auth provider error code preserved');
-  check(/HTTPS|localhost/.test(insecureResult.error.message), 'auth provider secure-context message preserved');
-
   const unavailableClient = api.createClient({ contract, endpoint: '', fetchImpl: fakeFetch, requestIdFactory: () => 'unavailable-id' });
   const unavailableResult = await unavailableClient.getPublication('camp-a', first.data.publication.publicationId);
   check(!unavailableResult.success, 'missing endpoint fails safely');
   equal(unavailableResult.error.code, 'REMOTE_CLIENT_UNAVAILABLE', 'missing endpoint code');
 
-  const incompleteContract = {
-    createPublishRequest: contract.createPublishRequest,
-    parseResponse: contract.parseResponse
-  };
+  const incompleteContract = { createPublishRequest: contract.createPublishRequest, parseResponse: contract.parseResponse };
   const incompleteClient = api.createClient({ contract: incompleteContract, endpoint: 'https://remote.test/exec', fetchImpl: fakeFetch });
   const incompleteResult = await incompleteClient.getPublication('camp-a', first.data.publication.publicationId);
   check(!incompleteResult.success, 'missing GET builder makes client unavailable');
@@ -392,6 +346,8 @@ function publishInput(campaignId, revision, hashChar) {
   console.log(`REMOTE_CLIENT_TEST_TOTAL=${total}`);
   console.log(`REMOTE_CLIENT_TEST_FAILED=${failed}`);
   console.log('REMOTE_CLIENT_MUTABLE_OPERATIONS=false');
+  console.log('REMOTE_CLIENT_ANONYMOUS_PUBLISH=true');
+  console.log('REMOTE_CLIENT_REQUEST_ONLY_ENVELOPE=true');
   console.log('REMOTE_CLIENT_DIRECT_IMMUTABLE_GET=true');
   console.log('REMOTE_CLIENT_REAL_NETWORK=false');
   console.log('REMOTE_CLIENT_SECRET_EMBEDDED=false');
@@ -403,7 +359,5 @@ function publishInput(campaignId, revision, hashChar) {
   console.log('REMOTE_CLIENT_TEST_STATUS=FAIL');
   console.log(`REMOTE_CLIENT_TEST_TOTAL=${total}`);
   console.log(`REMOTE_CLIENT_TEST_FAILED=${failed}`);
-  console.log('REMOTE_CLIENT_MUTABLE_OPERATIONS=false');
-  console.log('REMOTE_CLIENT_REAL_NETWORK=false');
   process.exitCode = 1;
 });

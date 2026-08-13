@@ -48,6 +48,8 @@ Studio consume `window.CRIOS_STUDIO_ADAPTER` como acceso de solo lectura a misio
 
 Publicar crea una versión nueva solo si el Draft y sus specs son válidos y la revisión esperada no cambió. El acceso a Runtime se construye directamente desde la publicación inmutable; no existe un paso normal de activar, desactivar ni volver a una versión mediante una referencia activa.
 
+La publicación remota normal no solicita clave docente. Studio envía únicamente el request de publicación al endpoint configurado; el backend acepta solo creación de snapshots inmutables, genera la identidad de publicación en servidor y aplica validación, límites de tamaño, tasa y capacidad. Studio no puede sobrescribir ni borrar una publicación remota existente.
+
 La persistencia usa `crios.publication.persistence.v1`. Es local al navegador y puede reportar estados vacíos, listos, degradados, corruptos o no soportados. No es nube, servidor ni garantía multiusuario.
 
 ## 6. Relación con Runtime

@@ -4,7 +4,7 @@
 
   var VERSION = '1.0.0';
   var CONFIG_GLOBAL = 'CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG';
-  var ALLOWED_CONFIG_KEYS = Object.freeze(['endpoint', 'writeTokenProvider', 'timeoutMs']);
+  var ALLOWED_CONFIG_KEYS = Object.freeze(['endpoint', 'timeoutMs']);
 
   function text(value) {
     return value == null ? '' : String(value).trim();
@@ -46,10 +46,10 @@
       return frozenError('REMOTE_PUBLICATION_CONFIG_INVALID', 'Remote publication configuration must be an object.', null);
     }
 
-    if (hasOwn(config, 'writeToken')) {
+    if (hasOwn(config, 'writeToken') || hasOwn(config, 'writeTokenProvider')) {
       return frozenError(
-        'REMOTE_PUBLICATION_SECRET_LITERAL_REJECTED',
-        'Remote publication configuration must provide authorization through writeTokenProvider, not a literal writeToken.',
+        'REMOTE_PUBLICATION_AUTH_RETIRED',
+        'Remote publication no longer accepts teacher authorization configuration.',
         null
       );
     }
@@ -66,14 +66,6 @@
 
     if (!text(config.endpoint)) {
       return frozenError('REMOTE_PUBLICATION_ENDPOINT_REQUIRED', 'Remote publication endpoint is required.', null);
-    }
-
-    if (hasOwn(config, 'writeTokenProvider') && typeof config.writeTokenProvider !== 'function') {
-      return frozenError(
-        'REMOTE_PUBLICATION_AUTH_PROVIDER_INVALID',
-        'writeTokenProvider must be a function when provided.',
-        null
-      );
     }
 
     if (hasOwn(config, 'timeoutMs')) {
@@ -135,9 +127,6 @@
       client = clientFactory.createClient({
         contract: contract,
         endpoint: text(config.endpoint),
-        writeTokenProvider: typeof config.writeTokenProvider === 'function'
-          ? config.writeTokenProvider
-          : function(){ return ''; },
         timeoutMs: hasOwn(config, 'timeoutMs') ? Number(config.timeoutMs) : undefined
       });
     } catch (clientError) {

@@ -33,14 +33,10 @@
       timeoutMs: timeoutMs
     });
 
-    var auth = window.CRIOS_STUDIO_WRITE_AUTH || null;
-    if (auth && typeof auth.createPromptProvider === 'function') {
-      window.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG = Object.freeze({
-        endpoint: endpoint,
-        timeoutMs: timeoutMs,
-        writeTokenProvider: auth.createPromptProvider()
-      });
-    }
+    window.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG = Object.freeze({
+      endpoint: endpoint,
+      timeoutMs: timeoutMs
+    });
 
     return Object.freeze({ configured: true, endpoint: endpoint });
   }

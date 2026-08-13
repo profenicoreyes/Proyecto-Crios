@@ -104,11 +104,25 @@ check(!/CRIOS_PUBLICATION_WRITE_TOKEN_PROPERTY\s*=/.test(source), 'legacy raw to
 check(source.includes('sha256PublicacionRemota(recibido)'), 'received token hashed before comparison');
 check(source.includes('compararConstantePublicacionRemota'), 'constant comparison retained');
 
+const processStart = source.indexOf('function procesarSolicitudPublicacionRemota');
+const processEnd = source.indexOf('function esEnvelopePostPublicacionRemota', processStart);
+const processSource = processStart >= 0 && processEnd > processStart ? source.slice(processStart, processEnd) : '';
+check(processStart >= 0 && processEnd > processStart, 'remote request processing function located');
+check(!processSource.includes('autorizarEscrituraPublicacionRemota('), 'normal publish path no longer calls teacher authorization');
+check(source.includes('CRIOS_PUBLICATION_ANONYMOUS_RATE_LIMIT = 30'), 'anonymous publication rate limit declared');
+check(source.includes('CRIOS_PUBLICATION_ANONYMOUS_RATE_WINDOW_SECONDS = 60'), 'anonymous rate window declared');
+check(source.includes('CRIOS_PUBLICATION_MAX_STORED_PUBLICATIONS = 5000'), 'anonymous storage capacity declared');
+check(source.includes('consumirCupoPublicacionAnonimaRemota'), 'anonymous rate guard implemented');
+check(source.includes('validarCupoNuevaPublicacionRemota'), 'new publication capacity guard implemented');
+check(source.includes("WRITE_RATE_LIMITED: 'WRITE_RATE_LIMITED'"), 'rate-limit error code declared');
+check(source.includes("WRITE_CAPACITY_REACHED: 'WRITE_CAPACITY_REACHED'"), 'capacity error code declared');
+
 console.log('PUBLICATION_BACKEND_SECURITY_TEST_STATUS=' + (failed ? 'FAIL' : 'PASS'));
 console.log('PUBLICATION_BACKEND_SECURITY_TEST_TOTAL=' + total);
 console.log('PUBLICATION_BACKEND_SECURITY_TEST_FAILED=' + failed);
+console.log('PUBLICATION_BACKEND_NORMAL_PATH_TEACHER_AUTH=false');
+console.log('PUBLICATION_BACKEND_ANONYMOUS_RATE_LIMIT=30_PER_60_SECONDS');
+console.log('PUBLICATION_BACKEND_STORAGE_LIMIT=5000_PUBLICATIONS');
+console.log('PUBLICATION_BACKEND_LEGACY_AUTH_HELPER_RETAINED_DEAD=true');
 console.log('PUBLICATION_BACKEND_RAW_TOKEN_STORED=false');
-console.log('PUBLICATION_BACKEND_HASHED_TOKEN_PROPERTY=true');
-console.log('PUBLICATION_BACKEND_LEGACY_RAW_PROPERTY_IGNORED=true');
-console.log('PUBLICATION_BACKEND_TOKEN_ROTATION_SUPPORTED=true');
 if (failed) process.exit(1);

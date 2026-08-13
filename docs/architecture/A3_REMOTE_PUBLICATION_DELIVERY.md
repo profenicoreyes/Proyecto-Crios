@@ -6,6 +6,8 @@ This document records the architecture and rollback path for the A3 work that se
 
 It is permanent project documentation. Patch files, runners, ZIP transport packages and transient validation outputs are disposable; this document is not.
 
+> **Current state after A3-003B7D2:** publication links resolve immutable `campaignId + publicationId` snapshots directly; normal Studio publishing no longer uses activation or a teacher write credential. Historical sections below document the rollout path and remain useful for rollback archaeology.
+
 ## 2. Architectural goal
 
 The normal/shared CRIOS entry opens Studio for the teacher.
