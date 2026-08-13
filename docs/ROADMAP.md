@@ -8,9 +8,10 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 
 - Studio base, banco de cuatro misiones, Campaign Draft, selector de escenario Antártida y resumen de campaña.
 - Dominio modular de Release, Session, Runtime, Navigation y PlayerState integrado con compatibilidad legacy.
-- Núcleo de publicación, activación y persistencia local dentro del alcance validado.
+- Núcleo de publicación remota inmutable: cada publicación se identifica por `campaignId + publicationId`, los enlaces antiguos siguen resolviendo su snapshot exacto y el flujo normal ya no depende de activación mutable.
+- Publicación remota create-only sin clave docente en el flujo normal de Studio, con `publicationId` generado por servidor, validación estricta, límite de 512 KiB, límite de 30 publicaciones nuevas por 60 segundos y tope de 5000 publicaciones almacenadas.
 - Contrato de `missionSpecs`, resolución de publicación ejecutable y materialización de misiones.
-- Bootstrap de Runtime en modos explícitos `legacy` y `published`, con `legacy` como valor predeterminado.
+- Bootstrap de Runtime en modos explícitos `legacy` y `published`, con `legacy` como valor predeterminado cuando no existe una entrada published explícita.
 - Trazabilidad acotada y contratos experimentales para observar el flujo sin convertir trazas en estado de dominio.
 - A2-006J / RT-007 cerrado con evidencia de disponibilidad degradada, recuperación y orden temporal.
 - A2-006K / RT-006 cerrado con síntesis, comparación y matriz de contradicciones de la evidencia RT-001 a RT-007.
@@ -22,6 +23,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-015 cerrado con caracterización y estabilización de las dependencias de composición de RuntimeCore, conservando su API pública y compatibilidad legacy.
 - A2-016 cerrado con caracterización y estabilización de las dependencias de composición de NavigationCore, conservando su API pública, registro clásico y compatibilidad legacy.
 - A2-017 aceptado funcional y visualmente como CRIOS MVP 1.0, con recorrido `published` completo, 417/417 comprobaciones agregadas y revisión manual aprobada.
+- A3-003B7 cerrado funcionalmente: identidad estable de campaña, enlace directo a snapshots inmutables, retiro del flujo mutable de activación y publicación anónima create-only validada localmente y contra el backend desplegado.
 
 ## Cierres recientes
 
@@ -263,30 +265,70 @@ La aceptación visual corrigió ocho defectos confirmados relacionados con acces
 
 A2-017 no declara `published` como modo predeterminado, no elimina legacy y no agrega backend, sincronización, cuentas ni colaboración. Los escenarios publicados específicos de rollback posterior a Progress, respuesta incorrecta y game over conservan cobertura parcial y quedan como trabajo posterior no bloqueante.
 
+### A3-003B7 — publicación remota inmutable y flujo sin clave docente
+
+El refactor de publicación queda cerrado funcionalmente en cuatro fronteras progresivas:
+
+- `A3-003B7A` asigna identidad propia y estable a cada campaña nueva de Studio.
+- `A3-003B7B` desacopla la lectura Runtime del puntero mutable de publicación activa: un enlace `campaignId + publicationId` resuelve siempre el snapshot inmutable exacto.
+- `A3-003B7C` retira Activar, Desactivar y Volver a esta versión del flujo normal de Studio y del contrato remoto; las operaciones mutables quedan fuera del camino soportado.
+- `A3-003B7D` elimina la clave docente del flujo normal de publicación y deja el backend remoto en modo create-only para publicaciones nuevas.
+
+El cierre preserva estas decisiones:
+
+- cada Publish crea una publicación inmutable nueva con `publicationId` generado por servidor;
+- publicar una versión posterior no invalida enlaces anteriores;
+- el Runtime lee directamente la publicación solicitada y no depende de una referencia activa;
+- Studio publica sin prompt de clave docente y envía únicamente el request de publicación;
+- el backend no expone overwrite, activate ni deactivate como operaciones remotas soportadas;
+- la publicación anónima conserva validación de esquema y contenido, límite de 524288 bytes, límite de 30 publicaciones nuevas por 60 segundos y tope de 5000 publicaciones almacenadas;
+- los replays idempotentes no consumen el cupo de escrituras nuevas;
+- la publicación desplegada fue validada con smoke real sin `writeToken`, `publicationId` generado por servidor, lectura inmutable directa y rechazo de operaciones mutables;
+- Studio fue validado manualmente publicando sin clave, abriendo el enlace generado y recargando la misma publicación con éxito.
+
+Evidencia principal del cierre:
+
+- B7D1 local: 1208/1208 comprobaciones Node y backend focal 114/114;
+- B7D1 smoke remoto: PASS;
+- B7D2 local: 1147/1147 comprobaciones Node;
+- browserless: 399/399;
+- B7D2 smoke manual de Studio: PASS;
+- commit funcional: `1dfb205f729b5b538cc47e059e5e955175cd6efa` — `feat(publication): enable anonymous immutable publishing`;
+- bundle vigente: `Proyecto-Crios-1dfb205f729b5b53-main.bundle`, SHA-256 `c096befece526ff4cd8e1d7a1dd33082f631e5b84902c7b78aa73a70714f8fab`, 3032479 bytes.
+
+El código legacy de activación que ya no se compone ni se alcanza desde el flujo normal queda como limpieza técnica diferida. No forma parte del comportamiento soportado y su eliminación física no bloquea el cierre funcional.
+
+La publicación inmutable es persistente. El requisito de expiración por inactividad pertenece a una futura entidad efímera de sesión/sala y no debe borrar ni invalidar publicaciones.
+
 ## Trabajo posterior
 
-Con CRIOS MVP 1.0 funcional y visualmente aceptado, siguen como líneas posibles, sujetas a nueva investigación y decisión de arquitectura:
+Con el refactor de publicación remota cerrado, la siguiente línea prioritaria es separar publicación persistente de sesión de juego efímera:
 
-- ampliar gradualmente el uso real de publicaciones sin eliminar prematuramente el fallback legacy;
+- diseñar una entidad de sesión/sala asociada a una publicación inmutable, con identidad propia, host, jugadores, presencia y progreso efímero;
+- definir heartbeat/presencia y `lastActivityAt` sin mezclar esa semántica con la sesión local legacy actual;
+- expirar y eliminar la sesión efímera cuando durante más de 10 minutos no exista actividad ni del host ni de ningún jugador, conservando intacta la publicación de origen;
+- mostrar una salida explícita como `Esta sesión finalizó por inactividad.` al intentar reingresar a una sesión expirada;
+- caracterizar primero el flujo actual de sesión y ownership antes de introducir red, concurrencia o persistencia compartida;
+- mantener como limpieza técnica independiente la eliminación física de archivos legacy de activación ya inalcanzables;
 - evaluar, solo con nueva evidencia, si RuntimeCore o NavigationCore deben avanzar desde captura estable hacia factorías puras sin registro global;
-- delimitar ownership de transacción, rollback, persistencia, sincronización remota y aplicación visual antes de trasladar cualquiera de esos efectos;
-- consolidar Game Flow como dueño de más transiciones solo cuando cada borde pueda aislarse, validarse y revertirse;
-- ampliar Studio con nuevos handlers, tipos de misión, escenarios y taxonomías;
-- evaluar persistencia remota, sincronización entre dispositivos y colaboración multiusuario.
+- ampliar Studio con nuevos handlers, tipos de misión, escenarios y taxonomías.
 
 ## Capacidades futuras
 
 Permanecen futuras hasta contar con implementación y evidencia específicas:
 
-- declarar `published` como modo principal del producto;
+- sesión/sala multiusuario remota con presencia de host y jugadores;
+- sincronización de progreso entre dispositivos dentro de una misma sesión;
+- declarar `published` como modo principal cuando una entrada explícita ya no sea necesaria;
 - eliminar el camino legacy;
-- persistencia remota y garantías de sincronización entre dispositivos;
-- colaboración multiusuario;
+- colaboración multiusuario más allá de la sesión de juego;
 - garantías universales de disponibilidad, red, storage o scheduler externo.
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline funcional el commit `a01a89f71fb7a8063ac3994011b798459416a6a0`, creado el 6 de agosto de 2026. El commit documental que incorpore este cierre será posterior.
+Esta actualización toma como baseline funcional el commit `1dfb205f729b5b538cc47e059e5e955175cd6efa`, creado el 13 de agosto de 2026. La publicación remota inmutable y sin clave docente está cerrada funcionalmente y el backend B7D1 fue desplegado y validado contra el endpoint real.
+
+El bundle de recuperación vigente antes de este cierre documental es `Proyecto-Crios-1dfb205f729b5b53-main.bundle`, SHA-256 `c096befece526ff4cd8e1d7a1dd33082f631e5b84902c7b78aa73a70714f8fab`.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
