@@ -38,6 +38,11 @@ const windowStub = {
     getItem() { return null; },
     setItem() {},
     removeItem() {}
+  },
+  localStorage: {
+    getItem() { return null; },
+    setItem() {},
+    removeItem() {}
   }
 };
 const context = {
@@ -63,11 +68,18 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_STUDIO_LIVE_ROOM_HOST;
 
 check(Boolean(api), 'host API exported');
-equal(api.version, '1.0.0', 'version');
+equal(api.version, '1.1.0', 'version');
 equal(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
+equal(api.rosterRefreshIntervalMs, 15000, 'roster refresh interval');
 equal(api.contextKey, 'crios-live-room-host-context-v1', 'context key');
+check(source.includes('window.localStorage'), 'host context supports persistent browser storage');
+check(source.includes('window.sessionStorage'), 'host context keeps session mirror');
+check(source.includes('var persisted = write(persistent, value)'), 'host context requires persistent write');
+check(!source.includes('asociada a esta pestaña'), 'host context error is not tab scoped');
+
 check(typeof api.createHostController === 'function', 'controller factory exported');
 check(typeof api.buildPlayerHref === 'function', 'player href builder exported');
+check(typeof api.buildHostConsoleHref === 'function', 'host console href builder exported');
 check(typeof api.bootstrapUi === 'function', 'UI bootstrap exported');
 check(Boolean(docListeners.DOMContentLoaded), 'DOMContentLoaded bootstrap registered');
 
@@ -85,6 +97,19 @@ equal(hrefUrl.searchParams.get('roomId'), 'room-1', 'player href room id');
 equal(api.buildPlayerHref('', 'room-1', 'https://example.test/'), '', 'empty runtime href rejected');
 equal(api.buildPlayerHref('/index.html', '', 'https://example.test/'), '', 'empty room id rejected');
 
+
+const consoleHref = api.buildHostConsoleHref(
+  { roomId: 'room-1' },
+  { campaignId: 'camp-1', publicationId: 'pub-1' },
+  'https://example.test/studio/index.html'
+);
+const consoleUrl = new URL(consoleHref);
+equal(consoleUrl.pathname, '/host/', 'host console path');
+equal(consoleUrl.searchParams.get('roomId'), 'room-1', 'host console room id');
+equal(consoleUrl.searchParams.get('campaignId'), 'camp-1', 'host console campaign id');
+equal(consoleUrl.searchParams.get('publicationId'), 'pub-1', 'host console publication id');
+check(!/capability|token|participantId/i.test(consoleUrl.search), 'host console URL contains no host secret');
+
 function makeStorage(initial, setResult = true) {
   let value = initial || null;
   let setCalls = 0;
@@ -100,7 +125,7 @@ function makeStorage(initial, setResult = true) {
 }
 
 function makeClient(overrides = {}) {
-  const calls = { create: [], heartbeat: [], get: [], forget: [] };
+  const calls = { create: [], heartbeat: [], get: [], roster: [], forget: [] };
   const client = {
     available() { return true; },
     async createLiveRoom(campaignId, publicationId, participantId) {
@@ -114,6 +139,10 @@ function makeClient(overrides = {}) {
     async getLiveRoom(roomId) {
       calls.get.push(roomId);
       return { success: true, data: { room: { roomId, campaignId: 'camp-1', publicationId: 'pub-1', status: 'active', expiresAt: '2099-01-01T00:10:00.000Z' } }, error: null };
+    },
+    async getLiveRoomRoster(roomId, participantId) {
+      calls.roster.push([roomId, participantId]);
+      return { success: true, data: { room: { roomId, campaignId: 'camp-1', publicationId: 'pub-1', status: 'active', expiresAt: '2099-01-01T00:10:00.000Z' }, roster: { generatedAt: '2099-01-01T00:00:00.000Z', registeredParticipantCount: 2, activeParticipantCount: 2, activePlayerCount: 1, hostConnected: true, participants: [{ participantId, role: 'host', joinedAt: '2099-01-01T00:00:00.000Z', lastSeenAt: '2099-01-01T00:00:00.000Z', connected: true }, { participantId: 'player-1', role: 'player', joinedAt: '2099-01-01T00:00:00.000Z', lastSeenAt: '2099-01-01T00:00:00.000Z', connected: true }] } }, error: null };
     },
     forgetCapability(roomId, participantId) { calls.forget.push([roomId, participantId]); return true; }
   };
@@ -145,6 +174,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
       client,
       storage,
       participantIdFactory: () => 'host-1',
+      campaignNameProvider: () => 'Campaña Polar',
       setIntervalImpl(fn, ms) { intervals.push({ fn, ms }); return 77; },
       clearIntervalImpl(id) { cleared.push(id); },
       now: () => 123456,
@@ -170,17 +200,25 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(storage.inspect().participantId, 'host-1', 'stored context participant id');
     equal(storage.inspect().campaignId, 'camp-1', 'stored context campaign id');
     equal(storage.inspect().publicationId, 'pub-1', 'stored context publication id');
+    equal(storage.inspect().campaignName, 'Campaña Polar', 'stored context campaign name');
     check(storage.inspect().playerHref.includes('roomId=room-abc'), 'stored player link carries room id');
     check(!Object.prototype.hasOwnProperty.call(storage.inspect(), 'capabilityToken'), 'host context stores no capabilityToken');
     check(!JSON.stringify(storage.inspect()).includes('secret'), 'host context stores no secret marker');
-    equal(intervals.length, 1, 'heartbeat timer started');
-    equal(intervals[0].ms, 120000, 'heartbeat timer uses two minutes');
+    equal(intervals.length, 2, 'heartbeat and roster timers started');
+    equal(intervals.filter(i => i.ms === 120000).length, 1, 'heartbeat timer uses two minutes');
+    equal(intervals.filter(i => i.ms === 15000).length, 1, 'roster timer uses fifteen seconds');
     check(result.playerHref.includes('campaignId=camp-1'), 'player href keeps campaign id');
     check(result.playerHref.includes('publicationId=pub-1'), 'player href keeps publication id');
     check(result.playerHref.includes('roomId=room-abc'), 'player href adds room id');
     check(Object.isFrozen(result), 'state snapshot frozen');
     check(states.some(s => s.status === 'CREATING'), 'creating transition emitted');
     check(states.some(s => s.status === 'ACTIVE'), 'active transition emitted');
+    await controller.refreshRoster();
+    check(client.calls.roster.length >= 1, 'roster requested after room creation');
+    equal(client.calls.roster[client.calls.roster.length - 1][0], 'room-abc', 'roster room id');
+    equal(client.calls.roster[client.calls.roster.length - 1][1], 'host-1', 'roster host participant id');
+    equal(controller.getState().roster.activePlayerCount, 1, 'roster active player count stored');
+    equal(controller.getState().lastRosterError, null, 'successful roster clears roster error');
 
     await controller.heartbeat();
     equal(client.calls.heartbeat.length, 1, 'manual heartbeat called once');
@@ -193,7 +231,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(controller.getState().status, 'ACTIVE', 'new publication does not replace active room');
     equal(controller.getState().room.roomId, 'room-abc', 'active room preserved after new publication');
     controller.destroy();
-    check(cleared.includes(77), 'destroy clears heartbeat timer');
+    check(cleared.filter(id => id === 77).length >= 2, 'destroy clears heartbeat and roster timers');
   }
 
   {
@@ -249,10 +287,12 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(client.calls.get[0], 'room-restored', 'restore gets saved room id');
     equal(client.calls.create.length, 0, 'restore never creates a replacement room');
     equal(client.calls.heartbeat.length, 1, 'restore immediately heartbeats host');
+    equal(client.calls.roster.length, 1, 'restore immediately reads roster');
     equal(client.calls.heartbeat[0][1], 'host-restored', 'restore heartbeat uses saved participant');
     equal(response.status, 'ACTIVE', 'restore returns active');
     equal(response.participantId, 'host-restored', 'restore preserves host participant');
-    equal(intervalMs, 120000, 'restore restarts heartbeat interval');
+    check(intervalMs === 120000 || intervalMs === 15000, 'restore starts live-room intervals');
+    equal(response.roster.activePlayerCount, 1, 'restore returns current player count');
   }
 
   {
@@ -295,14 +335,60 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(response.room, null, 'expired heartbeat removes room from active state');
   }
 
+
+  {
+    const client = makeClient({ async getLiveRoomRoster(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return { success:false, data:null, error:{code:'SERVER_ERROR',message:'temporary',retryable:true} }; } });
+    const controller = api.createHostController({ client, storage: makeStorage(), participantIdFactory: () => 'host-roster-transient', setIntervalImpl: () => 12, clearIntervalImpl: () => {}, now: () => 999 });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const response = await controller.refreshRoster();
+    equal(response.status, 'ACTIVE', 'transient roster failure keeps room active');
+    equal(response.lastRosterError.code, 'SERVER_ERROR', 'transient roster error preserved separately');
+    equal(response.room.roomId, 'room-abc', 'transient roster failure preserves room');
+  }
+
+  {
+    const client = makeClient({ async getLiveRoomRoster(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return { success:false, data:null, error:{code:'ROOM_EXPIRED',message:'Esta sesión finalizó por inactividad.',retryable:false} }; } });
+    const storage = makeStorage();
+    const cleared = [];
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-roster-expired', setIntervalImpl: (() => { let id=40; return () => ++id; })(), clearIntervalImpl: id => cleared.push(id) });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const response = await controller.refreshRoster();
+    equal(response.status, 'EXPIRED', 'expired roster transitions room to expired');
+    equal(response.lastRosterError.code, 'ROOM_EXPIRED', 'expired roster error preserved');
+    equal(response.room, null, 'expired roster clears active room');
+    equal(storage.clearCalls(), 1, 'expired roster clears host context');
+    equal(client.calls.forget.length, 1, 'expired roster forgets host capability');
+    check(cleared.length >= 2, 'expired roster stops live timers');
+  }
+
+  {
+    const client = makeClient({ async getLiveRoomRoster(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return { success:false, data:null, error:{code:'HOST_REQUIRED',message:'Only the LiveRoom host can read the participant roster.',retryable:false} }; } });
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-roster-denied', setIntervalImpl: () => 8, clearIntervalImpl: () => {} });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const response = await controller.refreshRoster();
+    equal(response.status, 'ERROR', 'host-required roster failure closes invalid host context');
+    equal(response.lastError.code, 'HOST_REQUIRED', 'host-required roster error surfaced');
+    equal(storage.clearCalls(), 1, 'host-required roster failure clears context');
+  }
+
   check(source.includes("start.textContent = 'Iniciar partida'"), 'visible start button label exists');
-  check(source.includes("playerLink.textContent = 'Abrir enlace para estudiantes'"), 'visible student link label exists');
+  check(source.includes("startButton.textContent = active ? 'Abrir consola de mando' : 'Iniciar partida'"), 'active Studio action opens command console');
+  check(source.includes("new URL('../host/', base)"), 'Studio builds separate host console route');
+  check(source.includes("window.location.assign(consoleHref)"), 'Studio redirects host after room creation');
+  check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 15 * 1000'), 'roster refresh interval source present');
+  check(source.includes('client.getLiveRoomRoster(roomId, participantId)'), 'host controller reads roster with host identity');
   check(source.includes("Esta sesión finalizó por inactividad."), 'expired UX message exists');
   check(!/prompt\s*\(/.test(source), 'host flow never prompts for credentials');
   check(!/password/i.test(source), 'host flow contains no password input concept');
   check(!/deleteLiveRoom|stopLiveRoom|closeLiveRoom/.test(source), 'host flow adds no destructive room operation');
   check(source.includes("url.searchParams.set('roomId', id)"), 'student URL carries roomId');
   check(source.includes("document.visibilityState === 'visible'"), 'visible-tab heartbeat recovery present');
+  check(source.includes("campaignName: text(campaignNameProvider())"), 'host context stores display campaign name without secrets');
+  check(source.includes("document.getElementById('campaign-name-input')"), 'Studio supplies visible campaign name to host context');
 
   console.log('STUDIO_LIVE_ROOM_HOST_TEST_TOTAL=' + total);
   console.log('STUDIO_LIVE_ROOM_HOST_TEST_FAILED=' + failed);

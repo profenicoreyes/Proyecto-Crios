@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIOS · Consola de mando</title>
+  <link rel="stylesheet" href="../css/crios.css">
+  <link rel="stylesheet" href="../css/host-console.css?v=20260814a4003d">
+</head>
+<body>
+  <main class="host-console" id="hostConsoleRoot" aria-live="polite">
+    <header class="host-console__header">
+      <div>
+        <div class="host-console__eyebrow">CRIOS · OPERACIÓN EN VIVO</div>
+        <h1>Consola de mando</h1>
+        <p id="hostConsoleCampaignLabel" class="host-console__subtitle">Recuperando partida…</p>
+      </div>
+      <div class="host-console__header-actions">
+        <span class="host-console__status" id="hostConsoleRoomStatus" data-state="loading">Conectando…</span>
+        <button class="btn host-console__share-trigger" type="button" id="hostConsoleShareButton" disabled>Compartir</button>
+        <a class="btn secondary" href="../studio/" id="hostConsoleBackToStudio">Volver a Studio</a>
+      </div>
+    </header>
+
+    <section class="host-console__notice" id="hostConsoleNotice" hidden></section>
+
+    <section class="host-console__metrics" aria-label="Resumen de la partida">
+      <article class="host-metric host-metric--players panel">
+        <div class="host-metric__label">Jugadores conectados</div>
+        <div class="host-metric__value" id="hostConsolePlayerCount">—</div>
+        <div class="host-metric__hint" id="hostConsolePlayerHint">Esperando datos de presencia</div>
+      </article>
+
+      <article class="host-metric panel">
+        <div class="host-metric__label">Última actualización</div>
+        <div class="host-metric__value host-metric__value--small" id="hostConsoleSyncAge">—</div>
+        <div class="host-metric__hint" id="hostConsoleSyncHint">Sin datos todavía</div>
+      </article>
+
+      <article class="host-metric panel">
+        <div class="host-metric__label">Estado de sala</div>
+        <div class="host-metric__value host-metric__value--small" id="hostConsoleRoomState">—</div>
+        <div class="host-metric__hint" id="hostConsoleRoomId">Sala: —</div>
+      </article>
+    </section>
+
+    <section class="host-console__grid">
+      <article class="host-console__participants panel">
+        <div class="host-console__section-head">
+          <div>
+            <div class="host-console__eyebrow">PRESENCIA</div>
+            <h2>Participantes</h2>
+          </div>
+          <span class="host-console__chip" id="hostConsoleRegisteredCount">0 registrados</span>
+        </div>
+        <div class="host-console__presence-map" id="hostConsolePresenceMap" aria-label="Mapa visual de participantes"></div>
+        <div class="host-console__participant-list" id="hostConsoleParticipantList">
+          <div class="host-console__empty">Aún no hay datos de participantes.</div>
+        </div>
+      </article>
+
+      <aside class="host-console__side">
+        <article class="host-console__trend panel">
+          <div class="host-console__section-head">
+            <div>
+              <div class="host-console__eyebrow">ACTIVIDAD RECIENTE</div>
+              <h2>Conexiones</h2>
+            </div>
+            <span class="host-console__chip" id="hostConsoleTrendLabel">sin muestras</span>
+          </div>
+          <svg id="hostConsolePresenceTrend" viewBox="0 0 320 120" role="img" aria-label="Evolución reciente de jugadores conectados">
+            <line x1="12" y1="106" x2="308" y2="106" class="host-trend__axis"></line>
+            <polyline id="hostConsolePresenceTrendLine" points="" class="host-trend__line"></polyline>
+            <g id="hostConsolePresenceTrendDots"></g>
+          </svg>
+          <p class="host-console__help">Muestra cambios de presencia recientes; no representa rendimiento académico.</p>
+          <div class="host-console__presence-events" id="hostConsolePresenceEvents">
+            <div class="host-console__empty host-console__empty--compact">Sin cambios de presencia todavía.</div>
+          </div>
+        </article>
+      </aside>
+    </section>
+
+    <div class="host-console__share-data" aria-hidden="true">
+      <input id="hostConsolePlayerLink" type="hidden" value="">
+      <span id="hostConsolePublicationRef">Publicación: —</span>
+    </div>
+  </main>
+
+  <div class="host-share" id="hostShareModal" hidden>
+    <div class="host-share__backdrop" data-host-share-close></div>
+    <section class="host-share__dialog" role="dialog" aria-modal="true" aria-labelledby="hostShareTitle">
+      <header class="host-share__header">
+        <div>
+          <div class="host-console__eyebrow">INVITAR A LA PARTIDA</div>
+          <h2 id="hostShareTitle">Compartir con estudiantes</h2>
+        </div>
+        <button class="host-share__close" type="button" id="hostShareCloseButton" aria-label="Cerrar">×</button>
+      </header>
+      <div class="host-share__body">
+        <div class="host-share__qr-column">
+          <div class="host-share__qr-frame">
+            <div id="hostShareQr" class="host-share__qr" aria-label="Código QR del enlace de estudiantes"></div>
+          </div>
+          <p class="host-share__scan-label">Escaneá para entrar a esta sala</p>
+        </div>
+        <div class="host-share__actions-column">
+          <label class="host-share__label" for="hostShareLink">Enlace para estudiantes</label>
+          <input id="hostShareLink" class="host-share__link" type="text" readonly value="">
+          <div class="host-share__actions">
+            <button class="btn host-share__primary" type="button" id="hostShareCopyButton">Copiar enlace</button>
+            <button class="btn secondary" type="button" id="hostShareNativeButton">Compartir…</button>
+            <a class="btn secondary" id="hostShareEmailLink" href="#">Correo</a>
+            <a class="btn secondary" id="hostShareWhatsAppLink" href="#" target="_blank" rel="noopener">WhatsApp</a>
+          </div>
+          <p class="host-share__feedback" id="hostShareFeedback" aria-live="polite"></p>
+          <p class="host-console__help">Este es el enlace público del estudiante. No contiene credenciales del anfitrión.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/live-room/live-room-model.js"></script>
+  <script src="../js/live-room/remote/live-room-contract.js"></script>
+  <script src="../js/live-room/remote/live-room-client.js"></script>
+  <script src="../js/live-room/remote/live-room-browser-bootstrap.js"></script>
+  <script src="../js/vendor/qrcode-generator/qrcode.js"></script>
+  <script src="../js/host/host-share.js?v=20260814a4003d"></script>
+  <script src="../js/host/host-console.js?v=20260814a4003d"></script>
+</body>
+</html>

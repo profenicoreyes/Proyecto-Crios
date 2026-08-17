@@ -9,7 +9,8 @@ const CRIOS_LIVE_ROOM_OPERATIONS = Object.freeze({
   CREATE: 'createLiveRoom',
   JOIN: 'joinLiveRoom',
   HEARTBEAT: 'heartbeatLiveRoom',
-  GET: 'getLiveRoom'
+  GET: 'getLiveRoom',
+  GET_ROSTER: 'getLiveRoomRoster'
 });
 
 const CRIOS_LIVE_ROOM_ERROR_CODES = Object.freeze({
@@ -23,6 +24,7 @@ const CRIOS_LIVE_ROOM_ERROR_CODES = Object.freeze({
   PARTICIPANT_UNAVAILABLE: 'PARTICIPANT_UNAVAILABLE',
   PARTICIPANT_CONFLICT: 'PARTICIPANT_CONFLICT',
   CAPABILITY_INVALID: 'CAPABILITY_INVALID',
+  HOST_REQUIRED: 'HOST_REQUIRED',
   REQUEST_CONFLICT: 'REQUEST_CONFLICT',
   SERVER_ERROR: 'SERVER_ERROR'
 });
@@ -203,6 +205,13 @@ function validarSolicitudLiveRoomRemota(solicitud) {
         cadenaNormalizadaLiveRoomRemota(payload.roomId, 160) !== payload.roomId) {
       return {ok: false, code: CRIOS_LIVE_ROOM_ERROR_CODES.INVALID_REQUEST, message: 'getLiveRoom payload is invalid.'};
     }
+  } else if (solicitud.operation === CRIOS_LIVE_ROOM_OPERATIONS.GET_ROSTER) {
+    if (!clavesExactasLiveRoomRemota(payload, ['roomId', 'participantId', 'capabilityToken']) ||
+        cadenaNormalizadaLiveRoomRemota(payload.roomId, 160) !== payload.roomId ||
+        cadenaNormalizadaLiveRoomRemota(payload.participantId, 160) !== payload.participantId ||
+        !capabilityValidaLiveRoomRemota(payload.capabilityToken)) {
+      return {ok: false, code: CRIOS_LIVE_ROOM_ERROR_CODES.INVALID_REQUEST, message: 'getLiveRoomRoster payload is invalid.'};
+    }
   }
   return {ok: true};
 }
@@ -321,6 +330,38 @@ function escribirPresenciaLiveRoomRemota(libro, presence, capabilityHash) {
     textoCeldaLiveRoomRemota(presence.lastSeenAt),
     textoCeldaLiveRoomRemota(capabilityHash)
   ]]);
+}
+
+function listarPresenciasLiveRoomRemota(libro, roomId, nowIso) {
+  const hoja = obtenerHojaLecturaLiveRoomRemota(libro, CRIOS_LIVE_ROOM_SHEETS.PRESENCES, CRIOS_LIVE_ROOM_HEADERS.PRESENCES);
+  if (!hoja || hoja.getLastRow() < 2) return [];
+  const filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, CRIOS_LIVE_ROOM_HEADERS.PRESENCES.length).getDisplayValues();
+  const nowMs = Date.parse(nowIso);
+  return filas
+    .filter(fila => fila[0] === roomId)
+    .map(fila => {
+      const lastSeenMs = Date.parse(fila[4]);
+      return {
+        participantId: fila[1],
+        role: fila[2],
+        joinedAt: fila[3],
+        lastSeenAt: fila[4],
+        connected: Number.isFinite(lastSeenMs) && nowMs <= lastSeenMs + CRIOS_LIVE_ROOM_IDLE_TIMEOUT_MS
+      };
+    })
+    .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt) || a.participantId.localeCompare(b.participantId));
+}
+
+function crearRosterSnapshotLiveRoomRemota(participants, generatedAt) {
+  const active = participants.filter(participant => participant.connected === true);
+  return {
+    generatedAt: generatedAt,
+    registeredParticipantCount: participants.length,
+    activeParticipantCount: active.length,
+    activePlayerCount: active.filter(participant => participant.role === 'player').length,
+    hostConnected: active.some(participant => participant.role === 'host'),
+    participants: participants
+  };
 }
 
 function leerSolicitudProcesadaLiveRoomRemota(libro, requestId) {
@@ -480,6 +521,29 @@ function procesarGetLiveRoomRemota(libro, solicitud) {
   return crearRespuestaLiveRoomRemota(solicitud, true, {room: estado.room});
 }
 
+function procesarGetRosterLiveRoomRemota(libro, solicitud) {
+  const nowIso = ahoraIsoLiveRoomRemota();
+  const estado = expirarSiCorrespondeLiveRoomRemota(libro, leerLiveRoomRemota(libro, solicitud.payload.roomId), nowIso);
+  if (estado.unavailable) return crearRespuestaLiveRoomRemota(solicitud, false, null, CRIOS_LIVE_ROOM_ERROR_CODES.ROOM_UNAVAILABLE, 'LiveRoom is unavailable.', false);
+  if (estado.expired) return crearRespuestaLiveRoomRemota(solicitud, false, null, CRIOS_LIVE_ROOM_ERROR_CODES.ROOM_EXPIRED, CRIOS_LIVE_ROOM_EXPIRED_MESSAGE, false);
+
+  const almacenada = leerPresenciaLiveRoomRemota(libro, estado.room.roomId, solicitud.payload.participantId);
+  if (!almacenada) return crearRespuestaLiveRoomRemota(solicitud, false, null, CRIOS_LIVE_ROOM_ERROR_CODES.PARTICIPANT_UNAVAILABLE, 'LiveRoom participant is unavailable.', false);
+  const recibido = sha256LiveRoomRemota(solicitud.payload.capabilityToken);
+  if (!compararConstanteLiveRoomRemota(almacenada.capabilityHash, recibido)) {
+    return crearRespuestaLiveRoomRemota(solicitud, false, null, CRIOS_LIVE_ROOM_ERROR_CODES.CAPABILITY_INVALID, 'LiveRoom participant capability is invalid.', false);
+  }
+  if (almacenada.presence.role !== 'host') {
+    return crearRespuestaLiveRoomRemota(solicitud, false, null, CRIOS_LIVE_ROOM_ERROR_CODES.HOST_REQUIRED, 'Only the LiveRoom host can read the participant roster.', false);
+  }
+
+  const participants = listarPresenciasLiveRoomRemota(libro, estado.room.roomId, nowIso);
+  return crearRespuestaLiveRoomRemota(solicitud, true, {
+    room: estado.room,
+    roster: crearRosterSnapshotLiveRoomRemota(participants, nowIso)
+  });
+}
+
 function procesarSolicitudLiveRoomRemota(solicitud) {
   const validacion = validarSolicitudLiveRoomRemota(solicitud);
   if (!validacion.ok) return crearRespuestaLiveRoomRemota(solicitud, false, null, validacion.code, validacion.message, false);
@@ -489,6 +553,7 @@ function procesarSolicitudLiveRoomRemota(solicitud) {
   try {
     const libro = SpreadsheetApp.getActiveSpreadsheet();
     if (solicitud.operation === CRIOS_LIVE_ROOM_OPERATIONS.GET) return procesarGetLiveRoomRemota(libro, solicitud);
+    if (solicitud.operation === CRIOS_LIVE_ROOM_OPERATIONS.GET_ROSTER) return procesarGetRosterLiveRoomRemota(libro, solicitud);
     const requestHash = hashSolicitudLiveRoomRemota(solicitud);
     if (solicitud.operation === CRIOS_LIVE_ROOM_OPERATIONS.CREATE) return procesarCrearLiveRoomRemota(libro, solicitud, requestHash);
     if (solicitud.operation === CRIOS_LIVE_ROOM_OPERATIONS.JOIN) return procesarJoinLiveRoomRemota(libro, solicitud, requestHash);

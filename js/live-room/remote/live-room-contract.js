@@ -11,7 +11,8 @@
     CREATE: 'createLiveRoom',
     JOIN: 'joinLiveRoom',
     HEARTBEAT: 'heartbeatLiveRoom',
-    GET: 'getLiveRoom'
+    GET: 'getLiveRoom',
+    GET_ROSTER: 'getLiveRoomRoster'
   });
 
   var ERROR_CODES = Object.freeze({
@@ -25,6 +26,7 @@
     PARTICIPANT_UNAVAILABLE: 'PARTICIPANT_UNAVAILABLE',
     PARTICIPANT_CONFLICT: 'PARTICIPANT_CONFLICT',
     CAPABILITY_INVALID: 'CAPABILITY_INVALID',
+    HOST_REQUIRED: 'HOST_REQUIRED',
     REQUEST_CONFLICT: 'REQUEST_CONFLICT',
     SERVER_ERROR: 'SERVER_ERROR'
   });
@@ -47,6 +49,8 @@
   var ERROR_KEYS = Object.freeze(['code', 'message', 'retryable']);
   var ROOM_KEYS = Object.freeze(['roomId', 'campaignId', 'publicationId', 'createdAt', 'lastActivityAt', 'expiresAt', 'status']);
   var PRESENCE_KEYS = Object.freeze(['roomId', 'participantId', 'role', 'joinedAt', 'lastSeenAt']);
+  var ROSTER_KEYS = Object.freeze(['generatedAt', 'registeredParticipantCount', 'activeParticipantCount', 'activePlayerCount', 'hostConnected', 'participants']);
+  var ROSTER_PARTICIPANT_KEYS = Object.freeze(['participantId', 'role', 'joinedAt', 'lastSeenAt', 'connected']);
 
   function isPlainObject(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -127,7 +131,7 @@
         if (normalizedString(value.payload.participantId, LIMITS.MAX_PARTICIPANT_ID_LENGTH) !== value.payload.participantId) issues.push(issue(ERROR_CODES.INVALID_REQUEST, 'participantId is invalid or not normalized.', '$.payload.participantId'));
         if (!validCapability(value.payload.capabilityToken)) issues.push(issue(ERROR_CODES.INVALID_REQUEST, 'capabilityToken is invalid.', '$.payload.capabilityToken'));
       }
-    } else if (value.operation === OPERATIONS.JOIN || value.operation === OPERATIONS.HEARTBEAT) {
+    } else if (value.operation === OPERATIONS.JOIN || value.operation === OPERATIONS.HEARTBEAT || value.operation === OPERATIONS.GET_ROSTER) {
       if (!exactKeys(value.payload, PARTICIPANT_KEYS)) issues.push(issue(ERROR_CODES.INVALID_REQUEST, value.operation + ' payload shape is invalid.', '$.payload'));
       else {
         if (normalizedString(value.payload.roomId, LIMITS.MAX_ROOM_ID_LENGTH) !== value.payload.roomId) issues.push(issue(ERROR_CODES.INVALID_REQUEST, 'roomId is invalid or not normalized.', '$.payload.roomId'));
@@ -185,6 +189,15 @@
     return buildRequest(OPERATIONS.GET, requestId, {roomId: String(roomId == null ? '' : roomId).trim()});
   }
 
+  function createGetLiveRoomRosterRequest(input, requestId) {
+    var source = isPlainObject(input) ? input : {};
+    return buildRequest(OPERATIONS.GET_ROSTER, requestId, {
+      roomId: String(source.roomId == null ? '' : source.roomId).trim(),
+      participantId: String(source.participantId == null ? '' : source.participantId).trim(),
+      capabilityToken: String(source.capabilityToken == null ? '' : source.capabilityToken)
+    });
+  }
+
   function validRoom(value) {
     return exactKeys(value, ROOM_KEYS) &&
       normalizedString(value.roomId, LIMITS.MAX_ROOM_ID_LENGTH) === value.roomId &&
@@ -203,12 +216,38 @@
       validIsoUtc(value.joinedAt) && validIsoUtc(value.lastSeenAt);
   }
 
+  function validRosterParticipant(value) {
+    return exactKeys(value, ROSTER_PARTICIPANT_KEYS) &&
+      normalizedString(value.participantId, LIMITS.MAX_PARTICIPANT_ID_LENGTH) === value.participantId &&
+      (value.role === 'host' || value.role === 'player') &&
+      validIsoUtc(value.joinedAt) && validIsoUtc(value.lastSeenAt) &&
+      typeof value.connected === 'boolean';
+  }
+
+  function validRoster(value) {
+    if (!exactKeys(value, ROSTER_KEYS) || !validIsoUtc(value.generatedAt) || !Array.isArray(value.participants)) return false;
+    if (!Number.isInteger(value.registeredParticipantCount) || value.registeredParticipantCount < 1 || value.registeredParticipantCount > MAX_PARTICIPANTS) return false;
+    if (!Number.isInteger(value.activeParticipantCount) || value.activeParticipantCount < 0 || value.activeParticipantCount > value.registeredParticipantCount) return false;
+    if (!Number.isInteger(value.activePlayerCount) || value.activePlayerCount < 0 || value.activePlayerCount > value.activeParticipantCount) return false;
+    if (typeof value.hostConnected !== 'boolean' || value.participants.length !== value.registeredParticipantCount) return false;
+    if (!value.participants.every(validRosterParticipant)) return false;
+    var active = value.participants.filter(function(participant){ return participant.connected === true; });
+    var activePlayers = active.filter(function(participant){ return participant.role === 'player'; });
+    var connectedHosts = active.filter(function(participant){ return participant.role === 'host'; });
+    var allHosts = value.participants.filter(function(participant){ return participant.role === 'host'; });
+    if (allHosts.length !== 1) return false;
+    return active.length === value.activeParticipantCount &&
+      activePlayers.length === value.activePlayerCount &&
+      (connectedHosts.length === 1) === value.hostConnected;
+  }
+
   function validError(value) {
     return exactKeys(value, ERROR_KEYS) && knownErrorCode(value.code) && typeof value.message === 'string' && value.message.trim() !== '' && typeof value.retryable === 'boolean';
   }
 
   function validSuccessData(operation, data) {
     if (operation === OPERATIONS.GET) return exactKeys(data, ['room']) && validRoom(data.room);
+    if (operation === OPERATIONS.GET_ROSTER) return exactKeys(data, ['room', 'roster']) && validRoom(data.room) && validRoster(data.roster);
     if (operation === OPERATIONS.CREATE || operation === OPERATIONS.JOIN || operation === OPERATIONS.HEARTBEAT) {
       return exactKeys(data, ['room', 'presence']) && validRoom(data.room) && validPresence(data.presence) && data.room.roomId === data.presence.roomId;
     }
@@ -257,6 +296,7 @@
     createJoinLiveRoomRequest: createJoinLiveRoomRequest,
     createHeartbeatLiveRoomRequest: createHeartbeatLiveRoomRequest,
     createGetLiveRoomRequest: createGetLiveRoomRequest,
+    createGetLiveRoomRosterRequest: createGetLiveRoomRosterRequest,
     parseResponse: parseResponse
   });
 })();

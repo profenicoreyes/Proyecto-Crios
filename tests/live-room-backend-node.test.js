@@ -285,6 +285,48 @@ const overCap = request('joinLiveRoom', 'req-cap-over', { roomId: capRoom, parti
 res = call(overCap);
 equal(res.error.code, 'ROOM_FULL', '65th participant rejected');
 
+// A4-003A: host-only presence roster is the first synchronized room state.
+check(CRIOS_LIVE_ROOM_OPERATIONS.GET_ROSTER === 'getLiveRoomRoster', 'roster operation explicit');
+check(CRIOS_LIVE_ROOM_ERROR_CODES.HOST_REQUIRED === 'HOST_REQUIRED', 'host-only roster error explicit');
+const requestSheet = book.getSheetByName('CRIOS_SALA_SOLICITUDES');
+const requestsBeforeRoster = requestSheet.getLastRow();
+const activityBeforeRoster = leerLiveRoomRemota(book, capRoom).room.lastActivityAt;
+const capHostToken = capCreate.payload.capabilityToken;
+res = call(request('getLiveRoomRoster', 'req-roster-host', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken }));
+check(res.success, 'host can read participant roster');
+equal(res.data.roster.registeredParticipantCount, 64, 'roster reports registered participants');
+equal(res.data.roster.activeParticipantCount, 64, 'roster reports all participants active initially');
+equal(res.data.roster.activePlayerCount, 63, 'roster counts active players excluding host');
+equal(res.data.roster.hostConnected, true, 'roster reports host connected');
+check(Array.isArray(res.data.roster.participants) && res.data.roster.participants.length === 64, 'roster returns deterministic participant snapshots');
+check(res.data.roster.participants.every(item => typeof item.connected === 'boolean'), 'roster participant connected flag explicit');
+check(!JSON.stringify(res).includes(capHostToken), 'roster response does not leak host capability');
+check(!JSON.stringify(res).includes('CAPABILITY_SHA256'), 'roster response does not expose capability hash field');
+equal(leerLiveRoomRemota(book, capRoom).room.lastActivityAt, activityBeforeRoster, 'roster read does not extend room activity');
+equal(requestSheet.getLastRow(), requestsBeforeRoster, 'roster read does not create idempotency write records');
+
+res = call(request('getLiveRoom', 'req-public-no-roster', { roomId: capRoom }));
+check(res.success && !Object.prototype.hasOwnProperty.call(res.data, 'roster'), 'public room GET remains roster-free');
+res = call(request('getLiveRoomRoster', 'req-roster-player', { roomId: capRoom, participantId: 'cap-player-1', capabilityToken: token('cap-1') }));
+equal(res.error.code, 'HOST_REQUIRED', 'player capability cannot read roster');
+res = call(request('getLiveRoomRoster', 'req-roster-bad-cap', { roomId: capRoom, participantId: 'cap-host', capabilityToken: token('wrong-roster') }));
+equal(res.error.code, 'CAPABILITY_INVALID', 'invalid host capability cannot read roster');
+res = call(request('getLiveRoomRoster', 'req-roster-shape', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken, extra: true }));
+equal(res.error.code, 'INVALID_REQUEST', 'roster payload shape remains exact');
+
+now = '2026-08-13T22:09:00.000Z';
+res = call(request('heartbeatLiveRoom', 'req-cap-host-hb', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken }));
+check(res.success, 'host heartbeat keeps room active independently of roster reads');
+const activityAfterHostHeartbeat = res.data.room.lastActivityAt;
+now = '2026-08-13T22:10:00.001Z';
+res = call(request('getLiveRoomRoster', 'req-roster-stale', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken }));
+check(res.success, 'roster remains readable while room active from valid heartbeat');
+equal(res.data.roster.activeParticipantCount, 1, 'stale participants are excluded from active count');
+equal(res.data.roster.activePlayerCount, 0, 'stale players are excluded from active player count');
+equal(res.data.roster.hostConnected, true, 'recent host heartbeat remains connected');
+check(res.data.roster.participants.filter(item => item.role === 'player').every(item => item.connected === false), 'players older than ten minutes are reported disconnected');
+equal(leerLiveRoomRemota(book, capRoom).room.lastActivityAt, activityAfterHostHeartbeat, 'stale roster read still does not extend activity');
+
 const roomSheet = book.getSheetByName('CRIOS_SALAS');
 const presenceRows = book.getSheetByName('CRIOS_SALA_PRESENCIAS').rows.flat().join('|');
 check(!presenceRows.includes(token('host')), 'host capability plaintext absent from storage');

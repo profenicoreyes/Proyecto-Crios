@@ -2,8 +2,9 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
+  var ROSTER_REFRESH_INTERVAL_MS = 15 * 1000;
   var CONTEXT_KEY = 'crios-live-room-host-context-v1';
 
   function clone(value) {
@@ -24,25 +25,48 @@
   function text(value) { return typeof value === 'string' ? value.trim() : ''; }
 
   function defaultStorage() {
-    var storage = null;
-    try { storage = window.sessionStorage || null; } catch (ignore) { storage = null; }
+    var session = null;
+    var persistent = null;
+    try { session = window.sessionStorage || null; } catch (ignoreSession) { session = null; }
+    try { persistent = window.localStorage || null; } catch (ignorePersistent) { persistent = null; }
+
+    function parse(raw) {
+      if (!raw) return null;
+      try {
+        var parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+      } catch (ignore) { return null; }
+    }
+    function read(store) {
+      if (!store) return null;
+      try { return parse(store.getItem(CONTEXT_KEY)); } catch (ignore) { return null; }
+    }
+    function write(store, value) {
+      if (!store) return false;
+      try { store.setItem(CONTEXT_KEY, JSON.stringify(value)); return true; } catch (ignore) { return false; }
+    }
+    function remove(store) {
+      if (!store) return false;
+      try { store.removeItem(CONTEXT_KEY); return true; } catch (ignore) { return false; }
+    }
+
     return Object.freeze({
       get: function(){
-        if (!storage) return null;
-        try {
-          var raw = storage.getItem(CONTEXT_KEY);
-          if (!raw) return null;
-          var parsed = JSON.parse(raw);
-          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-        } catch (ignore) { return null; }
+        var value = read(session);
+        if (value) return value;
+        value = read(persistent);
+        if (value && session) write(session, value);
+        return value;
       },
       set: function(value){
-        if (!storage) return false;
-        try { storage.setItem(CONTEXT_KEY, JSON.stringify(value)); return true; } catch (ignore) { return false; }
+        var persisted = write(persistent, value);
+        if (session) write(session, value);
+        return persisted;
       },
       clear: function(){
-        if (!storage) return false;
-        try { storage.removeItem(CONTEXT_KEY); return true; } catch (ignore) { return false; }
+        var a = remove(session);
+        var b = remove(persistent);
+        return a || b;
       }
     });
   }
@@ -75,6 +99,21 @@
     }
   }
 
+  function buildHostConsoleHref(room, publication, baseHref) {
+    var roomId = text(room && room.roomId);
+    var campaignId = text(publication && publication.campaignId);
+    var publicationId = text(publication && publication.publicationId);
+    if (!roomId || !campaignId || !publicationId) return '';
+    try {
+      var base = new URL(text(baseHref) || (window.location && window.location.href) || 'http://localhost/studio/');
+      var url = new URL('../host/', base);
+      url.searchParams.set('roomId', roomId);
+      url.searchParams.set('campaignId', campaignId);
+      url.searchParams.set('publicationId', publicationId);
+      return url.href;
+    } catch (ignore) { return ''; }
+  }
+
   function baseState(status) {
     return {
       status: status || 'IDLE',
@@ -84,7 +123,10 @@
       participantId: null,
       playerHref: null,
       lastError: null,
-      lastHeartbeatAt: null
+      lastHeartbeatAt: null,
+      roster: null,
+      lastRosterAt: null,
+      lastRosterError: null
     };
   }
 
@@ -96,10 +138,12 @@
     var setIntervalImpl = typeof opts.setIntervalImpl === 'function' ? opts.setIntervalImpl : window.setInterval.bind(window);
     var clearIntervalImpl = typeof opts.clearIntervalImpl === 'function' ? opts.clearIntervalImpl : window.clearInterval.bind(window);
     var now = typeof opts.now === 'function' ? opts.now : function(){ return Date.now(); };
+    var campaignNameProvider = typeof opts.campaignNameProvider === 'function' ? opts.campaignNameProvider : function(){ return ''; };
     var baseHref = text(opts.baseHref) || (window.location && window.location.href) || '';
     var onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : function(){};
     var state = baseState(client && typeof client.available === 'function' && client.available() ? 'IDLE' : 'UNAVAILABLE');
     var timer = null;
+    var rosterTimer = null;
     var destroyed = false;
 
     function emit(next) {
@@ -120,6 +164,19 @@
       stopHeartbeat();
       if (destroyed || state.status !== 'ACTIVE' || !state.room || !state.participantId) return;
       timer = setIntervalImpl(function(){ heartbeat(); }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    function stopRosterPolling() {
+      if (rosterTimer !== null) {
+        try { clearIntervalImpl(rosterTimer); } catch (ignore) {}
+        rosterTimer = null;
+      }
+    }
+
+    function startRosterPolling() {
+      stopRosterPolling();
+      if (destroyed || state.status !== 'ACTIVE' || !state.room || !state.participantId) return;
+      rosterTimer = setIntervalImpl(function(){ refreshRoster(); }, ROSTER_REFRESH_INTERVAL_MS);
     }
 
     function normalizedPublication(publication) {
@@ -149,6 +206,7 @@
         participantId: text(participantId),
         campaignId: text(publication && publication.campaignId),
         publicationId: text(publication && publication.publicationId),
+        campaignName: text(campaignNameProvider()),
         runtimeHref: text(publication && publication.href),
         playerHref: text(playerHref)
       };
@@ -189,12 +247,13 @@
       var playerHref = buildPlayerHref(publication.href, room.roomId, baseHref);
       if (!saveContext(room, participantId, publication, playerHref)) {
         clearContext(room.roomId, participantId);
-        return emit({status:'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:frozen({code:'HOST_CONTEXT_STORAGE_UNAVAILABLE', message:'La sala fue creada, pero Studio no pudo guardar el contexto del anfitrión en esta pestaña.'})});
+        return emit({status:'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:frozen({code:'HOST_CONTEXT_STORAGE_UNAVAILABLE', message:'La sala fue creada, pero Studio no pudo guardar el contexto recuperable del anfitrión en este navegador.'})});
       }
 
-      var snapshot = emit({status:'ACTIVE', busy:false, room:room, participantId:participantId, playerHref:playerHref, lastError:null, lastHeartbeatAt:now()});
+      emit({status:'ACTIVE', busy:false, room:room, participantId:participantId, playerHref:playerHref, lastError:null, lastHeartbeatAt:now()});
       startHeartbeat();
-      return snapshot;
+      startRosterPolling();
+      return refreshRoster();
     }
 
     async function heartbeat() {
@@ -206,6 +265,7 @@
         var error = frozen(response && response.error || {code:'LIVE_ROOM_HEARTBEAT_FAILED', message:'No se pudo actualizar la presencia del anfitrión.'});
         if (error.code === 'ROOM_EXPIRED' || error.code === 'ROOM_UNAVAILABLE' || error.code === 'PARTICIPANT_UNAVAILABLE' || error.code === 'CAPABILITY_STORAGE_UNAVAILABLE') {
           stopHeartbeat();
+          stopRosterPolling();
           clearContext(roomId, participantId);
           return emit({status:error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:error});
         }
@@ -213,6 +273,27 @@
       }
       var room = response.data && response.data.room ? response.data.room : state.room;
       return emit({status:'ACTIVE', busy:false, room:room, lastError:null, lastHeartbeatAt:now()});
+    }
+
+    async function refreshRoster() {
+      if (destroyed || state.status !== 'ACTIVE' || !state.room || !state.participantId) return getState();
+      if (!client || typeof client.getLiveRoomRoster !== 'function') {
+        return emit({status:'ACTIVE', lastRosterError:frozen({code:'LIVE_ROOM_ROSTER_UNAVAILABLE', message:'No se pudo consultar la lista de jugadores conectados.'})});
+      }
+      var roomId = text(state.room.roomId);
+      var participantId = text(state.participantId);
+      var response = await client.getLiveRoomRoster(roomId, participantId);
+      if (!response || response.success !== true || !response.data || !response.data.roster) {
+        var error = frozen(response && response.error || {code:'LIVE_ROOM_ROSTER_FAILED', message:'No se pudo actualizar la lista de jugadores conectados.'});
+        if (error.code === 'ROOM_EXPIRED' || error.code === 'ROOM_UNAVAILABLE' || error.code === 'PARTICIPANT_UNAVAILABLE' || error.code === 'CAPABILITY_INVALID' || error.code === 'CAPABILITY_STORAGE_UNAVAILABLE' || error.code === 'HOST_REQUIRED') {
+          stopHeartbeat();
+          stopRosterPolling();
+          clearContext(roomId, participantId);
+          return emit({status:error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'ERROR', busy:false, room:null, participantId:null, playerHref:null, roster:null, lastRosterError:error, lastError:error});
+        }
+        return emit({status:'ACTIVE', busy:false, lastRosterError:error});
+      }
+      return emit({status:'ACTIVE', busy:false, roster:response.data.roster, lastRosterAt:now(), lastRosterError:null});
     }
 
     async function restore() {
@@ -239,17 +320,21 @@
         var error = frozen(response && response.error || {code:'ROOM_UNAVAILABLE',message:'La sala ya no está disponible.'});
         clearContext(roomId, participantId);
         stopHeartbeat();
+        stopRosterPolling();
         return emit({status:error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'IDLE', busy:false, room:null, participantId:null, playerHref:null, lastError:error});
       }
       var room = response.data.room;
       if (text(room.campaignId) !== campaignId || text(room.publicationId) !== publicationId) {
         clearContext(roomId, participantId);
         stopHeartbeat();
+        stopRosterPolling();
         return emit({status:'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:frozen({code:'ROOM_PUBLICATION_MISMATCH',message:'La sala recuperada no coincide con la publicación guardada.'})});
       }
       emit({status:'ACTIVE', busy:false, room:room, participantId:participantId, playerHref:playerHref, lastError:null});
       startHeartbeat();
-      return heartbeat();
+      startRosterPolling();
+      await heartbeat();
+      return refreshRoster();
     }
 
     function getState() { return frozen(state); }
@@ -257,6 +342,7 @@
     function destroy() {
       destroyed = true;
       stopHeartbeat();
+      stopRosterPolling();
     }
 
     return Object.freeze({
@@ -264,6 +350,7 @@
       setPublication: setPublication,
       createRoom: createRoom,
       heartbeat: heartbeat,
+      refreshRoster: refreshRoster,
       restore: restore,
       getState: getState,
       destroy: destroy
@@ -294,6 +381,10 @@
     room.id = 'studioLiveRoomRoomId';
     room.className = 'studio-publication-memory-notice';
     room.hidden = true;
+    var roster = document.createElement('p');
+    roster.id = 'studioLiveRoomRoster';
+    roster.className = 'studio-publication-memory-notice';
+    roster.hidden = true;
     var playerLink = document.createElement('a');
     playerLink.id = 'studioLiveRoomPlayerLink';
     playerLink.className = 'btn studio-btn';
@@ -306,6 +397,7 @@
     panel.appendChild(status);
     panel.appendChild(start);
     panel.appendChild(room);
+    panel.appendChild(roster);
     panel.appendChild(playerLink);
     launchLink.parentNode.insertBefore(panel, launchLink.nextSibling);
     return panel;
@@ -321,6 +413,7 @@
     var statusNode = panel.querySelector('#studioLiveRoomHostStatus');
     var startButton = panel.querySelector('#studioLiveRoomStartButton');
     var roomNode = panel.querySelector('#studioLiveRoomRoomId');
+    var rosterNode = panel.querySelector('#studioLiveRoomRoster');
     var playerLink = panel.querySelector('#studioLiveRoomPlayerLink');
     var lastPublicationSignature = '';
 
@@ -338,18 +431,24 @@
       statusNode.dataset.status = state.status;
 
       var active = state.status === 'ACTIVE' && state.room && state.playerHref;
-      startButton.hidden = active;
+      startButton.hidden = false;
+      startButton.textContent = active ? 'Abrir consola de mando' : 'Iniciar partida';
       startButton.disabled = state.busy || state.status === 'UNAVAILABLE' || state.status === 'NO_PUBLICATION' || state.status === 'RESTORING';
       roomNode.hidden = !active;
-      playerLink.hidden = !active;
+      rosterNode.hidden = true;
+      playerLink.hidden = true;
       if (active) {
-        roomNode.textContent = 'ID de sala: ' + String(state.room.roomId || '');
-        playerLink.href = state.playerHref;
-        playerLink.dataset.roomId = String(state.room.roomId || '');
-        playerLink.dataset.campaignId = String(state.room.campaignId || '');
-        playerLink.dataset.publicationId = String(state.room.publicationId || '');
+        roomNode.textContent = 'Sala activa: ' + String(state.room.roomId || '') + '. El monitoreo continúa en la consola de mando.';
+        rosterNode.textContent = '';
+        delete rosterNode.dataset.count;
+        playerLink.removeAttribute('href');
+        delete playerLink.dataset.roomId;
+        delete playerLink.dataset.campaignId;
+        delete playerLink.dataset.publicationId;
       } else {
         roomNode.textContent = '';
+        rosterNode.textContent = '';
+        delete rosterNode.dataset.count;
         playerLink.removeAttribute('href');
         delete playerLink.dataset.roomId;
         delete playerLink.dataset.campaignId;
@@ -357,7 +456,17 @@
       }
     }
 
-    var controller = createHostController({client:client,onStateChange:renderState});
+    var controller = createHostController({
+      client:client,
+      onStateChange:renderState,
+      campaignNameProvider:function(){
+        var input=document.getElementById('campaign-name-input');
+        if(input&&text(input.value))return text(input.value);
+        var draft=window.CRIOS_CAMPAIGN_DRAFT;
+        if(draft&&typeof draft.obtenerNombre==='function'){try{return text(draft.obtenerNombre());}catch(ignore){}}
+        return '';
+      }
+    });
 
     function syncPublication() {
       var launch = studio.runtimeLaunch.getState();
@@ -367,9 +476,14 @@
       controller.setPublication(launch);
     }
 
-    startButton.onclick = function(){
+    startButton.onclick = async function(){
       syncPublication();
-      controller.createRoom();
+      var current = controller.getState();
+      var result = current.status === 'ACTIVE' ? current : await controller.createRoom();
+      if (result && result.status === 'ACTIVE' && result.room && result.publication) {
+        var consoleHref = buildHostConsoleHref(result.room, result.publication, window.location.href);
+        if (consoleHref) window.location.assign(consoleHref);
+      }
     };
 
     syncPublication();
@@ -382,7 +496,7 @@
     }
 
     document.addEventListener('visibilitychange', function(){
-      if (document.visibilityState === 'visible' && controller.getState().status === 'ACTIVE') controller.heartbeat();
+      if (document.visibilityState === 'visible' && controller.getState().status === 'ACTIVE') { controller.heartbeat(); controller.refreshRoster(); }
     });
 
     window.CRIOS_STUDIO_LIVE_ROOM_HOST_CONTROLLER = controller;
@@ -400,8 +514,10 @@
   window.CRIOS_STUDIO_LIVE_ROOM_HOST = Object.freeze({
     version: VERSION,
     heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+    rosterRefreshIntervalMs: ROSTER_REFRESH_INTERVAL_MS,
     contextKey: CONTEXT_KEY,
     buildPlayerHref: buildPlayerHref,
+    buildHostConsoleHref: buildHostConsoleHref,
     createHostController: createHostController,
     bootstrapUi: bootstrapUi
   });

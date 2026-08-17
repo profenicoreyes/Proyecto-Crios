@@ -2,7 +2,7 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var ERROR_CODES = Object.freeze({
     CLIENT_UNAVAILABLE: 'LIVE_ROOM_CLIENT_UNAVAILABLE',
     TRANSPORT_FAILED: 'LIVE_ROOM_TRANSPORT_FAILED',
@@ -41,20 +41,47 @@
   function storageKey(roomId, participantId) { return STORE_PREFIX + encodeURIComponent(roomId) + ':' + encodeURIComponent(participantId); }
 
   function defaultCredentialStore() {
-    var storage = null;
-    try { storage = window.sessionStorage || null; } catch (ignore) { storage = null; }
+    var session = null;
+    var persistent = null;
+    try { session = window.sessionStorage || null; } catch (ignoreSession) { session = null; }
+    try { persistent = window.localStorage || null; } catch (ignorePersistent) { persistent = null; }
+
+    function read(store, key) {
+      if (!store) return '';
+      try { return text(store.getItem(key)); } catch (ignore) { return ''; }
+    }
+    function write(store, key, value) {
+      if (!store) return false;
+      try { store.setItem(key, value); return true; } catch (ignore) { return false; }
+    }
+    function remove(store, key) {
+      if (!store) return false;
+      try { store.removeItem(key); return true; } catch (ignore) { return false; }
+    }
+
     return Object.freeze({
       get: function(roomId, participantId) {
-        if (!storage) return '';
-        try { return text(storage.getItem(storageKey(roomId, participantId))); } catch (ignore) { return ''; }
+        var key = storageKey(roomId, participantId);
+        var value = read(session, key);
+        if (value) return value;
+        value = read(persistent, key);
+        if (value && session) write(session, key, value);
+        return value;
       },
       set: function(roomId, participantId, token) {
-        if (!storage) return false;
-        try { storage.setItem(storageKey(roomId, participantId), token); return true; } catch (ignore) { return false; }
+        return write(session, storageKey(roomId, participantId), token);
+      },
+      setPersistent: function(roomId, participantId, token) {
+        var key = storageKey(roomId, participantId);
+        var persisted = write(persistent, key, token);
+        if (session) write(session, key, token);
+        return persisted;
       },
       remove: function(roomId, participantId) {
-        if (!storage) return false;
-        try { storage.removeItem(storageKey(roomId, participantId)); return true; } catch (ignore) { return false; }
+        var key = storageKey(roomId, participantId);
+        var a = remove(session, key);
+        var b = remove(persistent, key);
+        return a || b;
       }
     });
   }
@@ -75,6 +102,7 @@
         typeof contract.createJoinLiveRoomRequest === 'function' &&
         typeof contract.createHeartbeatLiveRoomRequest === 'function' &&
         typeof contract.createGetLiveRoomRequest === 'function' &&
+        typeof contract.createGetLiveRoomRosterRequest === 'function' &&
         typeof contract.parseResponse === 'function');
     }
 
@@ -147,8 +175,11 @@
       var response = await execute(request);
       if (!response.success) return response;
       var roomId = response.data && response.data.room ? response.data.room.roomId : '';
-      if (!roomId || !credentials || typeof credentials.set !== 'function' || credentials.set(roomId, participantId, capability) !== true) {
-        return result(false, requestId, null, errorPayload(ERROR_CODES.CAPABILITY_STORAGE_UNAVAILABLE, 'LiveRoom capability could not be stored for this browser session.', false, {roomCreated:true, roomId:roomId || null}));
+      var persistHostCapability = credentials && typeof credentials.setPersistent === 'function'
+        ? credentials.setPersistent.bind(credentials)
+        : (credentials && typeof credentials.set === 'function' ? credentials.set.bind(credentials) : null);
+      if (!roomId || !persistHostCapability || persistHostCapability(roomId, participantId, capability) !== true) {
+        return result(false, requestId, null, errorPayload(ERROR_CODES.CAPABILITY_STORAGE_UNAVAILABLE, 'LiveRoom host capability could not be persisted in this browser.', false, {roomCreated:true, roomId:roomId || null}));
       }
       return response;
     }
@@ -175,7 +206,7 @@
       try { requestId = createRequestId('heartbeat', call.requestId); } catch (error) { return clientUnavailable(''); }
       if (!available()) return clientUnavailable(requestId);
       var capability = credentials && typeof credentials.get === 'function' ? text(credentials.get(roomId, participantId)) : '';
-      if (!capability) return result(false, requestId, null, errorPayload(ERROR_CODES.CAPABILITY_STORAGE_UNAVAILABLE, 'LiveRoom capability is unavailable for this browser session.', false, null));
+      if (!capability) return result(false, requestId, null, errorPayload(ERROR_CODES.CAPABILITY_STORAGE_UNAVAILABLE, 'LiveRoom capability is unavailable in this browser.', false, null));
       var request;
       try { request = contract.createHeartbeatLiveRoomRequest({roomId:roomId,participantId:participantId,capabilityToken:capability}, requestId); }
       catch (errorRequest) { return result(false, requestId, null, errorPayload('INVALID_REQUEST', String(errorRequest && errorRequest.message || errorRequest), false, null)); }
@@ -192,6 +223,18 @@
       return execute(request);
     }
 
+    async function getLiveRoomRoster(roomId, participantId, callOptions) {
+      var call = callOptions && typeof callOptions === 'object' ? callOptions : {}; var requestId;
+      try { requestId = createRequestId('roster', call.requestId); } catch (error) { return clientUnavailable(''); }
+      if (!available()) return clientUnavailable(requestId);
+      var capability = credentials && typeof credentials.get === 'function' ? text(credentials.get(roomId, participantId)) : '';
+      if (!capability) return result(false, requestId, null, errorPayload(ERROR_CODES.CAPABILITY_STORAGE_UNAVAILABLE, 'LiveRoom capability is unavailable in this browser.', false, null));
+      var request;
+      try { request = contract.createGetLiveRoomRosterRequest({roomId:roomId,participantId:participantId,capabilityToken:capability}, requestId); }
+      catch (errorRequest) { return result(false, requestId, null, errorPayload('INVALID_REQUEST', String(errorRequest && errorRequest.message || errorRequest), false, null)); }
+      return execute(request);
+    }
+
     function forgetCapability(roomId, participantId) {
       return Boolean(credentials && typeof credentials.remove === 'function' && credentials.remove(roomId, participantId));
     }
@@ -203,6 +246,7 @@
       joinLiveRoom: joinLiveRoom,
       heartbeatLiveRoom: heartbeatLiveRoom,
       getLiveRoom: getLiveRoom,
+      getLiveRoomRoster: getLiveRoomRoster,
       forgetCapability: forgetCapability
     });
   }
