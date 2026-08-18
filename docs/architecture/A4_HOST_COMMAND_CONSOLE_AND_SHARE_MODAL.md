@@ -244,29 +244,29 @@ Se mantienen y reutilizan las piezas ya existentes:
 
 La persistente no se convierte en sala, ni la sala en publicación. La diferencia sigue siendo explícita.
 
-### 10.2 Piezas nuevas que hará falta después
+### 10.2 Estado materializado y frontera restante
 
-Además del backend actual, la arquitectura necesita nuevas capas:
+Los checkpoints A4-001 a A4-004 materializaron:
 
 - shell/page de consola de mando;
 - redirección desde Studio al iniciar partida;
-- estado y persistencia de contexto del host en la misma pestaña;
+- estado y persistencia local del contexto autorizado del host;
 - modal de compartir;
-- capa de actualización en tiempo real para presencia y futuros datos;
+- capa Firebase de actualización signal-only para presencia;
 - estado de UI de carga, expiración y restauración.
 
-La consola no es sólo un cambio visual. Es una nueva superficie operativa con contexto propio y flujo de vida diferenciado.
+La consola no es sólo un cambio visual. Es una superficie operativa con contexto propio y flujo de vida diferenciado. La frontera restante no se deriva automáticamente del transporte de presencia: compartir progreso, respuestas o resultados requiere otro contrato y otra decisión de arquitectura.
 
 ## 11. Trazabilidad del roadmap
 
-Este documento deja el contrato del problema y de la superficie. La subdivisión futura puede ser:
+La secuencia materializada quedó registrada en estos checkpoints:
 
-- A4-003C — host command console shell + redirect;
-- A4-003D — share modal + QR + copy/share actions;
-- A4-003E — host presence live updates in console;
-- A4-004 — game-state synchronization.
+- A4-001 — remote session foundation;
+- A4-002 — host and player flow;
+- A4-003 — host command console and presence;
+- A4-004 — Firebase realtime presence signals.
 
-No se toca el roadmap ni se implementa nada aquí; sólo se deja la orientación de cómo encaja la nueva consola dentro del conjunto de arquitectura.
+La orientación anterior que reservaba `A4-004` para game-state synchronization quedó superada por la secuencia realmente comprometida. La sincronización de estado/progreso continúa pendiente y no recibe un identificador nuevo en este documento.
 
 ## 12. Decisiones explícitas y diferidos
 
@@ -281,9 +281,9 @@ No se toca el roadmap ni se implementa nada aquí; sólo se deja la orientación
 
 ### Diferidos
 
-- la implementación final del transporte en tiempo real;
 - la política exacta de sincronización futura de estado del juego;
+- la semántica autoritativa de desconexión inmediata ante cierre abrupto;
 - la resolución final de métricas pedagógicas avanzadas;
 - la decisión definitiva sobre la capa de actualización para datos de misión y resultados.
 
-El documento define la frontera y el requisito operativo, pero no adelanta la implementación final del transporte ni del estado del juego.
+El documento define la frontera operativa ya materializada, pero no convierte el canal signal-only de presencia en transporte de estado del juego.

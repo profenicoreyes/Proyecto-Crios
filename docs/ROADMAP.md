@@ -24,6 +24,7 @@ Este roadmap ordena el trabajo confirmado y separa estado implementado de capaci
 - A2-016 cerrado con caracterización y estabilización de las dependencias de composición de NavigationCore, conservando su API pública, registro clásico y compatibilidad legacy.
 - A2-017 aceptado funcional y visualmente como CRIOS MVP 1.0, con recorrido `published` completo, 417/417 comprobaciones agregadas y revisión manual aprobada.
 - A3-003B7 cerrado funcionalmente: identidad estable de campaña, enlace directo a snapshots inmutables, retiro del flujo mutable de activación y publicación anónima create-only validada localmente y contra el backend desplegado.
+- A4-001 a A4-004 cerrados funcionalmente: sesión remota efímera asociada a una publicación inmutable, flujo visible de host y jugadores, consola de mando, presencia autorizada y señales Firebase realtime con Apps Script como fuente autoritativa.
 
 ## Cierres recientes
 
@@ -300,15 +301,45 @@ El código legacy de activación que ya no se compone ni se alcanza desde el flu
 
 La publicación inmutable es persistente. El requisito de expiración por inactividad pertenece a una futura entidad efímera de sesión/sala y no debe borrar ni invalidar publicaciones.
 
+### A4-001 a A4-004 — LiveRoom, consola y presencia realtime
+
+La primera frontera operativa de LiveRoom queda cerrada en cuatro checkpoints locales:
+
+- `ef3cd0947c661f35fba9dc90ef653aaa16e1b49c` — `feat(live-room): establish remote session foundation`;
+- `0bc229250121b476a0530d68cfb0453a7f96b975` — `feat(live-room): connect host and player flow`;
+- `21359faafa4afa5533e949010a5123884acf943a` — `feat(live-room): add host command console and presence`;
+- `719b7fb05c6f7cb277543e4e50836918b8357b4f` — `feat(live-room): add Firebase realtime presence signals`.
+
+El cierre preserva estas decisiones:
+
+- la publicación de campaña continúa siendo inmutable y persistente; la room es una entidad efímera separada;
+- Apps Script LiveRoom conserva la autoridad de creación, acceso, roster, heartbeat y expiración;
+- host y jugadores usan identidades internas y capabilities que no se exponen en enlaces públicos;
+- la consola de mando es una superficie separada de Studio, recupera el contexto local autorizado y ofrece presencia, participantes y Compartir;
+- Firebase Realtime Database transporta únicamente señales mínimas de invalidación `presence-change`; no almacena roster, capabilities CRIOS, progreso, respuestas, resultados ni `sessionData`;
+- el polling autorizado de roster cada 15 segundos permanece como fallback;
+- una room expira después de más de 10 minutos sin actividad válida, sin afectar la publicación de origen.
+
+La evidencia de cierre registra:
+
+- 29 suites Node, 2037/2037 comprobaciones aprobadas;
+- regresión browserless, 399/399 aprobadas;
+- Anonymous Authentication y reglas RTDB validadas contra el proyecto real `crios-e1b83`;
+- rechazo de lectura no autenticada, escritura bajo otro UID, campos extra y tipos de señal inválidos;
+- smoke real host/jugador con sincronizaciones observadas de 1,65 s, 4,84 s y 3,5 s, todas bajo el umbral de 8 s;
+- bundle `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, 3163169 bytes, verificado contra `main`.
+
+Este cierre no sincroniza progreso, respuestas, resultados ni estado pedagógico entre dispositivos. Tampoco interpreta el cierre abrupto de una pestaña como desconexión autoritativa inmediata.
+
 ## Trabajo posterior
 
-Con el refactor de publicación remota cerrado, la siguiente línea prioritaria es separar publicación persistente de sesión de juego efímera:
+Con LiveRoom, la consola y la presencia realtime cerrados, la siguiente capacidad funcional documentada pero todavía no implementada es la sincronización de estado/progreso de juego entre dispositivos dentro de una misma room.
 
-- diseñar una entidad de sesión/sala asociada a una publicación inmutable, con identidad propia, host, jugadores, presencia y progreso efímero;
-- definir heartbeat/presencia y `lastActivityAt` sin mezclar esa semántica con la sesión local legacy actual;
-- expirar y eliminar la sesión efímera cuando durante más de 10 minutos no exista actividad ni del host ni de ningún jugador, conservando intacta la publicación de origen;
-- mostrar una salida explícita como `Esta sesión finalizó por inactividad.` al intentar reingresar a una sesión expirada;
-- caracterizar primero el flujo actual de sesión y ownership antes de introducir red, concurrencia o persistencia compartida;
+Este roadmap no le asigna todavía un identificador de tramo. Antes de abrir implementación debe existir una decisión de arquitectura separada que delimite qué estado es compartido, quién puede escribirlo, qué fuente es autoritativa y qué datos quedan expresamente fuera. La presencia realtime cerrada en A4-004 no se amplía implícitamente a datos pedagógicos.
+
+También permanecen como decisiones independientes:
+
+- definir, si se prioriza, una semántica autoritativa de desconexión abrupta distinta de la expiración por heartbeat;
 - mantener como limpieza técnica independiente la eliminación física de archivos legacy de activación ya inalcanzables;
 - evaluar, solo con nueva evidencia, si RuntimeCore o NavigationCore deben avanzar desde captura estable hacia factorías puras sin registro global;
 - ampliar Studio con nuevos handlers, tipos de misión, escenarios y taxonomías.
@@ -317,8 +348,9 @@ Con el refactor de publicación remota cerrado, la siguiente línea prioritaria 
 
 Permanecen futuras hasta contar con implementación y evidencia específicas:
 
-- sesión/sala multiusuario remota con presencia de host y jugadores;
 - sincronización de progreso entre dispositivos dentro de una misma sesión;
+- desconexión autoritativa inmediata ante cierre abrupto, si una decisión de arquitectura la prioriza;
+- datos pedagógicos, respuestas, resultados y métricas avanzadas en la consola de mando;
 - declarar `published` como modo principal cuando una entrada explícita ya no sea necesaria;
 - eliminar el camino legacy;
 - colaboración multiusuario más allá de la sesión de juego;
@@ -326,10 +358,10 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline funcional el commit `1dfb205f729b5b538cc47e059e5e955175cd6efa`, creado el 13 de agosto de 2026. La publicación remota inmutable y sin clave docente está cerrada funcionalmente y el backend B7D1 fue desplegado y validado contra el endpoint real.
+Esta actualización toma como baseline funcional el commit `719b7fb05c6f7cb277543e4e50836918b8357b4f`, creado el 18 de agosto de 2026. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime signal-only están cerrados funcionalmente. Apps Script LiveRoom y Firebase RTDB fueron validados contra sus servicios reales.
 
-El bundle de recuperación vigente antes de este cierre documental es `Proyecto-Crios-1dfb205f729b5b53-main.bundle`, SHA-256 `c096befece526ff4cd8e1d7a1dd33082f631e5b84902c7b78aa73a70714f8fab`.
+El bundle de recuperación vigente antes de este cierre documental es `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, de 3163169 bytes.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 
-La secuencia puede cambiar únicamente ante evidencia explícita más reciente y una nueva decisión de arquitectura.
+No existe un identificador aprobado para el tramo posterior a A4-004. La secuencia puede cambiar únicamente ante evidencia explícita más reciente y una nueva decisión de arquitectura.

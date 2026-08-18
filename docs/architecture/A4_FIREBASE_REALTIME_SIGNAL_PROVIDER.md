@@ -1,4 +1,4 @@
-# A4-004B: proveedor de señales Firebase Realtime Database
+# A4-004B/C: proveedor de señales Firebase Realtime Database
 
 ## Alcance
 
@@ -8,22 +8,7 @@ El polling de roster cada 15000 ms permanece activo aunque Firebase funcione. Un
 
 ## Selección y configuración
 
-El valor versionado es `CRIOS_CONFIG.realtime.provider = 'noop'`. Firebase sólo se selecciona cuando `provider` vale `firebase` y existen valores no vacíos para `apiKey`, `authDomain`, `databaseURL`, `projectId` y `appId`. A4-004B no incluye valores reales, carga del SDK, proyecto Firebase, despliegue de reglas ni smoke live. El Runtime carga la frontera y el adapter local, pero mientras `provider` sea `noop` no se inicia Firebase.
-
-La configuración prevista para A4-004C tiene esta forma:
-
-```js
-realtime: Object.freeze({
-  provider: 'firebase',
-  firebase: Object.freeze({
-    apiKey: 'CONFIGURAR_EN_A4_004C',
-    authDomain: 'CONFIGURAR_EN_A4_004C',
-    databaseURL: 'CONFIGURAR_EN_A4_004C',
-    projectId: 'CONFIGURAR_EN_A4_004C',
-    appId: 'CONFIGURAR_EN_A4_004C'
-  })
-})
-```
+A4-004B introdujo la selección configurable con `provider = 'noop'` como estado previo. A4-004C cerró la configuración live y el valor versionado actual es `CRIOS_CONFIG.realtime.provider = 'firebase'`. El proveedor sólo se inicia cuando también existen valores no vacíos para `apiKey`, `authDomain`, `databaseURL`, `projectId` y `appId`; `js/config.js` es la fuente versionada de esos identificadores públicos.
 
 ## Contrato de datos
 
@@ -47,7 +32,7 @@ No se envían ni almacenan roster, capability CRIOS, participantId del host, pro
 
 ## Reglas
 
-Las reglas de `firebase/realtime-database.rules.json` están versionadas pero no desplegadas. Niegan acceso por defecto, exigen autenticación para leer señales de una sala, limitan escritura a `auth.uid === $uid`, exigen los tres campos mínimos y rechazan cualquier campo adicional mediante `$other`.
+Las reglas de `firebase/realtime-database.rules.json` están versionadas y fueron publicadas en el proyecto `crios-e1b83`. Niegan acceso por defecto, exigen autenticación para leer señales de una sala, limitan escritura a `auth.uid === $uid`, exigen los tres campos mínimos y rechazan cualquier campo adicional mediante `$other`. El smoke live confirmó tanto el camino permitido como las denegaciones previstas.
 
 ## Productores de señal
 
@@ -66,17 +51,20 @@ CRIOS carga exclusivamente los SDK necesarios desde la CDN oficial de Firebase, 
 ya tiene un contrato `window.firebase` estable y CRIOS no incorpora bundler en este tramo.
 La migración futura al SDK modular no cambia la frontera signal-only.
 
-Antes del smoke live deben estar publicados en Firebase los contenidos exactos de
-`firebase/realtime-database.rules.json` y habilitado Firebase Authentication anónimo.
+Para el smoke live se publicaron en Firebase los contenidos exactos de
+`firebase/realtime-database.rules.json` y se habilitó Firebase Authentication anónimo.
 
-El smoke A4-004C verifica contra los servicios reales:
+El smoke A4-004C verificó contra los servicios reales:
 - creación de identidad Firebase anónima;
 - denegación de lectura sin autenticación;
 - escritura válida bajo `/liveRoomSignals/{roomId}/{auth.uid}`;
 - lectura autenticada de la sala;
 - rechazo de escritura bajo otro UID;
 - rechazo de payload con campos adicionales;
+- rechazo de tipos de señal inválidos;
 - limpieza del nodo de smoke.
 
 El smoke nunca imprime ID tokens ni refresh tokens. Firebase continúa siendo sólo un canal de
 invalidación; Apps Script LiveRoom conserva la autoridad del roster y de la expiración.
+
+El checkpoint de cierre es `719b7fb05c6f7cb277543e4e50836918b8357b4f`. La validación acumulada aprobó 2037/2037 comprobaciones Node, 399/399 browserless y un smoke real host/jugador con las tres sincronizaciones observadas por debajo de 8 segundos. El cierre abrupto de una pestaña continúa fuera de esta semántica signal-only y la sincronización de progreso o resultados requiere una decisión de arquitectura separada.
