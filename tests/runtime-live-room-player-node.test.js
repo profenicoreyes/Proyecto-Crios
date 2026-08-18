@@ -59,10 +59,12 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_RUNTIME_LIVE_ROOM_PLAYER;
 
 check(Boolean(api), 'API exported');
-eq(api.version, '1.0.0', 'version');
+eq(api.version, '1.1.0', 'version');
 eq(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
 eq(api.contextKey, 'crios-live-room-player-context-v1', 'context key');
 eq(api.expiredMessage, 'Esta sesión finalizó por inactividad.', 'expired message');
+eq(api.realtimeSignalType, 'presence-change', 'realtime signal type');
+check(typeof api.defaultRealtimeTransportFactory === 'function', 'defaultRealtimeTransportFactory exported');
 check(typeof api.parseRoomLaunch === 'function', 'parseRoomLaunch exported');
 check(typeof api.createPlayerController === 'function', 'createPlayerController exported');
 check(typeof api.createStatusPanel === 'function', 'createStatusPanel exported');
@@ -143,7 +145,13 @@ function makeTimer() {
       forgetCapability(id, participantId) { calls.push(['forget', id, participantId]); return true; }
     };
     const states = [];
-    const controller = api.createPlayerController({client,storage,participantIdFactory:()=> 'player-abc',setIntervalImpl:timer.set,clearIntervalImpl:timer.clear,now:()=>now,onStateChange:s=>states.push(s)});
+    const realtimeSignals = [];
+    let realtimeDestroyed = 0;
+    const realtimeTransport = {
+      publishSignal(roomId, signal) { realtimeSignals.push({roomId, signal:JSON.parse(JSON.stringify(signal))}); return true; },
+      destroy() { realtimeDestroyed += 1; }
+    };
+    const controller = api.createPlayerController({client,storage,participantIdFactory:()=> 'player-abc',setIntervalImpl:timer.set,clearIntervalImpl:timer.clear,now:()=>now,onStateChange:s=>states.push(s),realtimeTransportFactory:()=>realtimeTransport,realtimeEventIdFactory:()=>`evt-${realtimeSignals.length+1}`});
     check(Object.isFrozen(controller), 'controller frozen');
     eq(controller.getState().status, 'IDLE', 'initial state idle');
     const active = await controller.start(launch);
@@ -166,11 +174,23 @@ function makeTimer() {
     check(!JSON.stringify(ctx).includes('secret'), 'context contains no secret literal');
     eq(timer.ms(), 120000, 'heartbeat timer interval');
     eq(timer.active(), true, 'heartbeat timer active');
+    eq(realtimeSignals.length, 1, 'fresh join emits one realtime signal');
+    eq(realtimeSignals[0].roomId, 'room-1', 'join signal uses room id as transport scope');
+    eq(realtimeSignals[0].signal.type, 'presence-change', 'join signal type');
+    eq(realtimeSignals[0].signal.eventId, 'evt-1', 'join signal event id');
+    eq(realtimeSignals[0].signal.emittedAt, '1970-01-01T00:00:01.000Z', 'join signal timestamp');
+    eq(Object.keys(realtimeSignals[0].signal).sort().join(','), 'emittedAt,eventId,type', 'join signal payload is minimal');
+    check(!JSON.stringify(realtimeSignals[0]).includes('player-abc'), 'join realtime signal excludes participant id');
+    check(!JSON.stringify(realtimeSignals[0]).includes('capability'), 'join realtime signal excludes capability');
     now = 2000;
     await controller.heartbeat();
     eq(controller.getState().lastHeartbeatAt, 2000, 'manual heartbeat updates timestamp');
     eq(calls[calls.length-1][0], 'heartbeat', 'manual heartbeat remote call');
+    eq(realtimeSignals.length, 2, 'successful heartbeat emits realtime signal');
+    eq(realtimeSignals[1].signal.eventId, 'evt-2', 'heartbeat signal gets fresh event id');
+    eq(realtimeSignals[1].signal.emittedAt, '1970-01-01T00:00:02.000Z', 'heartbeat signal timestamp follows successful heartbeat');
     controller.destroy();
+    eq(realtimeDestroyed, 1, 'destroy tears down realtime transport');
     eq(timer.active(), false, 'destroy stops timer');
     check(timer.cleared() >= 1, 'destroy clears interval');
     check(states.some(s=>s.status==='CHECKING'), 'checking state emitted');
@@ -189,7 +209,8 @@ function makeTimer() {
       async heartbeatLiveRoom(id,p){ calls.push(['heartbeat',id,p]); return successRoom({room:room(),presence:presence(p)}); },
       forgetCapability(){ calls.push(['forget']); return true; }
     };
-    const controller = api.createPlayerController({client,storage,participantIdFactory:()=> 'player-new',setIntervalImpl:timer.set,clearIntervalImpl:timer.clear,now:()=>3000});
+    const restoredSignals = [];
+    const controller = api.createPlayerController({client,storage,participantIdFactory:()=> 'player-new',setIntervalImpl:timer.set,clearIntervalImpl:timer.clear,now:()=>3000,realtimeTransportFactory:()=>({publishSignal(roomId, signal){restoredSignals.push({roomId,signal});return true;},destroy(){}}),realtimeEventIdFactory:()=> 'evt-restored'});
     const restored = await controller.start(launch);
     eq(restored.status, 'ACTIVE', 'restore active');
     eq(restored.participantId, 'player-old', 'restore same participant');
@@ -199,6 +220,9 @@ function makeTimer() {
     check(!calls.some(c=>c[0]==='join'), 'restore does not duplicate join');
     eq(storage.inspect().participantId, 'player-old', 'restore context unchanged');
     eq(timer.active(), true, 'restore starts timer');
+    eq(restoredSignals.length, 1, 'successful restore heartbeat emits realtime signal');
+    eq(restoredSignals[0].roomId, 'room-1', 'restore signal uses room id scope');
+    eq(restoredSignals[0].signal.eventId, 'evt-restored', 'restore signal event id');
     controller.destroy();
   }
 
@@ -293,6 +317,19 @@ function makeTimer() {
   }
 
   {
+    const storage=makeStorage();
+    const timer=makeTimer();
+    const client={available:()=>true,async getLiveRoom(){return successRoom({room:room()})},async joinLiveRoom(id,p){return successRoom({room:room(),presence:presence(p)})},async heartbeatLiveRoom(){return successRoom({room:room()})}};
+    const controller=api.createPlayerController({client,storage,participantIdFactory:()=> 'player-realtime-fail',setIntervalImpl:timer.set,clearIntervalImpl:timer.clear,now:()=>7000,realtimeTransportFactory:()=>({publishSignal(){throw new Error('realtime down');},destroy(){throw new Error('destroy down');}}),realtimeEventIdFactory:()=> 'evt-fail'});
+    let state=await controller.start(launch);
+    eq(state.status,'ACTIVE','realtime publish failure does not break join');
+    state=await controller.heartbeat();
+    eq(state.status,'ACTIVE','realtime publish failure does not break heartbeat');
+    eq(state.lastError,null,'realtime failure remains outside authoritative player state');
+    controller.destroy();
+  }
+
+  {
     const panel={textContent:'',dataset:{}};
     api.renderStatus(panel,{status:'CHECKING'}); eq(panel.textContent,'Partida en vivo · conectando…','checking visible text'); eq(panel.dataset.status,'CHECKING','checking dataset');
     api.renderStatus(panel,{status:'ACTIVE',room:{roomId:'room-1'},lastError:null}); eq(panel.textContent,'Partida en vivo · conectado','active visible text'); eq(panel.dataset.status,'ACTIVE','active dataset'); eq(panel.dataset.roomId,'room-1','active room dataset');
@@ -310,9 +347,17 @@ function makeTimer() {
   }
 
   const index = fs.readFileSync(path.join(root,'index.html'),'utf8');
+  const realtimeBoundaryScript = '<script src="js/live-room/realtime/live-room-realtime-transport.js"></script>';
+  const firebaseProviderScript = '<script src="js/live-room/realtime/firebase-live-room-realtime-provider.js"></script>';
   const playerScript = '<script src="js/runtime/live-room/runtime-live-room-player.js?v=20260813a4002b"></script>';
+  check(index.includes(realtimeBoundaryScript),'runtime index loads realtime boundary');
+  check(index.includes(firebaseProviderScript),'runtime index loads Firebase provider adapter');
   check(index.includes(playerScript),'runtime index loads player module');
+  check(index.indexOf(realtimeBoundaryScript) < index.indexOf(playerScript),'realtime boundary loads before player module');
+  check(index.indexOf(firebaseProviderScript) < index.indexOf(playerScript),'Firebase adapter loads before player module');
   check(index.indexOf(playerScript) > index.indexOf('<script src="js/crios.js"></script>'),'player module loads after CRIOS');
+  eq((index.match(/live-room-realtime-transport\.js/g)||[]).length,1,'runtime realtime boundary loaded once');
+  eq((index.match(/firebase-live-room-realtime-provider\.js/g)||[]).length,1,'runtime Firebase adapter loaded once');
   eq((index.match(/runtime-live-room-player\.js/g)||[]).length,1,'player module loaded once');
   check(source.includes("client.getLiveRoom(launch.roomId)"),'source preflights room with GET');
   check(source.indexOf('client.getLiveRoom(launch.roomId)') < source.indexOf('client.joinLiveRoom(launch.roomId, participantId)'),'GET occurs before join in source');
@@ -323,6 +368,9 @@ function makeTimer() {
   check(!source.includes('deleteLiveRoom'),'no delete operation');
   check(!source.includes('activateLiveRoom'),'no room reactivation');
   check(source.includes('HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000'),'2 minute heartbeat constant');
+  check(source.includes("REALTIME_SIGNAL_TYPE = 'presence-change'"),'runtime signal type is fixed');
+  check(source.includes('publishRealtimePresence(launch.roomId);'),'successful player lifecycle publishes realtime invalidation signal');
+  check(!source.includes('capabilityToken'),'runtime realtime producer never handles capability token');
   check(source.includes("if (!launch.requested) return false"),'no roomId bootstrap exits before UI/client actions');
 
   const doc = fs.readFileSync(path.join(root,'docs','architecture','A4_RUNTIME_LIVE_ROOM_PLAYER_FLOW.md'),'utf8');

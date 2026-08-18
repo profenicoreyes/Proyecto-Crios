@@ -2,10 +2,11 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
   var CONTEXT_KEY = 'crios-live-room-player-context-v1';
   var EXPIRED_MESSAGE = 'Esta sesión finalizó por inactividad.';
+  var REALTIME_SIGNAL_TYPE = 'presence-change';
 
   function clone(value) {
     if (value === null || typeof value !== 'object') return value;
@@ -80,6 +81,36 @@
     });
   }
 
+  function defaultRealtimeTransportFactory() {
+    var config = typeof CRIOS_CONFIG !== 'undefined' && CRIOS_CONFIG ? CRIOS_CONFIG.realtime : null;
+    var firebaseProvider = window.CRIOS_FIREBASE_LIVE_ROOM_REALTIME_PROVIDER;
+    if (firebaseProvider && typeof firebaseProvider.isCompleteConfig === 'function' && firebaseProvider.isCompleteConfig(config) && typeof firebaseProvider.createTransport === 'function') {
+      try { return firebaseProvider.createTransport(config); } catch (ignoreFirebaseProviderError) {}
+    }
+    var api = window.CRIOS_LIVE_ROOM_REALTIME_TRANSPORT;
+    if (api && typeof api.createTransport === 'function') {
+      try { return api.createTransport(); } catch (ignoreBaseTransportError) {}
+    }
+    return Object.freeze({
+      subscribeRoom:function(){ return true; },
+      unsubscribeRoom:function(){ return true; },
+      publishSignal:function(){ return true; },
+      destroy:function(){}
+    });
+  }
+
+  function defaultRealtimeEventIdFactory() {
+    try {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') return 'presence-' + window.crypto.randomUUID();
+      if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+        var bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return 'presence-' + Array.prototype.map.call(bytes, function(byte){ return byte.toString(16).padStart(2, '0'); }).join('');
+      }
+    } catch (ignore) {}
+    return '';
+  }
+
   function defaultParticipantIdFactory() {
     try {
       if (window.crypto && typeof window.crypto.randomUUID === 'function') return 'player-' + window.crypto.randomUUID();
@@ -129,8 +160,11 @@
     var clearIntervalImpl = typeof opts.clearIntervalImpl === 'function' ? opts.clearIntervalImpl : window.clearInterval.bind(window);
     var now = typeof opts.now === 'function' ? opts.now : function(){ return Date.now(); };
     var onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : function(){};
+    var realtimeTransportFactory = typeof opts.realtimeTransportFactory === 'function' ? opts.realtimeTransportFactory : defaultRealtimeTransportFactory;
+    var realtimeEventIdFactory = typeof opts.realtimeEventIdFactory === 'function' ? opts.realtimeEventIdFactory : defaultRealtimeEventIdFactory;
     var state = baseState(client && typeof client.available === 'function' && client.available() ? 'IDLE' : 'UNAVAILABLE');
     var timer = null;
+    var realtimeTransport = null;
     var destroyed = false;
 
     function emit(next) {
@@ -151,6 +185,32 @@
       stopHeartbeat();
       if (destroyed || state.status !== 'ACTIVE' || !state.launch || !state.participantId) return;
       timer = setIntervalImpl(function(){ heartbeat(); }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    function destroyRealtime() {
+      if (!realtimeTransport) return;
+      if (typeof realtimeTransport.destroy === 'function') {
+        try { realtimeTransport.destroy(); } catch (ignoreDestroyRealtime) {}
+      }
+      realtimeTransport = null;
+    }
+
+    function publishRealtimePresence(roomId) {
+      if (destroyed) return false;
+      var normalizedRoomId = text(roomId);
+      if (!normalizedRoomId) return false;
+      if (!realtimeTransport) {
+        try { realtimeTransport = realtimeTransportFactory(); }
+        catch (ignoreRealtimeFactory) { realtimeTransport = null; }
+      }
+      if (!realtimeTransport || typeof realtimeTransport.publishSignal !== 'function') return false;
+      var eventId = text(realtimeEventIdFactory());
+      if (!eventId) return false;
+      var emittedAt;
+      try { emittedAt = new Date(now()).toISOString(); } catch (ignoreDate) { return false; }
+      try {
+        return realtimeTransport.publishSignal(normalizedRoomId, {type:REALTIME_SIGNAL_TYPE,eventId:eventId,emittedAt:emittedAt}) !== false;
+      } catch (ignorePublish) { return false; }
     }
 
     function clearContext(context) {
@@ -180,6 +240,7 @@
       var value = errorValue(error && error.code || fallbackCode, error && error.message || fallbackMessage);
       var expired = value.code === 'ROOM_EXPIRED';
       stopHeartbeat();
+      destroyRealtime();
       if (expired) clearContext(state.launch && {roomId:state.launch.roomId, participantId:state.participantId});
       return emit({status:expired ? 'EXPIRED' : 'ERROR',busy:false,room:null,lastError:expired ? errorValue('ROOM_EXPIRED', EXPIRED_MESSAGE) : value});
     }
@@ -216,6 +277,7 @@
         }
         if (!sameRoom(restored.data.room, launch)) return emit({status:'INVALID',busy:false,launch:launch,room:null,participantId:restoredId,lastError:errorValue('ROOM_PUBLICATION_MISMATCH','La sala recuperada no coincide con la campaña publicada.')});
         var restoredState = emit({status:'ACTIVE',busy:false,launch:launch,room:restored.data.room,participantId:restoredId,lastError:null,lastHeartbeatAt:now()});
+        publishRealtimePresence(launch.roomId);
         startHeartbeat();
         return restoredState;
       }
@@ -238,6 +300,7 @@
       }
 
       var joinedState = emit({status:'ACTIVE',busy:false,launch:launch,room:joined.data.room,participantId:participantId,lastError:null,lastHeartbeatAt:now()});
+      publishRealtimePresence(launch.roomId);
       startHeartbeat();
       return joinedState;
     }
@@ -254,11 +317,12 @@
         return emit({status:'ACTIVE',busy:false,lastError:errorValue(error.code || 'LIVE_ROOM_HEARTBEAT_FAILED',error.message || 'La conexión está temporalmente inestable.'),lastHeartbeatAt:state.lastHeartbeatAt});
       }
       if (!sameRoom(response.data.room, launch)) return emit({status:'ERROR',busy:false,lastError:errorValue('ROOM_PUBLICATION_MISMATCH','La sala dejó de coincidir con la campaña publicada.')});
+      publishRealtimePresence(launch.roomId);
       return emit({status:'ACTIVE',busy:false,room:response.data.room,lastError:null,lastHeartbeatAt:now()});
     }
 
     function getState() { return frozen(state); }
-    function destroy() { destroyed = true; stopHeartbeat(); }
+    function destroy() { destroyed = true; stopHeartbeat(); destroyRealtime(); }
 
     return Object.freeze({version:VERSION,start:start,heartbeat:heartbeat,getState:getState,destroy:destroy});
   }
@@ -330,6 +394,8 @@
     heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
     contextKey: CONTEXT_KEY,
     expiredMessage: EXPIRED_MESSAGE,
+    realtimeSignalType: REALTIME_SIGNAL_TYPE,
+    defaultRealtimeTransportFactory: defaultRealtimeTransportFactory,
     parseRoomLaunch: parseRoomLaunch,
     createPlayerController: createPlayerController,
     createStatusPanel: createStatusPanel,

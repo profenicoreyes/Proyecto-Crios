@@ -10,6 +10,16 @@ const CRIOS_CONFIG = Object.freeze({
   resultsEndpoint: 'https://script.google.com/macros/s/AKfycbwnoHvlD8xAtDHhcymZxfrt9TlKSx86F-sAECTfj1Y8mAOYDbtnFCLfKPeUVxzr8bwEyA/exec',
   publicationEndpoint: 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec',
   publicationTimeoutMs: 15000,
+  realtime: Object.freeze({
+    provider: 'firebase',
+    firebase: Object.freeze({
+      apiKey: 'AIzaSyACPFEnyD8MtG_FFZGcxqYRcs0XJE50zf8',
+      authDomain: 'crios-e1b83.firebaseapp.com',
+      databaseURL: 'https://crios-e1b83-default-rtdb.firebaseio.com',
+      projectId: 'crios-e1b83',
+      appId: '1:480732895813:web:287d843f2f17d187fc612c'
+    })
+  }),
   variantCount: 36,
   progressSendDelayMs: 250,
   missionReturnDelayMs: 1400,

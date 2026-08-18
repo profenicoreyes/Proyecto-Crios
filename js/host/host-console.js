@@ -2,9 +2,10 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
   var ROSTER_REFRESH_INTERVAL_MS = 15 * 1000;
+  var REALTIME_SIGNAL_DEBOUNCE_MS = 300;
   var CLOCK_REFRESH_INTERVAL_MS = 1000;
   var CONTEXT_KEY = 'crios-live-room-host-context-v1';
   var MAX_TREND_SAMPLES = 40;
@@ -109,6 +110,24 @@
     return 'hace ' + min + ' min';
   }
 
+  function defaultRealtimeTransportFactory(){
+    var config = typeof CRIOS_CONFIG !== 'undefined' && CRIOS_CONFIG ? CRIOS_CONFIG.realtime : null;
+    var firebaseProvider = window.CRIOS_FIREBASE_LIVE_ROOM_REALTIME_PROVIDER;
+    if (firebaseProvider && typeof firebaseProvider.isCompleteConfig === 'function' && firebaseProvider.isCompleteConfig(config) && typeof firebaseProvider.createTransport === 'function') {
+      try { return firebaseProvider.createTransport(config); } catch (ignoreFirebaseProviderError) {}
+    }
+    var api = window.CRIOS_LIVE_ROOM_REALTIME_TRANSPORT;
+    if (api && typeof api.createTransport === 'function') {
+      return api.createTransport();
+    }
+    return Object.freeze({
+      subscribeRoom: function(){ return true; },
+      unsubscribeRoom: function(){ return true; },
+      publishSignal: function(){ return true; },
+      destroy: function(){}
+    });
+  }
+
   function createController(options){
     var opts = options && typeof options === 'object' ? options : {};
     var client = opts.client || null;
@@ -116,10 +135,20 @@
     var href = text(opts.href) || window.location.href;
     var setIntervalImpl = opts.setIntervalImpl || window.setInterval.bind(window);
     var clearIntervalImpl = opts.clearIntervalImpl || window.clearInterval.bind(window);
+    var setTimeoutImpl = opts.setTimeoutImpl || (typeof window.setTimeout === 'function'
+      ? window.setTimeout.bind(window)
+      : function(callback){ if (typeof callback === 'function') callback(); return 0; });
+    var clearTimeoutImpl = opts.clearTimeoutImpl || (typeof window.clearTimeout === 'function' ? window.clearTimeout.bind(window) : function(){});
     var onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : function(){};
+    var realtimeTransportFactory = typeof opts.realtimeTransportFactory === 'function'
+      ? opts.realtimeTransportFactory
+      : defaultRealtimeTransportFactory;
     var state = {status:'LOADING',context:null,room:null,roster:null,lastSyncAt:null,lastError:null,trend:[]};
     var heartbeatTimer = null;
     var rosterTimer = null;
+    var signalRefreshTimer = null;
+    var realtimeTransport = null;
+    var realtimeSubscribedRoomId = '';
     var destroyed = false;
 
     function emit(patch){
@@ -131,6 +160,19 @@
     function stopTimers(){
       if (heartbeatTimer !== null) { try { clearIntervalImpl(heartbeatTimer); } catch (ignore) {} heartbeatTimer = null; }
       if (rosterTimer !== null) { try { clearIntervalImpl(rosterTimer); } catch (ignore) {} rosterTimer = null; }
+      if (signalRefreshTimer !== null) { try { clearTimeoutImpl(signalRefreshTimer); } catch (ignore) {} signalRefreshTimer = null; }
+    }
+
+    function detachRealtime(){
+      if (!realtimeTransport) return;
+      if (realtimeSubscribedRoomId && typeof realtimeTransport.unsubscribeRoom === 'function') {
+        try { realtimeTransport.unsubscribeRoom(realtimeSubscribedRoomId); } catch (ignoreUnsubscribe) {}
+      }
+      realtimeSubscribedRoomId = '';
+      if (typeof realtimeTransport.destroy === 'function') {
+        try { realtimeTransport.destroy(); } catch (ignoreDestroy) {}
+      }
+      realtimeTransport = null;
     }
 
     function clearHostContext(){
@@ -143,6 +185,7 @@
 
     function fatal(error){
       stopTimers();
+      detachRealtime();
       clearHostContext();
       return emit({status:error && error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'ERROR',room:null,roster:null,lastError:error || {code:'HOST_CONSOLE_FAILED',message:'No se pudo recuperar la consola de mando.'}});
     }
@@ -165,6 +208,44 @@
       }
       recordTrend(response.data.roster);
       return emit({status:'ACTIVE',roster:response.data.roster,lastSyncAt:now(),lastError:null,trend:state.trend});
+    }
+
+    function scheduleRealtimeRefresh(){
+      if (destroyed || state.status !== 'ACTIVE' || !state.context) return;
+      if (signalRefreshTimer !== null) return;
+      signalRefreshTimer = setTimeoutImpl(function(){
+        signalRefreshTimer = null;
+        refreshRoster();
+      }, REALTIME_SIGNAL_DEBOUNCE_MS);
+    }
+
+    function attachRealtime(roomId){
+      if (destroyed) return;
+      var normalizedRoomId = text(roomId);
+      if (!normalizedRoomId) return;
+      detachRealtime();
+      try {
+        realtimeTransport = realtimeTransportFactory();
+      } catch (ignoreFactoryError) {
+        realtimeTransport = null;
+        return;
+      }
+      if (!realtimeTransport || typeof realtimeTransport.subscribeRoom !== 'function') {
+        realtimeTransport = null;
+        return;
+      }
+      try {
+        var subscribed = realtimeTransport.subscribeRoom(normalizedRoomId, function(){
+          scheduleRealtimeRefresh();
+        });
+        if (subscribed === false) {
+          detachRealtime();
+          return;
+        }
+        realtimeSubscribedRoomId = normalizedRoomId;
+      } catch (ignoreSubscribeError) {
+        detachRealtime();
+      }
     }
 
     async function heartbeat(){
@@ -196,6 +277,7 @@
         return fatal({code:'ROOM_PUBLICATION_MISMATCH',message:'La sala no coincide con la publicación esperada.'});
       }
       emit({status:'ACTIVE',room:room,lastError:null});
+      attachRealtime(context.roomId);
       await heartbeat();
       await refreshRoster();
       heartbeatTimer = setIntervalImpl(function(){ heartbeat(); }, HEARTBEAT_INTERVAL_MS);
@@ -204,7 +286,7 @@
     }
 
     function getState(){ return Object.assign({}, state, {trend:state.trend.slice()}); }
-    function destroy(){ destroyed = true; stopTimers(); }
+    function destroy(){ destroyed = true; stopTimers(); detachRealtime(); }
 
     return Object.freeze({start:start,heartbeat:heartbeat,refreshRoster:refreshRoster,getState:getState,destroy:destroy});
   }
@@ -352,8 +434,10 @@
     version:VERSION,
     heartbeatIntervalMs:HEARTBEAT_INTERVAL_MS,
     rosterRefreshIntervalMs:ROSTER_REFRESH_INTERVAL_MS,
+    realtimeSignalDebounceMs:REALTIME_SIGNAL_DEBOUNCE_MS,
     contextKey:CONTEXT_KEY,
     defaultContextStorage:defaultContextStorage,
+    defaultRealtimeTransportFactory:defaultRealtimeTransportFactory,
     readContext:readContext,
     buildConsoleHref:buildConsoleHref,
     validateUrlContext:validateUrlContext,

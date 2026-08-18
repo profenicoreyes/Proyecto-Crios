@@ -36,12 +36,14 @@ vm.runInContext(source, context, {filename:sourcePath});
 const api = windowStub.CRIOS_HOST_CONSOLE;
 
 check(Boolean(api), 'host console API exported');
-equal(api.version, '1.2.0', 'version');
+equal(api.version, '1.3.0', 'version');
 equal(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
 equal(api.rosterRefreshIntervalMs, 15000, 'roster interval transitional');
+equal(api.realtimeSignalDebounceMs, 300, 'realtime signal debounce interval');
 equal(api.contextKey, 'crios-live-room-host-context-v1', 'shared host context key');
 check(typeof api.readContext === 'function', 'readContext exported');
 check(typeof api.defaultContextStorage === 'function', 'persistent default context storage exported');
+check(typeof api.defaultRealtimeTransportFactory === 'function', 'realtime transport factory exported');
 check(source.includes('window.localStorage'), 'host console supports persistent browser storage');
 
 check(typeof api.validateUrlContext === 'function', 'validateUrlContext exported');
@@ -90,6 +92,32 @@ function makeClient(overrides={}){
   return Object.assign(client,overrides);
 }
 
+function makeRealtimeTransport(){
+  const listeners = new Map();
+  const calls = {subscribe:[],unsubscribe:[],publish:[],destroy:0};
+  const transport = {
+    subscribeRoom(roomId, callback){
+      calls.subscribe.push(roomId);
+      listeners.set(roomId, callback);
+      return true;
+    },
+    unsubscribeRoom(roomId){
+      calls.unsubscribe.push(roomId);
+      listeners.delete(roomId);
+      return true;
+    },
+    publishSignal(roomId, signal){
+      calls.publish.push([roomId, signal]);
+      const callback = listeners.get(roomId);
+      if (callback) callback(signal);
+      return true;
+    },
+    destroy(){ calls.destroy += 1; listeners.clear(); },
+    calls
+  };
+  return transport;
+}
+
 (async()=>{
   {
     const client=makeClient();
@@ -111,6 +139,71 @@ function makeClient(overrides={}){
     check(states.some(s=>s.status==='ACTIVE'),'active state emitted');
     controller.destroy();
     check(clears.length>=2,'destroy stops both network timers');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const timeouts=[];
+    const realtime=makeRealtimeTransport();
+    const controller=api.createController({
+      client,
+      storage,
+      href:windowStub.location.href,
+      setIntervalImpl:()=>1,
+      clearIntervalImpl:()=>{},
+      setTimeoutImpl(fn,ms){ timeouts.push({fn,ms}); return timeouts.length; },
+      clearTimeoutImpl(){},
+      realtimeTransportFactory(){ return realtime; }
+    });
+    await controller.start();
+    equal(realtime.calls.subscribe.length,1,'realtime subscribes once on start');
+    equal(realtime.calls.subscribe[0],'room-1','realtime subscribes with room id');
+
+    realtime.publishSignal('room-1',{roomId:'room-1',type:'presence-change',eventId:'evt-1',capability:'secret',participants:[{id:'x'}]});
+    realtime.publishSignal('room-1',{roomId:'room-1',type:'presence-change',eventId:'evt-2'});
+    equal(timeouts.length,1,'burst of realtime signals is coalesced');
+    equal(timeouts[0].ms,300,'realtime coalescing uses debounce window');
+    equal(client.calls.roster.length,1,'signal does not mutate roster directly');
+    timeouts[0].fn();
+    equal(client.calls.roster.length,2,'signal path triggers authorized roster refresh');
+
+    controller.destroy();
+    equal(realtime.calls.unsubscribe.length,1,'destroy unsubscribes realtime room listener');
+    equal(realtime.calls.destroy,1,'destroy tears down realtime transport instance');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const intervals=[];
+    const controller=api.createController({
+      client,
+      storage,
+      href:windowStub.location.href,
+      setIntervalImpl(fn,ms){ intervals.push(ms); return intervals.length; },
+      clearIntervalImpl:()=>{},
+      realtimeTransportFactory(){ throw new Error('transport unavailable'); }
+    });
+    const state=await controller.start();
+    equal(state.status,'ACTIVE','realtime transport failure does not break session');
+    check(intervals.includes(15000),'polling fallback remains active when realtime fails');
+    equal(storage.removes(),0,'realtime transport failure does not clear host context');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const realtime=makeRealtimeTransport();
+    const controllerA=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},realtimeTransportFactory(){ return realtime; }});
+    await controllerA.start();
+    controllerA.destroy();
+    const controllerB=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},realtimeTransportFactory(){ return realtime; }});
+    await controllerB.start();
+    equal(realtime.calls.subscribe.length,2,'reloading console does not duplicate active subscriptions');
+    equal(realtime.calls.unsubscribe.length,1,'previous subscription is released before next start');
+    controllerB.destroy();
+    equal(realtime.calls.unsubscribe.length,2,'second controller also releases subscription');
   }
 
   {
@@ -186,6 +279,10 @@ function makeClient(overrides={}){
   check(css.includes('.host-trend__line'),'trend line styled');
   check(css.includes('.host-share__dialog'),'share modal styled');
   check(source.includes('MAX_TREND_SAMPLES = 40'),'trend history bounded to roughly ten minutes at transitional cadence');
+  check(source.includes('REALTIME_SIGNAL_DEBOUNCE_MS = 300'),'realtime signal path has explicit coalescing window');
+  check(source.includes('defaultRealtimeTransportFactory'),'host console depends on realtime transport abstraction');
+  check(source.includes('scheduleRealtimeRefresh'),'realtime signal path and polling path are separate');
+  check(source.includes('attachRealtime(context.roomId);'),'realtime signal path attaches after room validation');
   check(source.includes("context.campaignName || 'Campaña publicada'"),'campaign name preferred over technical ids in header');
   check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 15 * 1000'),'15s polling remains transitional');
   check(source.includes("url.searchParams.get('roomId')"),'console validates public room id');
