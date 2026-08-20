@@ -59,11 +59,12 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_RUNTIME_LIVE_ROOM_PLAYER;
 
 check(Boolean(api), 'API exported');
-eq(api.version, '1.1.0', 'version');
+eq(api.version, '1.3.0', 'version');
 eq(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
 eq(api.contextKey, 'crios-live-room-player-context-v1', 'context key');
 eq(api.expiredMessage, 'Esta sesión finalizó por inactividad.', 'expired message');
 eq(api.realtimeSignalType, 'presence-change', 'realtime signal type');
+eq(api.gameStateRealtimeSignalType, 'game-state-change', 'game-state realtime signal type');
 check(typeof api.defaultRealtimeTransportFactory === 'function', 'defaultRealtimeTransportFactory exported');
 check(typeof api.parseRoomLaunch === 'function', 'parseRoomLaunch exported');
 check(typeof api.createPlayerController === 'function', 'createPlayerController exported');
@@ -349,7 +350,7 @@ function makeTimer() {
   const index = fs.readFileSync(path.join(root,'index.html'),'utf8');
   const realtimeBoundaryScript = '<script src="js/live-room/realtime/live-room-realtime-transport.js"></script>';
   const firebaseProviderScript = '<script src="js/live-room/realtime/firebase-live-room-realtime-provider.js"></script>';
-  const playerScript = '<script src="js/runtime/live-room/runtime-live-room-player.js?v=20260813a4002b"></script>';
+  const playerScript = '<script src="js/runtime/live-room/runtime-live-room-player.js?v=20260819game-state"></script>';
   check(index.includes(realtimeBoundaryScript),'runtime index loads realtime boundary');
   check(index.includes(firebaseProviderScript),'runtime index loads Firebase provider adapter');
   check(index.includes(playerScript),'runtime index loads player module');

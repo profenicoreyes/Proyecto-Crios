@@ -2,11 +2,12 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.3.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
   var CONTEXT_KEY = 'crios-live-room-player-context-v1';
   var EXPIRED_MESSAGE = 'Esta sesión finalizó por inactividad.';
   var REALTIME_SIGNAL_TYPE = 'presence-change';
+  var GAME_STATE_SIGNAL_TYPE = 'game-state-change';
 
   function clone(value) {
     if (value === null || typeof value !== 'object') return value;
@@ -99,13 +100,14 @@
     });
   }
 
-  function defaultRealtimeEventIdFactory() {
+  function defaultRealtimeEventIdFactory(signalType) {
+    var prefix = signalType === GAME_STATE_SIGNAL_TYPE ? 'game-state-' : 'presence-';
     try {
-      if (window.crypto && typeof window.crypto.randomUUID === 'function') return 'presence-' + window.crypto.randomUUID();
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') return prefix + window.crypto.randomUUID();
       if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
         var bytes = new Uint8Array(16);
         window.crypto.getRandomValues(bytes);
-        return 'presence-' + Array.prototype.map.call(bytes, function(byte){ return byte.toString(16).padStart(2, '0'); }).join('');
+        return prefix + Array.prototype.map.call(bytes, function(byte){ return byte.toString(16).padStart(2, '0'); }).join('');
       }
     } catch (ignore) {}
     return '';
@@ -122,6 +124,28 @@
     } catch (ignore) {}
     return '';
   }
+
+  function defaultMissionOrderProvider() {
+    var crios = window.CRIOS || null;
+    return crios && typeof crios.obtenerMisionesActivas === 'function' ? crios.obtenerMisionesActivas() : [];
+  }
+
+  function defaultGameStateCoordinatorFactory() {
+    return window.CRIOS_RUNTIME_LIVE_ROOM_GAME_STATE_COORDINATOR_FACTORY || null;
+  }
+
+  function defaultGameStateReconciliationFactory() {
+    return window.CRIOS_LIVE_ROOM_GAME_STATE_RECONCILIATION || null;
+  }
+
+  function defaultGameStateChange(gameState) {
+    var crios = window.CRIOS || null;
+    var api = crios && crios.api;
+    if (!api || typeof api.applyLiveRoomSharedGameState !== 'function') return false;
+    try { return api.applyLiveRoomSharedGameState(gameState) === true; }
+    catch (ignore) { return false; }
+  }
+
 
   function baseState(status) {
     return {
@@ -162,11 +186,22 @@
     var onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : function(){};
     var realtimeTransportFactory = typeof opts.realtimeTransportFactory === 'function' ? opts.realtimeTransportFactory : defaultRealtimeTransportFactory;
     var realtimeEventIdFactory = typeof opts.realtimeEventIdFactory === 'function' ? opts.realtimeEventIdFactory : defaultRealtimeEventIdFactory;
+    var missionOrderProvider = typeof opts.missionOrderProvider === 'function' ? opts.missionOrderProvider : defaultMissionOrderProvider;
+    var gameStateCoordinatorFactory = opts.gameStateCoordinatorFactory || defaultGameStateCoordinatorFactory();
+    var gameStateReconciliationFactory = opts.gameStateReconciliationFactory || defaultGameStateReconciliationFactory();
+    var gameStateStorage = opts.gameStateStorage;
+    var onGameStateChange = typeof opts.onGameStateChange === 'function' ? opts.onGameStateChange : defaultGameStateChange;
     var state = baseState(client && typeof client.available === 'function' && client.available() ? 'IDLE' : 'UNAVAILABLE');
     var timer = null;
     var realtimeTransport = null;
+    var realtimeSubscribedRoomId = null;
+    var realtimeSubscriptionGeneration = 0;
     var destroyed = false;
 
+    var gameStateCoordinator = null;
+    var gameStateCoordinatorGeneration = 0;
+    var gameStateReconciliation = null;
+    var gameStateVisible = opts.gameStateVisible !== false;
     function emit(next) {
       state = Object.assign(baseState(next && next.status || state.status), state, next || {});
       var snapshot = frozen(state);
@@ -187,31 +222,73 @@
       timer = setIntervalImpl(function(){ heartbeat(); }, HEARTBEAT_INTERVAL_MS);
     }
 
+    function ensureRealtimeTransport() {
+      if (realtimeTransport) return realtimeTransport;
+      try { realtimeTransport = realtimeTransportFactory(); }
+      catch (ignoreRealtimeFactory) { realtimeTransport = null; }
+      return realtimeTransport;
+    }
+
     function destroyRealtime() {
-      if (!realtimeTransport) return;
+      realtimeSubscriptionGeneration += 1;
+      if (!realtimeTransport) {
+        realtimeSubscribedRoomId = null;
+        return;
+      }
+      if (realtimeSubscribedRoomId && typeof realtimeTransport.unsubscribeRoom === 'function') {
+        try { realtimeTransport.unsubscribeRoom(realtimeSubscribedRoomId); } catch (ignoreUnsubscribeRealtime) {}
+      }
       if (typeof realtimeTransport.destroy === 'function') {
         try { realtimeTransport.destroy(); } catch (ignoreDestroyRealtime) {}
       }
       realtimeTransport = null;
+      realtimeSubscribedRoomId = null;
     }
 
-    function publishRealtimePresence(roomId) {
+    function attachRealtime(roomId) {
       if (destroyed) return false;
       var normalizedRoomId = text(roomId);
       if (!normalizedRoomId) return false;
-      if (!realtimeTransport) {
-        try { realtimeTransport = realtimeTransportFactory(); }
-        catch (ignoreRealtimeFactory) { realtimeTransport = null; }
+      var transport = ensureRealtimeTransport();
+      if (!transport || typeof transport.subscribeRoom !== 'function') return false;
+      if (realtimeSubscribedRoomId === normalizedRoomId) return true;
+      if (realtimeSubscribedRoomId && typeof transport.unsubscribeRoom === 'function') {
+        try { transport.unsubscribeRoom(realtimeSubscribedRoomId); } catch (ignorePreviousUnsubscribe) {}
       }
-      if (!realtimeTransport || typeof realtimeTransport.publishSignal !== 'function') return false;
-      var eventId = text(realtimeEventIdFactory());
+      realtimeSubscribedRoomId = null;
+      var subscriptionGeneration = realtimeSubscriptionGeneration + 1;
+      realtimeSubscriptionGeneration = subscriptionGeneration;
+      var subscribed;
+      try {
+        subscribed = transport.subscribeRoom(normalizedRoomId, function(signal){
+          if (destroyed || realtimeSubscriptionGeneration !== subscriptionGeneration || realtimeSubscribedRoomId !== normalizedRoomId) return;
+          if (state.status !== 'ACTIVE' || !state.launch || text(state.launch.roomId) !== normalizedRoomId) return;
+          if (!signal || signal.type !== GAME_STATE_SIGNAL_TYPE || !gameStateReconciliation || typeof gameStateReconciliation.request !== 'function') return;
+          try { gameStateReconciliation.request('signal'); } catch (ignoreSignalRefresh) {}
+        });
+      } catch (ignoreSubscribe) { subscribed = false; }
+      if (subscribed === false) return false;
+      realtimeSubscribedRoomId = normalizedRoomId;
+      return true;
+    }
+
+    function publishRealtimeSignal(roomId, signalType) {
+      if (destroyed) return false;
+      var normalizedRoomId = text(roomId);
+      if (!normalizedRoomId) return false;
+      var transport = ensureRealtimeTransport();
+      if (!transport || typeof transport.publishSignal !== 'function') return false;
+      var eventId = text(realtimeEventIdFactory(signalType));
       if (!eventId) return false;
       var emittedAt;
       try { emittedAt = new Date(now()).toISOString(); } catch (ignoreDate) { return false; }
       try {
-        return realtimeTransport.publishSignal(normalizedRoomId, {type:REALTIME_SIGNAL_TYPE,eventId:eventId,emittedAt:emittedAt}) !== false;
+        return transport.publishSignal(normalizedRoomId, {type:signalType,eventId:eventId,emittedAt:emittedAt}) !== false;
       } catch (ignorePublish) { return false; }
     }
+
+    function publishRealtimePresence(roomId) { return publishRealtimeSignal(roomId, REALTIME_SIGNAL_TYPE); }
+    function publishRealtimeGameState(roomId) { return publishRealtimeSignal(roomId, GAME_STATE_SIGNAL_TYPE); }
 
     function clearContext(context) {
       if (storage && typeof storage.clear === 'function') storage.clear();
@@ -236,17 +313,170 @@
       return storage && typeof storage.set === 'function' ? storage.set(context) === true : false;
     }
 
+    function destroyGameStateReconciliation() {
+      if (!gameStateReconciliation) return;
+      var activeReconciliation = gameStateReconciliation;
+      gameStateReconciliation = null;
+      if (typeof activeReconciliation.stop === 'function') {
+        try { activeReconciliation.stop(); } catch (ignoreReconciliationStop) {}
+      }
+    }
+
+    function destroyGameStateCoordinator(discard) {
+      destroyGameStateReconciliation();
+      if (!gameStateCoordinator) return;
+      var activeCoordinator = gameStateCoordinator;
+      gameStateCoordinator = null;
+      gameStateCoordinatorGeneration += 1;
+      if (discard && typeof activeCoordinator.discard === 'function') {
+        try { activeCoordinator.discard(); } catch (ignoreDiscard) {}
+      }
+      if (typeof activeCoordinator.destroy === 'function') {
+        try { activeCoordinator.destroy(); } catch (ignoreDestroy) {}
+      }
+      if (discard) {
+        try { onGameStateChange(null); } catch (ignoreGameStateClear) {}
+      }
+    }
+
+    function ensureGameStateCoordinator() {
+      if (gameStateCoordinator) return gameStateCoordinator;
+      if (state.status !== 'ACTIVE' || !state.launch || !state.participantId) return null;
+      if (!client || typeof client.createGameStateClient !== 'function') return null;
+      var missionOrder;
+      try { missionOrder = missionOrderProvider(); }
+      catch (ignoreMissionOrder) { return null; }
+      if (!Array.isArray(missionOrder) || !missionOrder.length) return null;
+      var coordinatorContext = {
+        roomId: state.launch.roomId,
+        campaignId: state.launch.campaignId,
+        publicationId: state.launch.publicationId,
+        participantId: state.participantId,
+        missionOrder: missionOrder.slice()
+      };
+      var gameStateClient = client.createGameStateClient(coordinatorContext);
+      if (!gameStateClient || typeof gameStateClient.available !== 'function' || gameStateClient.available() !== true) return null;
+      if (!gameStateCoordinatorFactory || typeof gameStateCoordinatorFactory.createCoordinator !== 'function') return null;
+      var created;
+      var createdGeneration = gameStateCoordinatorGeneration + 1;
+      try {
+        created = gameStateCoordinatorFactory.createCoordinator({
+          context: coordinatorContext,
+          client: gameStateClient,
+          storage: gameStateStorage,
+          onGameStateChange: function(gameState){
+            if (destroyed || gameStateCoordinatorGeneration !== createdGeneration || gameStateCoordinator !== created) return;
+            onGameStateChange(gameState);
+          },
+          onAuthoritativeStateChange: function(){
+            if (destroyed || gameStateCoordinatorGeneration !== createdGeneration || gameStateCoordinator !== created) return;
+            if (state.status !== 'ACTIVE' || !state.launch) return;
+            publishRealtimeGameState(state.launch.roomId);
+          }
+        });
+      } catch (ignoreCoordinatorCreate) { return null; }
+      if (!created || typeof created.available !== 'function' || created.available() !== true) return null;
+      gameStateCoordinatorGeneration = createdGeneration;
+      gameStateCoordinator = created;
+      return gameStateCoordinator;
+    }
+
+    function reconciliationOutcome(result) {
+      var current = result && typeof result === 'object' ? result : {};
+      if (current.status === 'READY') return {success:true,retryable:true,terminal:false};
+      if (current.status === 'TERMINAL' || current.status === 'DESTROYED') return {success:false,retryable:false,terminal:true};
+      return {success:false,retryable:!(current.lastError && current.lastError.retryable === false),terminal:false};
+    }
+
+    function ensureGameStateReconciliation(coordinator, generation) {
+      if (gameStateReconciliation) return gameStateReconciliation;
+      if (!coordinator || gameStateCoordinator !== coordinator || gameStateCoordinatorGeneration !== generation) return null;
+      if (!gameStateReconciliationFactory || typeof gameStateReconciliationFactory.createScheduler !== 'function') return null;
+      var created;
+      try {
+        created = gameStateReconciliationFactory.createScheduler({
+          visible: gameStateVisible,
+          refresh: async function(){
+            if (destroyed || gameStateCoordinator !== coordinator || gameStateCoordinatorGeneration !== generation) {
+              return {success:false,retryable:false,terminal:true};
+            }
+            var result;
+            try { result = await coordinator.refresh(); }
+            catch (ignoreCoordinatorRefresh) { result = null; }
+            return reconciliationOutcome(result);
+          }
+        });
+      } catch (ignoreReconciliationCreate) { return null; }
+      if (!created || typeof created.available !== 'function' || created.available() !== true) return null;
+      gameStateReconciliation = created;
+      if (typeof created.start === 'function') {
+        try { created.start(); } catch (ignoreReconciliationStart) {}
+      }
+      return gameStateReconciliation;
+    }
+
+    function synchronizeGameState() {
+      var coordinator = ensureGameStateCoordinator();
+      if (!coordinator || typeof coordinator.start !== 'function') return Promise.resolve(null);
+      var generation = gameStateCoordinatorGeneration;
+      try {
+        return Promise.resolve(coordinator.start()).then(function(result){
+          if (destroyed || gameStateCoordinator !== coordinator || gameStateCoordinatorGeneration !== generation) return result;
+          if (result && (result.status === 'TERMINAL' || result.status === 'DESTROYED' || result.status === 'UNAVAILABLE')) {
+            destroyGameStateReconciliation();
+            return result;
+          }
+          ensureGameStateReconciliation(coordinator, generation);
+          return result;
+        }).catch(function(){ return null; });
+      }
+      catch (ignoreStart) { return Promise.resolve(null); }
+    }
+
+    function refreshGameState() {
+      if (gameStateReconciliation && typeof gameStateReconciliation.request === 'function') {
+        try { return Promise.resolve(gameStateReconciliation.request('manual')); }
+        catch (ignoreManualRequest) { return Promise.resolve(false); }
+      }
+      return synchronizeGameState();
+    }
+
+    function setGameStateVisibility(visible) {
+      gameStateVisible = visible === true;
+      if (!gameStateReconciliation || typeof gameStateReconciliation.setVisible !== 'function') return false;
+      try { gameStateReconciliation.setVisible(gameStateVisible); return true; }
+      catch (ignoreVisibility) { return false; }
+    }
+
+    function recordCommittedMission(missionId) {
+      var coordinator = ensureGameStateCoordinator();
+      if (!coordinator || typeof coordinator.recordCommittedMission !== 'function') return false;
+      try { return coordinator.recordCommittedMission(missionId); }
+      catch (ignoreRecord) { return false; }
+    }
+
+
     function terminalError(error, fallbackCode, fallbackMessage) {
       var value = errorValue(error && error.code || fallbackCode, error && error.message || fallbackMessage);
       var expired = value.code === 'ROOM_EXPIRED';
       stopHeartbeat();
       destroyRealtime();
+      destroyGameStateReconciliation();
+      var discardGameState = expired || value.code === 'ROOM_UNAVAILABLE' || value.code === 'PARTICIPANT_UNAVAILABLE' ||
+        value.code === 'CAPABILITY_INVALID' || value.code === 'CAPABILITY_STORAGE_UNAVAILABLE';
+      if (discardGameState) destroyGameStateCoordinator(true);
       if (expired) clearContext(state.launch && {roomId:state.launch.roomId, participantId:state.participantId});
       return emit({status:expired ? 'EXPIRED' : 'ERROR',busy:false,room:null,lastError:expired ? errorValue('ROOM_EXPIRED', EXPIRED_MESSAGE) : value});
     }
 
     async function start(launchInput) {
       if (destroyed) return getState();
+      stopHeartbeat();
+      destroyRealtime();
+      if (gameStateCoordinator) {
+        destroyGameStateCoordinator(false);
+        try { onGameStateChange(null); } catch (ignoreGameStateClear) {}
+      }
       var launch = launchInput && typeof launchInput === 'object' ? frozen(launchInput) : null;
       if (!launch || launch.requested !== true) return emit({status:'IDLE',busy:false,launch:null,room:null,participantId:null,lastError:null});
       if (launch.valid !== true) return emit({status:'INVALID',busy:false,launch:launch,room:null,participantId:null,lastError:launch.error || errorValue('INVALID_ROOM_LINK','El enlace de partida no es válido.')});
@@ -277,8 +507,10 @@
         }
         if (!sameRoom(restored.data.room, launch)) return emit({status:'INVALID',busy:false,launch:launch,room:null,participantId:restoredId,lastError:errorValue('ROOM_PUBLICATION_MISMATCH','La sala recuperada no coincide con la campaña publicada.')});
         var restoredState = emit({status:'ACTIVE',busy:false,launch:launch,room:restored.data.room,participantId:restoredId,lastError:null,lastHeartbeatAt:now()});
+        attachRealtime(launch.roomId);
         publishRealtimePresence(launch.roomId);
         startHeartbeat();
+        synchronizeGameState();
         return restoredState;
       }
 
@@ -300,8 +532,10 @@
       }
 
       var joinedState = emit({status:'ACTIVE',busy:false,launch:launch,room:joined.data.room,participantId:participantId,lastError:null,lastHeartbeatAt:now()});
+      attachRealtime(launch.roomId);
       publishRealtimePresence(launch.roomId);
       startHeartbeat();
+      synchronizeGameState();
       return joinedState;
     }
 
@@ -316,15 +550,23 @@
         }
         return emit({status:'ACTIVE',busy:false,lastError:errorValue(error.code || 'LIVE_ROOM_HEARTBEAT_FAILED',error.message || 'La conexión está temporalmente inestable.'),lastHeartbeatAt:state.lastHeartbeatAt});
       }
-      if (!sameRoom(response.data.room, launch)) return emit({status:'ERROR',busy:false,lastError:errorValue('ROOM_PUBLICATION_MISMATCH','La sala dejó de coincidir con la campaña publicada.')});
+      if (!sameRoom(response.data.room, launch)) {
+        destroyGameStateCoordinator(true);
+        return emit({status:'ERROR',busy:false,lastError:errorValue('ROOM_PUBLICATION_MISMATCH','La sala dejó de coincidir con la campaña publicada.')});
+      }
       publishRealtimePresence(launch.roomId);
       return emit({status:'ACTIVE',busy:false,room:response.data.room,lastError:null,lastHeartbeatAt:now()});
     }
 
     function getState() { return frozen(state); }
-    function destroy() { destroyed = true; stopHeartbeat(); destroyRealtime(); }
+    function destroy() {
+      destroyed = true;
+      stopHeartbeat();
+      destroyRealtime();
+      destroyGameStateCoordinator(false);
+    }
 
-    return Object.freeze({version:VERSION,start:start,heartbeat:heartbeat,getState:getState,destroy:destroy});
+    return Object.freeze({version:VERSION,start:start,heartbeat:heartbeat,synchronizeGameState:synchronizeGameState,refreshGameState:refreshGameState,setGameStateVisibility:setGameStateVisibility,recordCommittedMission:recordCommittedMission,getState:getState,destroy:destroy});
   }
 
   function createStatusPanel() {
@@ -381,9 +623,11 @@
     var client = live && live.configured && !live.error ? live.client : null;
     var controller = createPlayerController({client:client,onStateChange:function(state){ renderStatus(panel,state); }});
     window.CRIOS_RUNTIME_LIVE_ROOM_PLAYER_CONTROLLER = controller;
+    controller.setGameStateVisibility(document.visibilityState !== 'hidden');
     controller.start(launch);
 
     document.addEventListener('visibilitychange', function(){
+      controller.setGameStateVisibility(document.visibilityState !== 'hidden');
       if (document.visibilityState === 'visible' && controller.getState().status === 'ACTIVE') controller.heartbeat();
     });
     return true;
@@ -395,6 +639,7 @@
     contextKey: CONTEXT_KEY,
     expiredMessage: EXPIRED_MESSAGE,
     realtimeSignalType: REALTIME_SIGNAL_TYPE,
+    gameStateRealtimeSignalType: GAME_STATE_SIGNAL_TYPE,
     defaultRealtimeTransportFactory: defaultRealtimeTransportFactory,
     parseRoomLaunch: parseRoomLaunch,
     createPlayerController: createPlayerController,

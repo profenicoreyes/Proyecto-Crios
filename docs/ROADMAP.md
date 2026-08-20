@@ -333,9 +333,13 @@ Este cierre no sincroniza progreso, respuestas, resultados ni estado pedagógico
 
 ## Trabajo posterior
 
-Con LiveRoom, la consola y la presencia realtime cerrados, la siguiente capacidad funcional documentada pero todavía no implementada es la sincronización de estado/progreso de juego entre dispositivos dentro de una misma room.
+Con LiveRoom, la consola y la presencia realtime cerrados, la sincronización cooperativa de progreso dentro de una misma room ya cuenta con implementación local de backend, cliente, post-commit, proyección de juego, señal de invalidación, reconciliación acotada y lectura agregada de consola. Todavía no está desplegada ni disponible para usuarios.
 
-Este roadmap no le asigna todavía un identificador de tramo. Antes de abrir implementación debe existir una decisión de arquitectura separada que delimite qué estado es compartido, quién puede escribirlo, qué fuente es autoritativa y qué datos quedan expresamente fuera. La presencia realtime cerrada en A4-004 no se amplía implícitamente a datos pedagógicos.
+Este roadmap no le asigna todavía un identificador de tramo. La decisión de arquitectura separada delimita qué estado es compartido, quién puede escribirlo, qué fuente es autoritativa y qué datos quedan expresamente fuera. La presencia realtime cerrada en A4-004 no se amplía implícitamente a datos pedagógicos.
+
+La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). Su aceptación habilita implementación por tramos verificables, pero no le asigna un identificador definitivo ni habilita por sí sola commit, bundle o despliegue.
+
+El contrato físico queda registrado en [`architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md`](architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md), la frontera del cliente en [`architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md`](architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md), la composición del juego en [`architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y la política de invalidación/lectura agregada en [`architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La regresión Node local vigente aprueba 38/38 suites y 2888/2888 comprobaciones; tres smokes locales de navegador aprueban 89/89. El backend y las reglas ampliadas no fueron desplegados.
 
 También permanecen como decisiones independientes:
 
@@ -348,7 +352,7 @@ También permanecen como decisiones independientes:
 
 Permanecen futuras hasta contar con implementación y evidencia específicas:
 
-- sincronización de progreso entre dispositivos dentro de una misma sesión;
+- disponibilidad desplegada y validación de sincronización de progreso entre dispositivos reales dentro de una misma sesión;
 - desconexión autoritativa inmediata ante cierre abrupto, si una decisión de arquitectura la prioriza;
 - datos pedagógicos, respuestas, resultados y métricas avanzadas en la consola de mando;
 - declarar `published` como modo principal cuando una entrada explícita ya no sea necesaria;
@@ -358,9 +362,9 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización toma como baseline funcional el commit `719b7fb05c6f7cb277543e4e50836918b8357b4f`, creado el 18 de agosto de 2026. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime signal-only están cerrados funcionalmente. Apps Script LiveRoom y Firebase RTDB fueron validados contra sus servicios reales.
+Esta actualización local del 20 de agosto de 2026 parte del checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente; la sincronización de progreso posterior existe solo en el árbol de trabajo y no fue desplegada ni validada contra servicios reales.
 
-El bundle de recuperación vigente antes de este cierre documental es `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, de 3163169 bytes.
+El último bundle de recuperación identificado por este documento continúa siendo `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, de 3163169 bytes. No se generó un bundle para los cambios locales posteriores.
 
 El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
 

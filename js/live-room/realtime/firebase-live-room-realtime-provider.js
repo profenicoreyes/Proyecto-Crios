@@ -2,10 +2,11 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var APP_NAME = 'crios-live-room-realtime';
   var ROOT_PATH = 'liveRoomSignals';
   var SIGNAL_TYPE = 'presence-change';
+  var SIGNAL_TYPES = Object.freeze(['presence-change', 'game-state-change']);
   var REQUIRED_FIREBASE_CONFIG = ['apiKey','authDomain','databaseURL','projectId','appId'];
   var MAX_TEXT_LENGTH = 160;
   var MAX_SEEN_EVENT_IDS = 512;
@@ -33,7 +34,7 @@
     var type = text(source.type);
     var eventId = text(source.eventId);
     var emittedAt = text(source.emittedAt);
-    if (type !== SIGNAL_TYPE || !eventId || !emittedAt) return null;
+    if (SIGNAL_TYPES.indexOf(type) < 0 || !eventId || !emittedAt) return null;
     return Object.freeze({type:type,eventId:eventId,emittedAt:emittedAt});
   }
 
@@ -208,6 +209,7 @@
     version:VERSION,
     rootPath:ROOT_PATH,
     signalType:SIGNAL_TYPE,
+    signalTypes:SIGNAL_TYPES,
     attachRetryMs:ATTACH_RETRY_MS,
     maxSeenEventIds:MAX_SEEN_EVENT_IDS,
     isCompleteConfig:isCompleteConfig,

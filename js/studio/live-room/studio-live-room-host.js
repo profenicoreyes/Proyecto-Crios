@@ -2,7 +2,7 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
   var ROSTER_REFRESH_INTERVAL_MS = 15 * 1000;
   var CONTEXT_KEY = 'crios-live-room-host-context-v1';
@@ -114,6 +114,26 @@
     } catch (ignore) { return ''; }
   }
 
+  function normalizedMissionOrder(value) {
+    if (!Array.isArray(value) || !value.length) return [];
+    var order = [];
+    var seen = Object.create(null);
+    for (var index = 0; index < value.length; index += 1) {
+      var raw = value[index];
+      var missionId = text(raw);
+      if (typeof raw !== 'string' || raw !== missionId || !missionId || missionId.length > 160) return [];
+      if (/[\u0000-\u001F\u007F]/.test(missionId) || seen[missionId]) return [];
+      seen[missionId] = true;
+      order.push(missionId);
+    }
+    var model = window.CRIOS_LIVE_ROOM_GAME_STATE_MODEL;
+    if (model && typeof model.validateMissionOrder === 'function') {
+      try { model.validateMissionOrder(order); }
+      catch (ignoreMissionOrder) { return []; }
+    }
+    return order;
+  }
+
   function baseState(status) {
     return {
       status: status || 'IDLE',
@@ -185,7 +205,8 @@
       var publicationId = text(publication.publicationId);
       var href = text(publication.href);
       if (!publication.available || !campaignId || !publicationId || !href) return null;
-      return frozen({campaignId: campaignId, publicationId: publicationId, href: href});
+      var missionOrder = normalizedMissionOrder(publication.missionOrder);
+      return frozen({campaignId: campaignId, publicationId: publicationId, href: href, missionOrder: missionOrder});
     }
 
     function setPublication(publication) {
@@ -208,6 +229,7 @@
         publicationId: text(publication && publication.publicationId),
         campaignName: text(campaignNameProvider()),
         runtimeHref: text(publication && publication.href),
+        missionOrder: normalizedMissionOrder(publication && publication.missionOrder),
         playerHref: text(playerHref)
       };
       if (!context.roomId || !context.participantId || !context.campaignId || !context.publicationId || !context.playerHref) return false;
@@ -305,6 +327,7 @@
       var campaignId = text(context.campaignId);
       var publicationId = text(context.publicationId);
       var runtimeHref = text(context.runtimeHref);
+      var missionOrder = normalizedMissionOrder(context.missionOrder);
       var playerHref = text(context.playerHref);
       if (!roomId || !participantId || !campaignId || !publicationId || !playerHref) {
         clearContext(roomId, participantId);
@@ -314,7 +337,7 @@
         return emit({status:'UNAVAILABLE', room:null, participantId:null, playerHref:null});
       }
 
-      emit({status:'RESTORING', busy:true, publication:frozen({campaignId:campaignId,publicationId:publicationId,href:runtimeHref}), participantId:participantId, playerHref:playerHref, lastError:null});
+      emit({status:'RESTORING', busy:true, publication:frozen({campaignId:campaignId,publicationId:publicationId,href:runtimeHref,missionOrder:missionOrder}), participantId:participantId, playerHref:playerHref, lastError:null});
       var response = await client.getLiveRoom(roomId);
       if (!response || response.success !== true || !response.data || !response.data.room) {
         var error = frozen(response && response.error || {code:'ROOM_UNAVAILABLE',message:'La sala ya no está disponible.'});
@@ -468,12 +491,33 @@
       }
     });
 
+    function publicationMissionOrder(launch) {
+      if (!launch || !launch.available || !launch.publicationId) return [];
+      var publicationApi = studio.publication;
+      if (!publicationApi || typeof publicationApi.getPublication !== 'function') return [];
+      var publication;
+      try { publication = publicationApi.getPublication(launch.publicationId); }
+      catch (ignorePublicationRead) { return []; }
+      if (!publication || text(publication.campaignId) !== text(launch.campaignId) || text(publication.publicationId) !== text(launch.publicationId)) return [];
+      var content = publication.content && typeof publication.content === 'object' ? publication.content : {};
+      var manifest = content.runtimeExecutionManifest && typeof content.runtimeExecutionManifest === 'object' ? content.runtimeExecutionManifest : {};
+      var order = normalizedMissionOrder(manifest.missionOrder);
+      var specs = Array.isArray(content.missionSpecs) ? content.missionSpecs : [];
+      if (!order.length || specs.length !== order.length) return [];
+      for (var index = 0; index < order.length; index += 1) {
+        if (!specs[index] || text(specs[index].missionId) !== order[index]) return [];
+      }
+      return order;
+    }
+
     function syncPublication() {
       var launch = studio.runtimeLaunch.getState();
-      var signature = [launch && launch.available, launch && launch.campaignId, launch && launch.publicationId, launch && launch.href].join('|');
+      var missionOrder = publicationMissionOrder(launch);
+      var publication = launch ? Object.assign({}, launch, {missionOrder:missionOrder}) : launch;
+      var signature = [launch && launch.available, launch && launch.campaignId, launch && launch.publicationId, launch && launch.href, missionOrder.join(',')].join('|');
       if (signature === lastPublicationSignature) return;
       lastPublicationSignature = signature;
-      controller.setPublication(launch);
+      controller.setPublication(publication);
     }
 
     startButton.onclick = async function(){

@@ -1,0 +1,70 @@
+.host-console__metrics{
+  grid-template-columns:minmax(240px,1.1fr) repeat(3,minmax(190px,.9fr));
+}
+
+.host-metric--progress{
+  background:radial-gradient(circle at 82% 18%,rgba(120,221,255,.14),transparent 36%),linear-gradient(145deg,rgba(14,48,71,.95),rgba(7,20,31,.92));
+}
+
+.host-metric__value--progress{
+  color:var(--ice);
+  font-size:clamp(2.2rem,4.5vw,4rem);
+  text-shadow:0 0 28px rgba(120,221,255,.16);
+}
+
+.host-console__progress{
+  padding:20px;
+}
+
+.host-mission-progress-list{
+  display:grid;
+  gap:8px;
+}
+
+.host-mission-progress{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:10px;
+  align-items:center;
+  padding:10px 11px;
+  border:1px solid rgba(120,221,255,.13);
+  border-radius:10px;
+  background:rgba(2,10,18,.4);
+}
+
+.host-mission-progress__marker{
+  width:32px;
+  height:32px;
+  display:grid;
+  place-items:center;
+  border-radius:9px;
+  background:rgba(120,221,255,.08);
+  color:var(--muted);
+  font-weight:950;
+}
+
+.host-mission-progress strong{
+  display:block;
+  font-size:.84rem;
+}
+
+.host-mission-progress small{
+  display:block;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:.74rem;
+}
+
+.host-mission-progress[data-completed="true"]{
+  border-color:rgba(68,224,139,.3);
+  background:rgba(68,224,139,.06);
+}
+
+.host-mission-progress[data-completed="true"] .host-mission-progress__marker{
+  background:rgba(68,224,139,.14);
+  color:var(--ok);
+}
+
+@media(max-width:900px){
+  .host-console__metrics{grid-template-columns:1fr;}
+}

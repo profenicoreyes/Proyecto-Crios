@@ -9,7 +9,7 @@
           ".write": "auth != null && auth.uid === $uid && $roomId.length > 0 && $roomId.length <= 160",
           ".validate": "newData.hasChildren(['type', 'eventId', 'emittedAt'])",
           "type": {
-            ".validate": "newData.isString() && newData.val() === 'presence-change'"
+            ".validate": "newData.isString() && (newData.val() === 'presence-change' || newData.val() === 'game-state-change')"
           },
           "eventId": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 160"

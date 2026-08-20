@@ -2,8 +2,9 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var SIGNAL_TYPE = 'presence-change';
+  var SIGNAL_TYPES = Object.freeze(['presence-change', 'game-state-change']);
   var MAX_TEXT_LENGTH = 160;
 
   function text(value){
@@ -19,7 +20,7 @@
     if (!normalizedRoomId) return null;
 
     var type = text(source.type) || SIGNAL_TYPE;
-    if (type !== SIGNAL_TYPE) return null;
+    if (SIGNAL_TYPES.indexOf(type) < 0) return null;
     var eventId = text(source.eventId || source.revision);
     if (!eventId) return null;
     var emittedAt = text(source.emittedAt);
@@ -86,6 +87,7 @@
   window.CRIOS_LIVE_ROOM_REALTIME_TRANSPORT = Object.freeze({
     version: VERSION,
     signalType: SIGNAL_TYPE,
+    signalTypes: SIGNAL_TYPES,
     createTransport: createTransport,
     normalizeSignal: normalizeSignal
   });

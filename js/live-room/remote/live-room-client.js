@@ -2,7 +2,7 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var ERROR_CODES = Object.freeze({
     CLIENT_UNAVAILABLE: 'LIVE_ROOM_CLIENT_UNAVAILABLE',
     TRANSPORT_FAILED: 'LIVE_ROOM_TRANSPORT_FAILED',
@@ -94,6 +94,9 @@
     var requestIdFactory = typeof opts.requestIdFactory === 'function' ? opts.requestIdFactory : defaultRequestIdFactory;
     var capabilityFactory = typeof opts.capabilityFactory === 'function' ? opts.capabilityFactory : defaultCapabilityFactory;
     var credentials = opts.credentialStore && typeof opts.credentialStore === 'object' ? opts.credentialStore : defaultCredentialStore();
+    var gameStateContract = opts.gameStateContract || window.CRIOS_REMOTE_LIVE_ROOM_GAME_STATE_CONTRACT || null;
+    var gameStateModel = opts.gameStateModel || window.CRIOS_LIVE_ROOM_GAME_STATE_MODEL || null;
+    var gameStateClientFactory = opts.gameStateClientFactory || window.CRIOS_REMOTE_LIVE_ROOM_GAME_STATE_CLIENT || null;
     var timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0 ? Math.floor(Number(opts.timeoutMs)) : 15000;
 
     function available() {
@@ -239,6 +242,24 @@
       return Boolean(credentials && typeof credentials.remove === 'function' && credentials.remove(roomId, participantId));
     }
 
+    function createGameStateClient(context) {
+      if (!gameStateContract || !gameStateModel || !gameStateClientFactory ||
+          typeof gameStateClientFactory.createClient !== 'function') return null;
+      try {
+        return gameStateClientFactory.createClient({
+          context: context,
+          contract: gameStateContract,
+          model: gameStateModel,
+          endpoint: endpoint,
+          fetchImpl: fetchImpl,
+          credentialStore: credentials,
+          timeoutMs: timeoutMs
+        });
+      } catch (ignore) {
+        return null;
+      }
+    }
+
     return Object.freeze({
       version: VERSION,
       available: available,
@@ -247,6 +268,7 @@
       heartbeatLiveRoom: heartbeatLiveRoom,
       getLiveRoom: getLiveRoom,
       getLiveRoomRoster: getLiveRoomRoster,
+      createGameStateClient: createGameStateClient,
       forgetCapability: forgetCapability
     });
   }

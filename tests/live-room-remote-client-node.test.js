@@ -9,7 +9,7 @@ const token='c'.repeat(64);let calls=[];let lastCapability='';
 const {window}=context();const contract=window.CRIOS_REMOTE_LIVE_ROOM_CONTRACT;const api=window.CRIOS_REMOTE_LIVE_ROOM_CLIENT;
 const fetchImpl=async(_url,init)=>{calls.push(init);const env=JSON.parse(init.body),req=env.liveRoomRequest;lastCapability=req.payload.capabilityToken||'';let data;if(req.operation==='getLiveRoom')data={room:room(req.payload.roomId)};else if(req.operation==='getLiveRoomRoster')data={room:room(req.payload.roomId),roster:roster()};else if(req.operation==='joinLiveRoom')data={room:room(req.payload.roomId),presence:presence(req.payload.roomId,req.payload.participantId,'player')};else if(req.operation==='heartbeatLiveRoom')data={room:room(req.payload.roomId),presence:presence(req.payload.roomId,req.payload.participantId,'player')};else data={room:room('room-created'),presence:presence('room-created',req.payload.participantId,'host')};return {ok:true,status:200,text:async()=>JSON.stringify(response(req,data,null))}};
 let rid=0;const client=api.createClient({contract,endpoint:'https://example.test/exec',fetchImpl,requestIdFactory:op=>'req-'+op+'-'+(++rid),capabilityFactory:()=>token});
-ok(client.available(),'available');ok(Object.isFrozen(client),'client frozen');ok(api.version==='1.1.0','api version');
+ok(client.available(),'available');ok(Object.isFrozen(client),'client frozen');ok(api.version==='1.2.0','api version');
 (async()=>{
 let r=await client.createLiveRoom('campaign-1','pub-1','host-1');ok(r.success,'create success');eq(r.data.room.roomId,'room-created','created room id');ok(lastCapability===token,'create capability sent');ok(!JSON.stringify(r).includes(token),'create result secret-free');ok(calls[0].method==='POST','post transport');eq(Object.keys(JSON.parse(calls[0].body)),['liveRoomRequest'],'dedicated envelope');
 r=await client.heartbeatLiveRoom('room-created','host-1');ok(r.success,'heartbeat uses stored token');ok(lastCapability===token,'stored capability recovered');
@@ -36,6 +36,19 @@ const httpClient=api.createClient({contract,endpoint:'https://x',fetchImpl:async
 const brokenJson=api.createClient({contract,endpoint:'https://x',fetchImpl:async()=>({ok:true,status:200,text:async()=>'{bad'}),requestIdFactory:()=> 'json-r',capabilityFactory:()=>token});r=await brokenJson.getLiveRoom('room');ok(!r.success&&r.error.code==='LIVE_ROOM_RESPONSE_PARSE_FAILED','bad json');
 const unavailable=api.createClient({contract:null,endpoint:'',fetchImpl:null});ok(!unavailable.available(),'unavailable');r=await unavailable.getLiveRoom('room');ok(!r.success&&r.error.code==='LIVE_ROOM_CLIENT_UNAVAILABLE','unavailable result');
 const invalid=api.createClient({contract,endpoint:'https://x',fetchImpl,requestIdFactory:()=> 'invalid-r',capabilityFactory:()=>token,credentialStore:{get:()=>token,set:()=>true,remove:()=>true}});r=await invalid.getLiveRoom('');ok(!r.success&&r.error.code==='INVALID_REQUEST','invalid room local reject');r=await invalid.getLiveRoomRoster('','host-1');ok(!r.success&&r.error.code==='INVALID_REQUEST','invalid roster room local reject');r=await invalid.getLiveRoomRoster('room-1','');ok(!r.success&&r.error.code==='INVALID_REQUEST','invalid roster participant local reject');
+
+const sharedCredentialStore={get:()=>token,set:()=>true,setPersistent:()=>true,remove:()=>true};let siblingOptions=null;
+const siblingFactory={createClient:options=>{siblingOptions=options;return Object.freeze({available:()=>true,marker:'game-state-sibling'})}};
+const siblingParent=api.createClient({contract,endpoint:'https://sibling.test/exec',fetchImpl,credentialStore:sharedCredentialStore,timeoutMs:4321,gameStateContract:{marker:'state-contract'},gameStateModel:{marker:'state-model'},gameStateClientFactory:siblingFactory});
+const siblingContext={roomId:'room-created',campaignId:'campaign-1',publicationId:'pub-1',participantId:'player-1',missionOrder:['energy']};
+const sibling=siblingParent.createGameStateClient(siblingContext);
+ok(Boolean(sibling)&&sibling.marker==='game-state-sibling','game-state sibling created');
+ok(siblingOptions.context===siblingContext,'sibling receives exact context reference for its own validation');
+ok(siblingOptions.credentialStore===sharedCredentialStore,'sibling receives same credential store instance');
+ok(siblingOptions.fetchImpl===fetchImpl,'sibling reuses transport implementation');
+eq(siblingOptions.endpoint,'https://sibling.test/exec','sibling reuses endpoint');eq(siblingOptions.timeoutMs,4321,'sibling reuses timeout');
+ok(!Object.keys(siblingParent).includes('getCapability'),'parent exposes no capability getter');
+ok(client.createGameStateClient(siblingContext)===null,'missing optional state modules fail closed');
 
 ok(typeof client.getLiveRoomRoster==='function','roster method exposed');ok(!Object.keys(client).includes('deleteLiveRoom'),'no delete method');ok(!Object.keys(client).includes('activateLiveRoom'),'no activate method');ok(!Object.keys(client).includes('deactivateLiveRoom'),'no deactivate method');
 for(const call of calls){const env=JSON.parse(call.body);ok(Object.keys(env).length===1&&env.liveRoomRequest,'all calls dedicated envelope')}

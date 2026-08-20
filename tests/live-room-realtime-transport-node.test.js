@@ -42,7 +42,8 @@ const api = windowStub.CRIOS_LIVE_ROOM_REALTIME_TRANSPORT;
 check(Boolean(api), 'realtime transport API exported');
 check(typeof api.createTransport === 'function', 'createTransport exported');
 check(typeof api.normalizeSignal === 'function', 'normalizeSignal exported');
-equal(api.signalType, 'presence-change', 'only supported signal type exported');
+equal(api.signalType, 'presence-change', 'legacy presence signal type exported');
+equal(api.signalTypes.join(','), 'presence-change,game-state-change', 'exact supported signal types exported');
 
 const transport = api.createTransport();
 check(Boolean(transport), 'transport created');
@@ -75,6 +76,19 @@ if (received) {
   check(!Object.prototype.hasOwnProperty.call(received, 'participantId'), 'signal excludes participantId');
   check(!Object.prototype.hasOwnProperty.call(received, 'roster'), 'signal excludes roster payload');
 }
+
+received = null;
+check(transport.publishSignal('room-1', {
+  type: 'game-state-change',
+  eventId: 'game-event-1',
+  emittedAt: '2026-08-19T12:00:00.000Z',
+  revision: 9,
+  completedMissionIds: ['secret-mission'],
+  participantId: 'player-secret'
+}) === true, 'game-state invalidation signal accepted');
+equal(received && received.type, 'game-state-change', 'game-state signal type delivered');
+equal(Object.keys(received || {}).sort().join(','), 'emittedAt,eventId,roomId,type', 'game-state signal remains payload-minimal');
+check(!JSON.stringify(received).includes('secret'), 'game-state signal strips pedagogical and participant data');
 
 received = null;
 check(transport.unsubscribeRoom('room-1') === true, 'unsubscribe returns true for subscribed room');

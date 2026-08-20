@@ -4,6 +4,7 @@
 let campanaActiva = null;
 let misionesActivas = [];
 let missionIds = [];
+let liveRoomSharedCompletedMissionIds = Object.freeze([]);
 const runtimeLaunchApi = window.CRIOS_RUNTIME_LAUNCH || null;
 const runtimeLaunchSelectionApi = window.CRIOS_RUNTIME_LAUNCH_SELECTION || null;
 const runtimeLaunchSearch = window.location && typeof window.location.search === 'string'
@@ -902,7 +903,8 @@ function createSessionId(){
   return 'crios-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
 }
 function persistSession(){
-  if(sessionData) writeJson(sessionStorage, STORAGE.sessionData, sessionData);
+  if(!sessionData) return true;
+  return writeJson(sessionStorage, STORAGE.sessionData, sessionData);
 }
 function startSession(realName,characterName,groupName){
   traceEvent('session:create:before', {
@@ -1316,11 +1318,65 @@ function openMission(id){
 }
 function normalize(v){return Number(String(v).replace(',','.').replace(/[^\d.-]/g,''))}
 
-function save(){progresosCampanas[activeProgressKey()]={...progress};writeJson(sessionStorage, STORAGE.campaignProgress, progresosCampanas);writeJson(sessionStorage, STORAGE.progress, progress);updateMap();renderCampaignSelector();persistSession()}
+function liveRoomPlayerController(){
+  const controller=window.CRIOS_RUNTIME_LIVE_ROOM_PLAYER_CONTROLLER||null;
+  return controller&&typeof controller==='object'?controller:null;
+}
+
+function synchronizeLiveRoomGameState(){
+  const controller=liveRoomPlayerController();
+  if(!controller||typeof controller.synchronizeGameState!=='function') return false;
+  try{controller.synchronizeGameState();return true}
+  catch(error){return false}
+}
+
+function recordCommittedLiveRoomMission(missionId){
+  const controller=liveRoomPlayerController();
+  if(!controller||typeof controller.recordCommittedMission!=='function') return false;
+  try{return controller.recordCommittedMission(missionId)!==false}
+  catch(error){return false}
+}
+
+function clearLiveRoomSharedGameState(){
+  liveRoomSharedCompletedMissionIds=Object.freeze([]);
+  if(campanaActiva) updateMap();
+  return true;
+}
+
+function applyLiveRoomSharedGameState(gameState){
+  if(gameState===null) return clearLiveRoomSharedGameState();
+  if(runtimeCampaignMode!=='published'||!gameState||typeof gameState!=='object') return false;
+  const model=window.CRIOS_LIVE_ROOM_GAME_STATE_MODEL||null;
+  if(!model||typeof model.validateGameState!=='function') return false;
+  try{model.validateGameState(gameState,missionIds)}
+  catch(error){return false}
+  if(
+    gameState.campaignId!==requestedPublishedCampaignId||
+    gameState.publicationId!==requestedPublishedPublicationId
+  ) return false;
+  liveRoomSharedCompletedMissionIds=Object.freeze(gameState.completedMissionIds.slice());
+  updateMap();
+  return true;
+}
+
+function isMissionEffectivelyCompleted(missionId){
+  return Boolean(progress[missionId])||liveRoomSharedCompletedMissionIds.includes(missionId);
+}
+
+
+function save(){
+  progresosCampanas[activeProgressKey()]={...progress};
+  const campaignSaved=writeJson(sessionStorage, STORAGE.campaignProgress, progresosCampanas);
+  const progressSaved=writeJson(sessionStorage, STORAGE.progress, progress);
+  updateMap();
+  renderCampaignSelector();
+  const sessionSaved=persistSession();
+  return campaignSaved&&progressSaved&&sessionSaved;
+}
 function updateMap(){
   let done=0;
   missionIds.forEach(id=>{
-    const isDone=Boolean(progress[id]);
+    const isDone=isMissionEffectivelyCompleted(id);
     if(isDone) done++;
     const card=document.getElementById('card-'+id);
     const mini=document.getElementById('mini-'+id);
@@ -1559,6 +1615,7 @@ function applyPreparedPublishedCampaign(prepared){
   sessionStorage.setItem(STORAGE.campaignId, metadata.campaignId);
   misionesActivas=prepared.bridge.missions.slice();
   missionIds=prepared.data.missionOrder.slice();
+  synchronizeLiveRoomGameState();
   progress=sessionData&&sessionData.idSesion
     ? {...(progresosCampanas[activeProgressKey()]||{})}
     : {};
@@ -1991,7 +2048,10 @@ function validateMissionResult(id){
   const gameFlowResult=applyDomainEvaluationForMission(id,isCorrect);
   if(isCorrect&&gameFlowResult&&gameFlowResult.status==='FLOW_COMPLETED'&&gameFlowResult.action==='RETURN_TO_MAP'&&gameFlowResult.target==='map'){
     fb.className='feedback show ok';fb.textContent='Resultado compatible. Módulo recuperado. Regresando al mapa…';
-    persistStats();save();if(soundOn)successSound();
+    const statsPersisted=persistStats();
+    const progressPersisted=save();
+    if(statsPersisted&&progressPersisted) recordCommittedLiveRoomMission(id);
+    if(soundOn)successSound();
     traceAsyncScheduled('validateMissionResult', 'setTimeout-map', {
       delayMs: CRIOS_CONFIG.missionReturnDelayMs,
       missionId: id
@@ -2020,7 +2080,11 @@ function validateMissionResult(id){
   queueSessionUpdate();
 }
 function registerHint(id){if(hintRegistered[id])return;hintRegistered[id]=true;sessionStats[id]=sessionStats[id]||{attempts:0,hints:0,procedureAttempts:0};sessionStats[id].hints++;const rec=missionRecord(id);if(rec) rec.hintUsed=true;persistStats();persistSession();queueSessionUpdate()}
-function persistStats(){writeJson(sessionStorage, STORAGE.sessionStats, sessionStats);persistSession()}
+function persistStats(){
+  const statsSaved=writeJson(sessionStorage, STORAGE.sessionStats, sessionStats);
+  const sessionSaved=persistSession();
+  return statsSaved&&sessionSaved;
+}
 function getFinalExpected(){ensureMissionData();return missionIds.reduce((sum,id)=>sum+missionData[id].expected,0)-missionData.adjustMinus+missionData.adjustPlus}
 function renderFinal(){
   ensureMissionData();
@@ -2181,7 +2245,8 @@ const publicApi = Object.freeze({
   toggleAmbientAudio,
   abrirSelectorCampanas,
   seleccionarCampana,
-  detalleCampana
+  detalleCampana,
+  applyLiveRoomSharedGameState,
 });
 
 Object.assign(window, publicApi);

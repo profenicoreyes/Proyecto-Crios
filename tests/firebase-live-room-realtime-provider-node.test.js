@@ -69,6 +69,7 @@ const completeConfig = {provider:'firebase',firebase:{apiKey:'test-key',authDoma
 check(Boolean(api), 'Firebase provider API exported');
 equal(api.rootPath, 'liveRoomSignals', 'signal root is fixed');
 equal(api.signalType, 'presence-change', 'signal type fixed');
+equal(api.signalTypes.join(','), 'presence-change,game-state-change', 'exact Firebase signal types fixed');
 equal(api.attachRetryMs, 2000, 'attach retry cadence bounded');
 equal(api.maxSeenEventIds, 512, 'event dedupe memory bounded');
 check(api.isCompleteConfig(completeConfig), 'complete Firebase config accepted');
@@ -79,6 +80,10 @@ const safe = api.signalPayload({type:'presence-change',eventId:'evt-1',emittedAt
 equal(Object.keys(safe).sort().join(','), 'emittedAt,eventId,type', 'signal payload has only minimum fields');
 check(!api.signalPayload({type:'presence-change',eventId:'',emittedAt:'now'}), 'signal requires eventId');
 check(!api.signalPayload({type:'unexpected',eventId:'evt-x',emittedAt:'2026-08-17T12:00:00.000Z'}), 'signal rejects unsupported type');
+const gameSafe = api.signalPayload({type:'game-state-change',eventId:'game-1',emittedAt:'2026-08-19T12:00:00.000Z',revision:4,completedMissionIds:['energy'],participantId:'player-1'});
+equal(Object.keys(gameSafe).sort().join(','), 'emittedAt,eventId,type', 'game-state signal keeps the same minimal payload');
+equal(gameSafe.type, 'game-state-change', 'game-state signal type accepted');
+check(!JSON.stringify(gameSafe).includes('energy') && !JSON.stringify(gameSafe).includes('player-1'), 'game-state signal strips progress and participant data');
 
 (async()=>{
   const transport = api.createTransport(completeConfig, {firebase});
@@ -139,7 +144,7 @@ check(!api.signalPayload({type:'unexpected',eventId:'evt-x',emittedAt:'2026-08-1
   check(rules.liveRoomSignals.$roomId.$uid['.write'].includes('auth.uid === $uid'), 'writes are restricted to authenticated uid');
   check(rules.liveRoomSignals.$roomId.$uid['.write'].includes('$roomId.length <= 160'), 'writes enforce bounded room id');
   check(rules.liveRoomSignals.$roomId.$uid['.validate'].includes("['type', 'eventId', 'emittedAt']"), 'rules require minimum signal fields');
-  check(rules.liveRoomSignals.$roomId.$uid.type['.validate'].includes("=== 'presence-change'"), 'rules restrict signal type');
+  check(rules.liveRoomSignals.$roomId.$uid.type['.validate'].includes("=== 'presence-change'") && rules.liveRoomSignals.$roomId.$uid.type['.validate'].includes("=== 'game-state-change'"), 'rules restrict signal type to the exact two-value enum');
   check(rules.liveRoomSignals.$roomId.$uid.emittedAt['.validate'].includes('.matches('), 'rules require ISO timestamp shape');
   equal(rules.liveRoomSignals.$roomId.$uid.$other['.validate'], false, 'rules reject extra signal fields');
   equal(rules.$other['.validate'], false, 'rules reject extra database roots');

@@ -545,6 +545,10 @@ function procesarGetRosterLiveRoomRemota(libro, solicitud) {
 }
 
 function procesarSolicitudLiveRoomRemota(solicitud) {
+  if (typeof esOperacionEstadoJuegoLiveRoomRemota === 'function' && esOperacionEstadoJuegoLiveRoomRemota(solicitud)) {
+    return procesarSolicitudEstadoJuegoLiveRoomRemota(solicitud);
+  }
+
   const validacion = validarSolicitudLiveRoomRemota(solicitud);
   if (!validacion.ok) return crearRespuestaLiveRoomRemota(solicitud, false, null, validacion.code, validacion.message, false);
 

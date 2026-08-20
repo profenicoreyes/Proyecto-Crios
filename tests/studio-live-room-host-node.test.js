@@ -68,7 +68,7 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_STUDIO_LIVE_ROOM_HOST;
 
 check(Boolean(api), 'host API exported');
-equal(api.version, '1.1.0', 'version');
+equal(api.version, '1.2.0', 'version');
 equal(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
 equal(api.rosterRefreshIntervalMs, 15000, 'roster refresh interval');
 equal(api.contextKey, 'crios-live-room-host-context-v1', 'context key');
@@ -151,7 +151,7 @@ function makeClient(overrides = {}) {
   return client;
 }
 
-const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub-1', href: '../index.html?campaignId=camp-1&publicationId=pub-1' };
+const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub-1', href: '../index.html?campaignId=camp-1&publicationId=pub-1', missionOrder: ['energy','greenhouse'] };
 
 (async () => {
   {
@@ -186,6 +186,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(controller.getState().status, 'READY', 'publication enables room creation');
     equal(controller.getState().publication.campaignId, 'camp-1', 'publication campaign stored');
     equal(controller.getState().publication.publicationId, 'pub-1', 'publication id stored');
+    equal(controller.getState().publication.missionOrder.join(','), 'energy,greenhouse', 'publication mission order stored');
     const result = await controller.createRoom();
     equal(result.status, 'ACTIVE', 'successful create becomes active');
     equal(result.room.roomId, 'room-abc', 'created room stored');
@@ -200,6 +201,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(storage.inspect().participantId, 'host-1', 'stored context participant id');
     equal(storage.inspect().campaignId, 'camp-1', 'stored context campaign id');
     equal(storage.inspect().publicationId, 'pub-1', 'stored context publication id');
+    equal(storage.inspect().missionOrder.join(','), 'energy,greenhouse', 'stored context keeps nonsecret publication mission order');
     equal(storage.inspect().campaignName, 'Campaña Polar', 'stored context campaign name');
     check(storage.inspect().playerHref.includes('roomId=room-abc'), 'stored player link carries room id');
     check(!Object.prototype.hasOwnProperty.call(storage.inspect(), 'capabilityToken'), 'host context stores no capabilityToken');
@@ -279,7 +281,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
 
   {
     const client = makeClient();
-    const storage = makeStorage({ version:1, roomId:'room-restored', participantId:'host-restored', campaignId:'camp-1', publicationId:'pub-1', runtimeHref:'../index.html?campaignId=camp-1&publicationId=pub-1', playerHref:'https://example.test/index.html?campaignId=camp-1&publicationId=pub-1&roomId=room-restored' });
+    const storage = makeStorage({ version:1, roomId:'room-restored', participantId:'host-restored', campaignId:'camp-1', publicationId:'pub-1', runtimeHref:'../index.html?campaignId=camp-1&publicationId=pub-1', missionOrder:['energy','greenhouse'], playerHref:'https://example.test/index.html?campaignId=camp-1&publicationId=pub-1&roomId=room-restored' });
     let intervalMs = null;
     const controller = api.createHostController({ client, storage, setIntervalImpl(fn, ms){ intervalMs = ms; return 9; }, clearIntervalImpl: () => {}, now: () => 777 });
     const response = await controller.restore();
@@ -291,6 +293,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(client.calls.heartbeat[0][1], 'host-restored', 'restore heartbeat uses saved participant');
     equal(response.status, 'ACTIVE', 'restore returns active');
     equal(response.participantId, 'host-restored', 'restore preserves host participant');
+    equal(response.publication.missionOrder.join(','), 'energy,greenhouse', 'restore preserves saved mission order');
     check(intervalMs === 120000 || intervalMs === 15000, 'restore starts live-room intervals');
     equal(response.roster.activePlayerCount, 1, 'restore returns current player count');
   }
@@ -389,6 +392,10 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
   check(source.includes("document.visibilityState === 'visible'"), 'visible-tab heartbeat recovery present');
   check(source.includes("campaignName: text(campaignNameProvider())"), 'host context stores display campaign name without secrets');
   check(source.includes("document.getElementById('campaign-name-input')"), 'Studio supplies visible campaign name to host context');
+  check(source.includes('publicationApi.getPublication(launch.publicationId)'), 'Studio reads exact cached immutable publication');
+  check(source.includes('content.runtimeExecutionManifest'), 'Studio extracts runtime mission order from publication manifest');
+  check(source.includes('missionOrder: normalizedMissionOrder'), 'Studio stores only validated mission order in host context');
+  check(!source.includes('capabilityToken'), 'Studio host context code handles no capability token');
 
   console.log('STUDIO_LIVE_ROOM_HOST_TEST_TOTAL=' + total);
   console.log('STUDIO_LIVE_ROOM_HOST_TEST_FAILED=' + failed);
