@@ -188,7 +188,7 @@ Eventos pendientes de una sala expirada o de otra publicación no se migran a un
 
 ## Realtime y reconciliación
 
-Firebase continúa siendo signal-only. La implementación podrá ampliar el tipo permitido con `game-state-change`, conservando el payload mínimo:
+Firebase continúa siendo signal-only. La implementación del candidato local amplía el tipo permitido con `game-state-change`, conservando el payload mínimo:
 
 ```json
 {

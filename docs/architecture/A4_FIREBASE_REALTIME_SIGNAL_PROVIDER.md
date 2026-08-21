@@ -30,11 +30,15 @@ Cada UID sólo puede escribir su propio nodo. El payload persistido contiene exa
 
 No se envían ni almacenan roster, capability CRIOS, participantId del host, progreso, respuestas, resultados o sessionData. `roomId` y `firebaseUid` forman la ruta y tampoco son parte del payload.
 
+Este ejemplo documenta el cierre histórico A4-004B/C. El candidato posterior de sincronización de progreso conserva el mismo payload mínimo y admite además `game-state-change`; sus productores y reconciliación se definen en [`GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md).
+
 ## Reglas
 
-Las reglas de `firebase/realtime-database.rules.json` están versionadas y fueron publicadas en el proyecto `crios-e1b83`. Niegan acceso por defecto, exigen autenticación para leer señales de una sala, limitan escritura a `auth.uid === $uid`, exigen los tres campos mínimos y rechazan cualquier campo adicional mediante `$other`. El smoke live confirmó tanto el camino permitido como las denegaciones previstas.
+Las reglas candidatas de `firebase/realtime-database.rules.json` están versionadas para el proyecto `crios-e1b83`. Niegan acceso por defecto, exigen autenticación para leer señales de una sala, limitan escritura a `auth.uid === $uid`, exigen los tres campos mínimos y rechazan cualquier campo adicional mediante `$other`. El smoke live del cierre confirmó tanto el camino permitido como las denegaciones previstas.
 
-## Productores de señal
+La evidencia conservada del smoke A4-004C no incluye un snapshot textual remoto que permita sostener identidad byte a byte. El snapshot aportado el 21 de agosto de 2026 conserva el contrato funcional de `presence-change`, pero omite las denegaciones explícitas de raíz presentes en la fuente versionada. La diferencia y su clasificación están registradas en [`FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md`](../evidence/FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md).
+
+## Productores de señal del cierre A4-004B/C
 
 El Runtime del jugador emite `presence-change` después de un `joinLiveRoom` válido, al restaurar mediante heartbeat y después de cada heartbeat exitoso. Una falla del canal realtime no cambia el estado `ACTIVE` ni la cadencia del heartbeat de Apps Script. El cierre abrupto de una pestaña todavía no se interpreta como desconexión autoritativa inmediata: esa semántica queda fuera de A4-004B y no se simula con datos no autoritativos.
 
@@ -51,8 +55,8 @@ CRIOS carga exclusivamente los SDK necesarios desde la CDN oficial de Firebase, 
 ya tiene un contrato `window.firebase` estable y CRIOS no incorpora bundler en este tramo.
 La migración futura al SDK modular no cambia la frontera signal-only.
 
-Para el smoke live se publicaron en Firebase los contenidos exactos de
-`firebase/realtime-database.rules.json` y se habilitó Firebase Authentication anónimo.
+Para el smoke live se desplegaron reglas con el contrato versionado de presencia y se habilitó
+Firebase Authentication anónimo.
 
 El smoke A4-004C verificó contra los servicios reales:
 - creación de identidad Firebase anónima;

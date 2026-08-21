@@ -2,7 +2,7 @@
 
 ## Estado
 
-Esta decisión corresponde al candidato local `626563afd1c1a88ba1905220abe20ded90774186` y responde a la auditoría independiente del salto acumulado desde `81e39c5d89633ca6c13d0f732f3e940533f475b6`. No asigna un identificador de roadmap, no modifica reglas y no autoriza bundle, push ni despliegue.
+Esta decisión se originó sobre el candidato local `626563afd1c1a88ba1905220abe20ded90774186` y responde a la auditoría independiente del salto acumulado desde `81e39c5d89633ca6c13d0f732f3e940533f475b6`. El preflight del 21 de agosto de 2026 agrega evidencia remota sin asignar un identificador de roadmap ni autorizar push o despliegue.
 
 ## Hechos verificados
 
@@ -14,6 +14,16 @@ Esta decisión corresponde al candidato local `626563afd1c1a88ba1905220abe20ded9
 - Cada identidad solo puede escribir bajo su propio `firebaseUid`.
 - El payload admite exactamente `type`, `eventId` y `emittedAt`; la ruta contiene `roomId` y `firebaseUid`.
 - No se almacenan capability, `participantId` CRIOS, roster, respuestas, resultados, progreso, vidas, intentos, identidad personal ni datos de sesión.
+
+## Preflight remoto del 21 de agosto de 2026
+
+El operador aportó desde Firebase Console el snapshot vigente previo al despliegue. La copia exacta, su procedencia, la comparación estructural y el rollback están conservados en [`FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md`](../evidence/FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md).
+
+El remoto aportado difiere de la regla anterior versionada en `719b7fb05c6f7cb277543e4e50836918b8357b4f` porque omite `.read: false`, `.write: false` y `$other/.validate: false` en la raíz. Firebase deniega por defecto cuando ninguna regla concede acceso, por lo que esas omisiones no representan por sí mismas un permiso adicional. La candidata conserva las tres defensas explícitas.
+
+La cuarta y única diferencia que amplía el contrato es el enum de `type`: el remoto admite solo `presence-change` y la candidata admite también `game-state-change`. No se detectaron otras diferencias estructurales.
+
+La afirmación previa de que el único cambio textual esperado era el nuevo tipo queda sustituida por esta clasificación exacta de cuatro diferencias.
 
 ## Riesgo residual
 
@@ -46,11 +56,13 @@ Si se exige confidencialidad incluso para horarios o tipos de señal, la regla a
 
 Antes de modificar Firebase deben cumplirse en orden:
 
-1. leer y conservar desde la consola autenticada las reglas actualmente publicadas;
+1. leer y conservar desde la consola autenticada las reglas actualmente publicadas; el snapshot aportado cumple la conservación preliminar, pero debe reconfirmarse inmediatamente antes de publicar;
 2. comparar ese snapshot con la regla versionada anterior y con la candidata;
-3. confirmar que el único cambio esperado incorpora `game-state-change` al tipo permitido;
-4. ejecutar smoke remoto de lectura sin autenticación denegada, escritura propia permitida, UID ajeno denegado, campos extra denegados, tipos inválidos denegados y limpieza completa;
-5. verificar que `presence-change` y `game-state-change` nunca contienen datos fuera del contrato;
-6. registrar versión, fecha, resultado y rollback exacto.
+3. confirmar que el diff esperado contiene exclusivamente las tres denegaciones explícitas de raíz y la incorporación de `game-state-change` al tipo permitido;
+4. comprobar que `.gitattributes` fija `text eol=lf` para la regla y su snapshot, y que tamaño y SHA-256 reproducen la evidencia registrada;
+5. bloquear la publicación ante cualquier otra diferencia;
+6. ejecutar smoke remoto de lectura sin autenticación denegada, escritura propia permitida, UID ajeno denegado, campos extra denegados, tipos inválidos denegados y limpieza completa;
+7. verificar que `presence-change` y `game-state-change` nunca contienen datos fuera del contrato;
+8. conservar el snapshot posterior y registrar versión, fecha, resultado y rollback exacto.
 
 Este gate no sustituye el despliegue coherente de Apps Script ni el smoke real con host y jugadores independientes.
