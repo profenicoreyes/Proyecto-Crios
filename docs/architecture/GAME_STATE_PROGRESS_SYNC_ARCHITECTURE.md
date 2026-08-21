@@ -2,9 +2,9 @@
 
 ## Estado de esta decisión
 
-Esta decisión de arquitectura fue aceptada para abrir implementación después de A4-004. Los tramos locales enumerados más abajo ya cuentan con implementación y evidencia, pero la decisión todavía no constituye por sí misma un tramo, no tiene un identificador definitivo y no afirma que la capacidad esté desplegada o disponible para usuarios.
+Esta decisión de arquitectura fue aceptada para abrir implementación después de A4-004. Los tramos locales enumerados más abajo ya cuentan con implementación, evidencia y el checkpoint local `6df495850d2a925c18ceb5556f60b4967df50c7f`, pero la decisión todavía no constituye por sí misma un tramo, no tiene un identificador definitivo y no afirma que la capacidad esté desplegada o disponible para usuarios.
 
-La validación restante debe avanzar por los tramos verificables definidos al final. Commit, bundle y despliegue conservan sus autorizaciones independientes.
+La validación restante debe avanzar por los tramos verificables definidos al final. Bundle y despliegue conservan sus autorizaciones independientes.
 
 ## Objetivo
 

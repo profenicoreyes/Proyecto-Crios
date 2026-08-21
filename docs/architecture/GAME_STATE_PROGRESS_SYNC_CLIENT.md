@@ -2,7 +2,7 @@
 
 ## Estado
 
-Este documento registra el cliente remoto local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap, no fue staged ni commiteada y no fue desplegada. Runtime carga el cliente para lectura y completado; la consola de mando lo carga con un contexto host para lectura exclusiva; Studio permanece fuera y usa solamente el modelo puro.
+Este documento registra el cliente remoto local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f` y no fue desplegada. Runtime carga el cliente para lectura y completado; la consola de mando lo carga con un contexto host para lectura exclusiva; Studio permanece fuera y usa solamente el modelo puro.
 
 El endpoint publicado vigente continúa sin estas operaciones hasta una autorización de despliegue independiente. La existencia del cliente local no convierte el progreso compartido en una capacidad disponible para usuarios.
 

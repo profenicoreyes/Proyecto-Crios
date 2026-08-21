@@ -337,7 +337,7 @@ Con LiveRoom, la consola y la presencia realtime cerrados, la sincronización co
 
 Este roadmap no le asigna todavía un identificador de tramo. La decisión de arquitectura separada delimita qué estado es compartido, quién puede escribirlo, qué fuente es autoritativa y qué datos quedan expresamente fuera. La presencia realtime cerrada en A4-004 no se amplía implícitamente a datos pedagógicos.
 
-La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). Su aceptación habilita implementación por tramos verificables, pero no le asigna un identificador definitivo ni habilita por sí sola commit, bundle o despliegue.
+La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). Su aceptación habilitó implementación por tramos verificables, comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`; no le asigna un identificador definitivo ni habilita por sí sola bundle o despliegue.
 
 El contrato físico queda registrado en [`architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md`](architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md), la frontera del cliente en [`architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md`](architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md), la composición del juego en [`architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y la política de invalidación/lectura agregada en [`architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La regresión Node local vigente aprueba 38/38 suites y 2888/2888 comprobaciones; tres smokes locales de navegador aprueban 89/89. El backend y las reglas ampliadas no fueron desplegados.
 
@@ -362,7 +362,7 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización local del 20 de agosto de 2026 parte del checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente; la sincronización de progreso posterior existe solo en el árbol de trabajo y no fue desplegada ni validada contra servicios reales.
+Esta actualización local del 20 de agosto de 2026 incorpora sobre el checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b` la sincronización de progreso comprometida en `6df495850d2a925c18ceb5556f60b4967df50c7f`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente; la sincronización posterior está validada localmente, pero no fue desplegada ni validada contra servicios reales.
 
 El último bundle de recuperación identificado por este documento continúa siendo `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, de 3163169 bytes. No se generó un bundle para los cambios locales posteriores.
 

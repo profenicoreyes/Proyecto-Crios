@@ -2,7 +2,7 @@
 
 ## Estado
 
-Este documento registra la implementación local de la señal de invalidación, la reconciliación acotada y la lectura agregada del progreso cooperativo de `LiveRoom`. La implementación no tiene un identificador definitivo de roadmap, no fue staged ni commiteada, no fue desplegada y no habilita todavía una capacidad disponible para usuarios.
+Este documento registra la implementación local de la señal de invalidación, la reconciliación acotada y la lectura agregada del progreso cooperativo de `LiveRoom`. La implementación no tiene un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`, no fue desplegada y no habilita todavía una capacidad disponible para usuarios.
 
 El endpoint Apps Script publicado y las reglas Firebase desplegadas permanecen sin esta ampliación. Toda la evidencia de este documento es local.
 
@@ -81,4 +81,4 @@ Permanecen pendientes y requieren autorización y evidencia independientes:
 - validar dos o más navegadores o dispositivos independientes, incluida red degradada, recarga y expiración;
 - observar carga y latencia reales antes de declarar definitiva la cadencia;
 - asignar, si la documentación futura lo decide, un identificador de implementación;
-- commit, bundle y despliegue.
+- bundle y despliegue.

@@ -2,7 +2,7 @@
 
 ## Estado
 
-Este documento registra el backend local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap, no fue staged ni commiteada y no fue desplegada.
+Este documento registra el backend local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f` y no fue desplegada.
 
 El backend publicado vigente continúa sin conocer `getLiveRoomGameState` ni `completeLiveRoomMission` hasta que exista una autorización de despliegue independiente.
 

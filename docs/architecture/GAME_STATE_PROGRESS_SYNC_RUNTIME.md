@@ -2,7 +2,7 @@
 
 ## Estado
 
-Este documento registra la composición local del primer progreso cooperativo de `LiveRoom` dentro de Runtime. La implementación no tiene todavía un identificador definitivo de roadmap, no fue staged ni commiteada, no fue desplegada y no habilita una capacidad disponible para usuarios.
+Este documento registra la composición local del primer progreso cooperativo de `LiveRoom` dentro de Runtime. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`, no fue desplegada y no habilita una capacidad disponible para usuarios.
 
 Runtime carga modelo, outbox, reconciliador, cliente y coordinador. Studio carga solamente el modelo puro para validar el orden público de misiones; la consola de mando carga modelo, reconciliador y cliente, pero no outbox ni coordinador y utiliza exclusivamente la lectura. El endpoint publicado vigente todavía no contiene las operaciones autoritativas requeridas.
 
@@ -105,4 +105,4 @@ Los smokes de navegador aprueban 89/89 comprobaciones. Su alcance es una sola in
 
 La lectura agregada en consola, la señal Firebase `game-state-change` como invalidación sin datos pedagógicos y la reconciliación con control sintético de carga ya están implementadas y validadas localmente. Quedan pendientes el despliegue coherente, la validación integral con dos o más navegadores o dispositivos reales independientes, la observación de carga real y el smoke contra Apps Script y Firebase desplegados.
 
-Nada en este documento autoriza asignar un identificador, realizar commit, generar bundle, desplegar Apps Script o modificar Firebase.
+Nada en este documento autoriza asignar un identificador, generar bundle, desplegar Apps Script o modificar Firebase.
