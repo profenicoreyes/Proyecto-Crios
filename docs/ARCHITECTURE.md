@@ -1,8 +1,10 @@
-# CRIOS OS - Arquitectura implementada
+# CRIOS OS - Arquitectura base posterior a A2-006J
 
 ## 1. Alcance y fuente de verdad
 
 Este documento describe el sistema observable en el commit funcional estable posterior a A2-006J. El código, las pruebas y los contratos de [architecture](architecture/) son la evidencia del estado implementado. La planificación futura no demuestra capacidades existentes.
+
+Este archivo es un baseline histórico con alcance temporal explícito, no la síntesis global vigente de todos los tramos posteriores. El estado actual se consulta en [ROADMAP.md](ROADMAP.md) y en las decisiones versionadas de [architecture](architecture/), incluida la publicación remota, LiveRoom y la sincronización cooperativa. Las afirmaciones de trabajo futuro de este baseline no pueden usarse para negar código y evidencia incorporados después de A2-006J.
 
 CRIOS mantiene dos capas que conviven:
 
@@ -103,4 +105,4 @@ Contratos públicos relevantes:
 - `window.CRIOS_CAMPAIGN_DRAFT`, `window.CRIOS_STUDIO_ADAPTER` y `window.CRIOS_STUDIO` en Studio;
 - `REGISTRO_MISIONES`, `REGISTRO_ESCENARIOS`, `CAMPANAS_CRIOS` y `TAXONOMIA_CRIOS` como contratos legacy vigentes.
 
-La extracción completa de Game Flow, Evaluation o Progress, la persistencia remota, la colaboración y cualquier ampliación de catálogo son trabajo futuro hasta que código, pruebas y contratos lo demuestren. Ante una contradicción: detenerse, presentar evidencia y esperar una decisión explícita.
+En el corte histórico A2-006J, la extracción completa de Game Flow, Evaluation o Progress, la persistencia remota, la colaboración y cualquier ampliación de catálogo eran trabajo futuro. Los tramos posteriores se clasifican mediante su código, pruebas, contratos, roadmap y estado de despliegue propios. Ante una contradicción: detenerse, presentar evidencia y esperar una decisión explícita.

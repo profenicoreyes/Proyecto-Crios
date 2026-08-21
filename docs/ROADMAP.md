@@ -339,6 +339,8 @@ Este roadmap no le asigna todavía un identificador de tramo. La decisión de ar
 
 La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). Su aceptación habilitó implementación por tramos verificables, comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`; no le asigna un identificador definitivo ni habilita por sí sola bundle o despliegue.
 
+La arquitectura general en [ARCHITECTURE.md](ARCHITECTURE.md) conserva alcance histórico posterior a A2-006J y apunta explícitamente a este roadmap para el estado posterior. La frontera de lectura Firebase, su riesgo residual y los gates de publicación quedan registrados en [architecture/LIVE_ROOM_FIREBASE_SIGNAL_METADATA_SECURITY.md](architecture/LIVE_ROOM_FIREBASE_SIGNAL_METADATA_SECURITY.md).
+
 El contrato físico queda registrado en [`architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md`](architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md), la frontera del cliente en [`architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md`](architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md), la composición del juego en [`architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y la política de invalidación/lectura agregada en [`architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La regresión Node local vigente aprueba 38/38 suites y 2888/2888 comprobaciones; tres smokes locales de navegador aprueban 89/89. El backend y las reglas ampliadas no fueron desplegados.
 
 También permanecen como decisiones independientes:
@@ -362,10 +364,10 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización local del 20 de agosto de 2026 incorpora sobre el checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b` la sincronización de progreso comprometida en `6df495850d2a925c18ceb5556f60b4967df50c7f`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente; la sincronización posterior está validada localmente, pero no fue desplegada ni validada contra servicios reales.
+Esta actualización local del 20 de agosto de 2026 incorpora sobre el checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b` la sincronización de progreso comprometida en `6df495850d2a925c18ceb5556f60b4967df50c7f` y su cierre documental `626563afd1c1a88ba1905220abe20ded90774186`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente; la sincronización posterior está validada localmente, pero no fue desplegada ni validada contra servicios reales.
 
-El último bundle de recuperación identificado por este documento continúa siendo `Proyecto-Crios-719b7fb05c6f7cb2-main.bundle`, SHA-256 `05ebc82d6258756fe75e82ad913b5e9151c20e18a148844a2fc63020ca707367`, de 3163169 bytes. No se generó un bundle para los cambios locales posteriores.
+El respaldo previo a este cierre documental es `Proyecto-Crios-626563afd1c1a88b-main.bundle`, SHA-256 `24f977487c5a6264bec7679dccba0512862d00e0adf50a7930775bf56e03f615`, de 3270793 bytes, verificado contra `main` en `626563afd1c1a88ba1905220abe20ded90774186` con historial completo. El bundle `Proyecto-Crios-75fa84b48a957f3e-main.bundle`, SHA-256 `2bc68e97d2f024e126c163d227ef49bc83a3d36f0c46f29bd78dbd99098a5b1b`, de 3166505 bytes, también fue reverificado como rollback anterior.
 
-El push permanece diferido. Esta actualización no afirma que `origin/main` esté alineado con el estado local.
+El push permanece diferido. El preflight externo de solo lectura del 20 de agosto de 2026 confirmó que `origin/main` y GitHub Pages sirven `81e39c5d89633ca6c13d0f732f3e940533f475b6`: 75 commits y 198 archivos por detrás del candidato local. Apps Script respondió `UNSUPPORTED_OPERATION` ante `getLiveRoomGameState`, y las reglas Firebase publicadas requieren lectura autenticada en consola para conocer su versión exacta. Por lo tanto, el próximo push constituye una release acumulada y no un hotfix de sincronización.
 
 No existe un identificador aprobado para el tramo posterior a A4-004. La secuencia puede cambiar únicamente ante evidencia explícita más reciente y una nueva decisión de arquitectura.
