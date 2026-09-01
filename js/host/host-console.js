@@ -309,17 +309,18 @@
         typeof expectedParticipantId !== 'undefined');
       var normalizedExpectedRoomId = text(expectedRoomId);
       var normalizedExpectedParticipantId = text(expectedParticipantId);
-      if (usesExpectedContext) {
-        if (!Number.isInteger(expectedGeneration) || !normalizedExpectedRoomId || !normalizedExpectedParticipantId) {
-          return {success:false,retryable:false,terminal:true};
-        }
-        if (!activePresenceRequest(expectedGeneration, normalizedExpectedRoomId, normalizedExpectedParticipantId)) {
-          return {success:false,retryable:false,terminal:true};
-        }
+      if (usesExpectedContext && (!Number.isInteger(expectedGeneration) || !normalizedExpectedRoomId || !normalizedExpectedParticipantId)) {
+        return {success:false,retryable:false,terminal:true};
+      }
+      var requestGeneration=usesExpectedContext?expectedGeneration:presenceRequestGeneration;
+      var requestRoomId=usesExpectedContext?normalizedExpectedRoomId:text(state.context.roomId);
+      var requestParticipantId=usesExpectedContext?normalizedExpectedParticipantId:text(state.context.participantId);
+      if(!activePresenceRequest(requestGeneration,requestRoomId,requestParticipantId)){
+        return {success:false,retryable:false,terminal:true};
       }
       var response;
       try{response=await gameStateClient.getLiveRoomGameState();}catch(ignoreGameStateRead){response=null;}
-      if (usesExpectedContext && !activePresenceRequest(expectedGeneration, normalizedExpectedRoomId, normalizedExpectedParticipantId)) {
+      if(!activePresenceRequest(requestGeneration,requestRoomId,requestParticipantId)){
         return {success:false,retryable:false,terminal:true};
       }
       if(!response||response.success!==true||!response.data||!response.data.gameState){

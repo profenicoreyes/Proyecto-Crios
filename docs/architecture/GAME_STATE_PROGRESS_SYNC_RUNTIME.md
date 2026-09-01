@@ -89,7 +89,7 @@ Esta separación conserva un único almacén lifecycle de credenciales y evita q
 
 ## Evidencia local focal
 
-La regresión Node completa vigente aprueba 38/38 suites y 3034/3034 comprobaciones. Las suites focales ampliadas verifican, entre otras fronteras, reconciliador 122/122, coordinador 79/79, Runtime player 163/163 y composición/proyección 80/80.
+La regresión Node completa vigente aprueba 38/38 suites y 3038/3038 comprobaciones. Las suites focales ampliadas verifican, entre otras fronteras, reconciliador 122/122, coordinador 79/79, Runtime player 163/163 y composición/proyección 80/80.
 
 La evidencia incluye recarga con el mismo `requestId`, red transitoria, invalidación realtime tipada, coalescencia, recuperación de visibilidad, expiración terminal irreversible, callbacks tardíos entre generaciones, cruce de contexto, outbox corrupta, reloj regresivo, ausencia de room, separación de persistencia y ausencia de capability en las APIs de composición.
 

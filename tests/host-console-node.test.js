@@ -551,6 +551,64 @@ function createDeferred(){
   }
 
   {
+    const client=makeClient();
+    const staleCycleRead=createDeferred();
+    const staleDestroyRead=createDeferred();
+    const reconciliationOptions=[];
+    const states=[];
+    let gameClientNumber=0;
+    client.createGameStateClient=function(gameContext){
+      this.calls.gameContext.push(JSON.parse(JSON.stringify(gameContext)));
+      gameClientNumber+=1;
+      const clientNumber=gameClientNumber;
+      let reads=0;
+      return {
+        available(){return true;},
+        async getLiveRoomGameState(){
+          client.calls.gameRead.push(true);
+          reads+=1;
+          if(clientNumber===1&&reads===2)return staleCycleRead.promise;
+          if(clientNumber===2&&reads===2)return staleDestroyRead.promise;
+          return {success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:gameContext.roomId,campaignId:gameContext.campaignId,publicationId:gameContext.publicationId,revision:clientNumber,completedMissionIds:['energy'],updatedAt:'2026-08-20T00:00:00.000Z'}},error:null};
+        }
+      };
+    };
+    const reconciliationFactory={
+      createScheduler(options){
+        reconciliationOptions.push(options);
+        return {available(){return true;},start(){return true;},request(){return true;},setVisible(){return true;},stop(){return true;}};
+      }
+    };
+    const controller=api.createController({
+      client,
+      storage:makeStorage(stored),
+      href:windowStub.location.href,
+      setIntervalImpl:()=>1,
+      clearIntervalImpl:()=>{},
+      gameStateReconciliationFactory:reconciliationFactory,
+      onStateChange(state){states.push(state);}
+    });
+    await controller.start();
+    const staleCyclePromise=reconciliationOptions[0].refresh({reason:'signal',attempt:1,requestedAt:1});
+    await controller.start();
+    const statesBeforeCycleResume=states.length;
+    const snapshotBeforeCycleResume=JSON.stringify(controller.getState());
+    staleCycleRead.resolve({success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',revision:99,completedMissionIds:['energy','greenhouse'],updatedAt:'2026-08-20T00:00:01.000Z'}},error:null});
+    await staleCyclePromise;
+    equal(states.length,statesBeforeCycleResume,'late scheduler read after lifecycle replacement emits no state');
+    equal(JSON.stringify(controller.getState()),snapshotBeforeCycleResume,'late scheduler read after lifecycle replacement cannot mutate current state');
+
+    const staleDestroyPromise=reconciliationOptions[1].refresh({reason:'signal',attempt:2,requestedAt:2});
+    const statesBeforeDestroyResume=states.length;
+    const snapshotBeforeDestroyResume=JSON.stringify(controller.getState());
+    controller.destroy();
+    staleDestroyRead.resolve({success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',revision:100,completedMissionIds:['energy','greenhouse'],updatedAt:'2026-08-20T00:00:02.000Z'}},error:null});
+    await staleDestroyPromise;
+    equal(states.length,statesBeforeDestroyResume,'late scheduler read after destroy emits no state');
+    equal(JSON.stringify(controller.getState()),snapshotBeforeDestroyResume,'late scheduler read after destroy cannot mutate state');
+  }
+
+  {
     let currentNow=1000;
     const client=makeClient();
     const storage=makeStorage(stored);

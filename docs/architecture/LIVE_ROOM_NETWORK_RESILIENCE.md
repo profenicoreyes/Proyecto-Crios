@@ -46,7 +46,7 @@ El bloqueo se libera tanto al resolver como al rechazar la promesa, y solo la pr
 
 ## Ciclos asíncronos y respuestas tardías
 
-Runtime, Studio y la consola invalidan la generación de presencia al comenzar un ciclo incompatible, alcanzar un estado terminal o ejecutar `destroy`. Cada solicitud captura generación, `roomId` y `participantId`; después de cada `await` crítico vuelve a validar que el ciclo y la identidad continúan vigentes. Una respuesta tardía de un ciclo reemplazado no puede emitir estado, programar timers, limpiar la promesa nueva ni revertir `EXPIRED`.
+Runtime, Studio y la consola invalidan la generación de presencia al comenzar un ciclo incompatible, alcanzar un estado terminal o ejecutar `destroy`. Cada solicitud captura generación, `roomId` y `participantId`; después de cada `await` crítico vuelve a validar que el ciclo y la identidad continúan vigentes. La consola aplica la misma validación a las lecturas agregadas de progreso iniciadas por lifecycle, scheduler o actualización manual. Una respuesta tardía de un ciclo reemplazado o destruido no puede emitir estado, mutar la proyección, programar timers, limpiar la promesa nueva ni revertir `EXPIRED`.
 
 La lectura inicial de progreso de la consola acepta una tripleta esperada completa y aplica fail-closed: si falta generación o identidad, o el ciclo dejó de estar activo, no lee la red, no emite y no ejecuta `fatal`. El modo manual sin contexto esperado conserva el comportamiento previo.
 
@@ -76,8 +76,8 @@ No se agrega jitter al heartbeat en este candidato. Antes de ampliar el número 
 
 ## Evidencia local vigente
 
-- suites dirigidas de lifecycle: Runtime 163/163, Studio 179/179 y Host 246/246; total 588/588;
-- regresión Node completa: 38/38 suites y 3034/3034 comprobaciones;
+- suites dirigidas de lifecycle: Runtime 163/163, Studio 179/179 y Host 250/250; total 592/592;
+- regresión Node completa: 38/38 suites y 3038/3038 comprobaciones;
 - `live-room-foreground-browser-smoke.test.html`: 36/36 en navegador real local, con eventos `focus` y `visibilitychange`, frontera exacta de 30000 ms, reloj regresivo, coalescencia, estados terminales y `destroy`;
 - el smoke usa clientes falsos por iframe y no accede a Apps Script ni Firebase reales.
 

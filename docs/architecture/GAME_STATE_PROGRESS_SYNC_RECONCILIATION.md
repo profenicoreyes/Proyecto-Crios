@@ -37,7 +37,7 @@ Estos valores son provisionales para la implementación local. No constituyen un
 
 Cada Runtime activo se suscribe al canal de su sala mediante el transporte realtime compartido. `presence-change` se ignora para progreso y `game-state-change` se entrega al scheduler. La lectura inicial ocurre después de validar sala, publicación y `missionOrder`; las lecturas posteriores se disparan por señal, recuperación de visibilidad, actualización manual o fallback periódico.
 
-La proyección compartida continúa separada del progreso personal. El scheduler se destruye y la suscripción se cancela al cambiar de contexto, destruir el jugador o recibir un estado terminal. Los callbacks tardíos quedan protegidos por generación y no pueden aplicar datos a otra sala.
+La proyección compartida continúa separada del progreso personal. El scheduler se destruye y la suscripción se cancela al cambiar de contexto, destruir el jugador o recibir un estado terminal. Los callbacks tardíos quedan protegidos por generación y no pueden aplicar datos a otra sala. En la consola, toda lectura captura además `roomId` y `participantId` antes del `await` y revalida la tripleta al resolver; una lectura del scheduler que termina después de reemplazar el ciclo o ejecutar `destroy` no emite ni muta estado.
 
 ## Consola de mando de solo lectura
 
@@ -65,12 +65,12 @@ Las pruebas focales nuevas o ampliadas verifican:
 - coordinador Runtime: 79/79;
 - Runtime player: 163/163;
 - composición y proyección Runtime: 80/80;
-- consola de mando: 246/246;
+- consola de mando: 250/250;
 - Studio host: 179/179;
 - proveedor realtime: 58/58;
 - transporte realtime: 34/34.
 
-La regresión Node completa vigente aprueba 38/38 suites y 3034/3034 comprobaciones. Tres smokes autocertificantes de progreso en navegador local aprueban 89/89 comprobaciones: 64 de Runtime/proyección y 25 de consola agregada con dos jugadores lógicos, señales tipadas, degradación transitoria, recuperación, lectura exclusiva y ausencia de IDs técnicos o atribución en la UI. Corresponden a una sola instancia con contextos lógicos y no validan el flujo contra servicios desplegados. El smoke complementario de foreground/focus aprueba 36/36 en Runtime, Host y Studio sin red real.
+La regresión Node completa vigente aprueba 38/38 suites y 3038/3038 comprobaciones. Tres smokes autocertificantes de progreso en navegador local aprueban 89/89 comprobaciones: 64 de Runtime/proyección y 25 de consola agregada con dos jugadores lógicos, señales tipadas, degradación transitoria, recuperación, lectura exclusiva y ausencia de IDs técnicos o atribución en la UI. Corresponden a una sola instancia con contextos lógicos y no validan el flujo contra servicios desplegados. El smoke complementario de foreground/focus aprueba 36/36 en Runtime, Host y Studio sin red real.
 
 ## Límites pendientes
 
