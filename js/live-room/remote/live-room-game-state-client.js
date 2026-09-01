@@ -106,7 +106,7 @@
     var credentialStore = isPlainObject(opts.credentialStore) ? opts.credentialStore : null;
     var timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
       ? Math.floor(Number(opts.timeoutMs))
-      : 15000;
+      : 30000;
     var context = null;
     var contextError = null;
     var currentState = null;

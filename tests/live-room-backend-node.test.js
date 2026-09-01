@@ -127,6 +127,7 @@ function token(seed) { return `${seed}-`.padEnd(40, 'x'); }
 function call(req) { return procesarSolicitudLiveRoomRemota(req); }
 
 check(CRIOS_LIVE_ROOM_IDLE_TIMEOUT_MS === 600000, 'timeout exactly ten minutes');
+check(CRIOS_LIVE_ROOM_PRESENCE_ACTIVE_TIMEOUT_MS === 300000, 'presence active timeout exactly five minutes');
 check(CRIOS_LIVE_ROOM_MAX_PARTICIPANTS === 64, 'participant cap explicit');
 equal(CRIOS_LIVE_ROOM_EXPIRED_MESSAGE, 'Esta sesión finalizó por inactividad.', 'expired message exact');
 check(esEnvelopePostLiveRoomRemota({ liveRoomRequest: {} }), 'dedicated POST envelope recognized');
@@ -314,6 +315,13 @@ equal(res.error.code, 'CAPABILITY_INVALID', 'invalid host capability cannot read
 res = call(request('getLiveRoomRoster', 'req-roster-shape', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken, extra: true }));
 equal(res.error.code, 'INVALID_REQUEST', 'roster payload shape remains exact');
 
+let boundaryPresence = listarPresenciasLiveRoomRemota(book, capRoom, '2026-08-13T22:05:00.000Z')
+  .find(item => item.participantId === 'cap-player-1');
+equal(boundaryPresence.connected, true, 'presence remains connected exactly five minutes after last seen');
+boundaryPresence = listarPresenciasLiveRoomRemota(book, capRoom, '2026-08-13T22:05:00.001Z')
+  .find(item => item.participantId === 'cap-player-1');
+equal(boundaryPresence.connected, false, 'presence becomes disconnected after five minutes');
+
 now = '2026-08-13T22:09:00.000Z';
 res = call(request('heartbeatLiveRoom', 'req-cap-host-hb', { roomId: capRoom, participantId: 'cap-host', capabilityToken: capHostToken }));
 check(res.success, 'host heartbeat keeps room active independently of roster reads');
@@ -324,7 +332,7 @@ check(res.success, 'roster remains readable while room active from valid heartbe
 equal(res.data.roster.activeParticipantCount, 1, 'stale participants are excluded from active count');
 equal(res.data.roster.activePlayerCount, 0, 'stale players are excluded from active player count');
 equal(res.data.roster.hostConnected, true, 'recent host heartbeat remains connected');
-check(res.data.roster.participants.filter(item => item.role === 'player').every(item => item.connected === false), 'players older than ten minutes are reported disconnected');
+check(res.data.roster.participants.filter(item => item.role === 'player').every(item => item.connected === false), 'players older than five minutes are reported disconnected');
 equal(leerLiveRoomRemota(book, capRoom).room.lastActivityAt, activityAfterHostHeartbeat, 'stale roster read still does not extend activity');
 
 const roomSheet = book.getSheetByName('CRIOS_SALAS');
@@ -346,6 +354,7 @@ console.log('LIVE_ROOM_BACKEND_TEST_STATUS=PASS');
 console.log('LIVE_ROOM_BACKEND_TEST_TOTAL=' + total);
 console.log('LIVE_ROOM_BACKEND_TEST_FAILED=0');
 console.log('LIVE_ROOM_BACKEND_IDLE_TIMEOUT_MS=600000');
+console.log('LIVE_ROOM_BACKEND_PRESENCE_ACTIVE_TIMEOUT_MS=300000');
 console.log('LIVE_ROOM_BACKEND_MAX_PARTICIPANTS=64');
 console.log('LIVE_ROOM_BACKEND_SERVER_CLOCK=true');
 console.log('LIVE_ROOM_BACKEND_CAPABILITY_HASH_ONLY=true');

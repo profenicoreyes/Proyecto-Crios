@@ -1,5 +1,6 @@
 const CRIOS_LIVE_ROOM_PROTOCOL_VERSION = '1.0';
 const CRIOS_LIVE_ROOM_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+const CRIOS_LIVE_ROOM_PRESENCE_ACTIVE_TIMEOUT_MS = 5 * 60 * 1000;
 const CRIOS_LIVE_ROOM_MAX_PARTICIPANTS = 64;
 const CRIOS_LIVE_ROOM_CAPABILITY_MIN_LENGTH = 32;
 const CRIOS_LIVE_ROOM_CAPABILITY_MAX_LENGTH = 256;
@@ -346,7 +347,7 @@ function listarPresenciasLiveRoomRemota(libro, roomId, nowIso) {
         role: fila[2],
         joinedAt: fila[3],
         lastSeenAt: fila[4],
-        connected: Number.isFinite(lastSeenMs) && nowMs <= lastSeenMs + CRIOS_LIVE_ROOM_IDLE_TIMEOUT_MS
+        connected: Number.isFinite(lastSeenMs) && nowMs <= lastSeenMs + CRIOS_LIVE_ROOM_PRESENCE_ACTIVE_TIMEOUT_MS
       };
     })
     .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt) || a.participantId.localeCompare(b.participantId));

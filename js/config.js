@@ -9,7 +9,7 @@ const CRIOS_CONFIG = Object.freeze({
   runtimeCampaignMode: 'legacy',
   resultsEndpoint: 'https://script.google.com/macros/s/AKfycbwnoHvlD8xAtDHhcymZxfrt9TlKSx86F-sAECTfj1Y8mAOYDbtnFCLfKPeUVxzr8bwEyA/exec',
   publicationEndpoint: 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec',
-  publicationTimeoutMs: 15000,
+  publicationTimeoutMs: 30000,
   realtime: Object.freeze({
     provider: 'firebase',
     firebase: Object.freeze({

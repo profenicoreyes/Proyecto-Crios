@@ -10,7 +10,7 @@
 
   function timeout(value) {
     var number = Number(value);
-    return Number.isFinite(number) && number > 0 ? Math.floor(number) : 15000;
+    return Number.isFinite(number) && number > 0 ? Math.floor(number) : 30000;
   }
 
   function getConfig() {

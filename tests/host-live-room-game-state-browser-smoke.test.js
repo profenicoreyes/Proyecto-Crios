@@ -35,6 +35,10 @@
   }
 
   function installControlledHostEnvironment(){
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: function(){ return 'visible'; }
+    });
     var context={
       roomId:'room-host-browser-smoke',
       participantId:'host-browser-smoke',

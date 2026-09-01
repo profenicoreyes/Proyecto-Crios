@@ -38,9 +38,10 @@ vm.runInContext(source, context, {filename:sourcePath});
 const api = windowStub.CRIOS_HOST_CONSOLE;
 
 check(Boolean(api), 'host console API exported');
-equal(api.version, '1.4.0', 'version');
+equal(api.version, '1.5.0', 'version');
 equal(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
-equal(api.rosterRefreshIntervalMs, 15000, 'roster interval transitional');
+equal(api.rosterRefreshIntervalMs, 30000, 'roster interval bounded');
+equal(api.foregroundRefreshMinIntervalMs, 30000, 'foreground refresh min interval');
 equal(api.realtimeSignalDebounceMs, 300, 'realtime signal debounce interval');
 equal(api.presenceSignalType, 'presence-change', 'presence signal type explicit');
 equal(api.gameStateSignalType, 'game-state-change', 'game-state signal type explicit');
@@ -134,6 +135,13 @@ function makeRealtimeTransport(){
   return transport;
 }
 
+function createDeferred(){
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
 (async()=>{
   {
     const client=makeClient();
@@ -156,7 +164,7 @@ function makeRealtimeTransport(){
     equal(state.trend.length,1,'first roster creates trend sample');
     equal(state.trend[0].count,1,'trend sample reflects player count');
     check(intervals.includes(120000),'heartbeat timer started');
-    check(intervals.includes(15000),'roster timer started');
+    check(intervals.includes(30000),'roster timer started');
     check(states.some(s=>s.status==='ACTIVE'),'active state emitted');
     controller.destroy();
     check(clears.length>=2,'destroy stops both network timers');
@@ -166,6 +174,7 @@ function makeRealtimeTransport(){
     const client=makeClient();
     const storage=makeStorage(stored);
     const timeouts=[];
+    const states=[];
     const realtime=makeRealtimeTransport();
     const reconciliationOptions=[];
     const reconciliationCalls=[];
@@ -190,7 +199,8 @@ function makeRealtimeTransport(){
       setTimeoutImpl(fn,ms){ timeouts.push({fn,ms}); return timeouts.length; },
       clearTimeoutImpl(){},
       realtimeTransportFactory(){ return realtime; },
-      gameStateReconciliationFactory:reconciliationFactory
+      gameStateReconciliationFactory:reconciliationFactory,
+      onStateChange(state){ states.push(state); }
     });
     await controller.start();
     equal(realtime.calls.subscribe.length,1,'realtime subscribes once on start');
@@ -215,17 +225,57 @@ function makeRealtimeTransport(){
     check(reconciliationCalls.some(call=>call[0]==='visible'&&call[1]===true),'visible state resumes progress scheduler');
 
     client.gameResponse={success:false,data:null,error:{code:'SERVER_ERROR',message:'temporary game-state failure',retryable:true}};
-    const gameOutcome=await reconciliationOptions[0].refresh();
+    const gameOutcome=await reconciliationOptions[0].refresh({reason:'signal',attempt:1,requestedAt:Date.parse('2026-08-19T12:00:02.000Z')});
     equal(gameOutcome.success,false,'transient progress read maps to scheduler failure');
     equal(gameOutcome.retryable,true,'transient progress read remains retryable');
     equal(controller.getState().status,'ACTIVE','transient progress failure preserves active room');
     equal(controller.getState().gameState.revision,1,'transient progress failure preserves last valid state');
     equal(controller.getState().lastGameStateError.code,'SERVER_ERROR','progress error stays separate from roster error');
 
+    client.gameResponse={success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',revision:2,completedMissionIds:['energy'],updatedAt:'2026-08-19T12:00:01.000Z'}},error:null};
+    function assertProtectedFailClosed(args,label){
+      return (async function(){
+        const readsBefore=client.calls.gameRead.length;
+        const statesBefore=states.length;
+        const snapshotBefore=JSON.stringify(controller.getState());
+        const outcome=await reconciliationOptions[0].refresh.apply(null,args);
+        equal(outcome.success,false,label+' returns neutral success=false');
+        equal(outcome.retryable,false,label+' returns neutral retryable=false');
+        equal(outcome.terminal,true,label+' returns neutral terminal=true');
+        equal(client.calls.gameRead.length,readsBefore,label+' performs zero remote reads');
+        equal(states.length,statesBefore,label+' emits zero states');
+        equal(JSON.stringify(controller.getState()),snapshotBefore,label+' mutates no host state');
+      })();
+    }
+
+    await assertProtectedFailClosed([1],'protected mode with generation only fails closed');
+    await assertProtectedFailClosed([undefined,'room-1','host-1'],'protected mode with only roomId/participantId fails closed');
+    await assertProtectedFailClosed([1,'room-1'],'protected mode with missing participantId fails closed');
+    await assertProtectedFailClosed([1,undefined,'host-1'],'protected mode with missing roomId fails closed');
+    await assertProtectedFailClosed([1.5,'room-1','host-1'],'protected mode with non-integer generation fails closed');
+    await assertProtectedFailClosed([1,'   ','host-1'],'protected mode with blank roomId fails closed');
+    await assertProtectedFailClosed([1,'room-1','   '],'protected mode with blank participantId fails closed');
+
+    const readsBeforeProtectedSuccess=client.calls.gameRead.length;
+    const statesBeforeProtectedSuccess=states.length;
+    const protectedSuccessOutcome=await reconciliationOptions[0].refresh(1,'room-1','host-1');
+    equal(protectedSuccessOutcome.success,true,'protected mode with valid triplet and active lifecycle performs read');
+    equal(client.calls.gameRead.length,readsBeforeProtectedSuccess+1,'protected mode with valid triplet performs exactly one read');
+    check(states.length>=statesBeforeProtectedSuccess+1,'protected mode with valid triplet emits authoritative update');
+
+    const restartState=await controller.start();
+    equal(restartState.status,'ACTIVE','restart keeps host active while rotating lifecycle generation');
+    await assertProtectedFailClosed([1,'room-1','host-1'],'protected mode with stale generation fails closed');
+
+    const readsBeforeNoArgs=client.calls.gameRead.length;
+    const noArgsOutcome=await reconciliationOptions[0].refresh();
+    equal(noArgsOutcome.success,true,'refresh without expected context keeps normal behavior');
+    equal(client.calls.gameRead.length,readsBeforeNoArgs+1,'refresh without expected context performs exactly one read');
+
     controller.destroy();
     check(reconciliationCalls.some(call=>call[0]==='stop'),'destroy stops game-state scheduler');
-    equal(realtime.calls.unsubscribe.length,1,'destroy unsubscribes realtime room listener');
-    equal(realtime.calls.destroy,1,'destroy tears down realtime transport instance');
+    equal(realtime.calls.unsubscribe.length,2,'destroy unsubscribes realtime room listener after lifecycle restart');
+    equal(realtime.calls.destroy,2,'destroy tears down realtime transport instance after lifecycle restart');
   }
 
   {
@@ -242,7 +292,7 @@ function makeRealtimeTransport(){
     });
     const state=await controller.start();
     equal(state.status,'ACTIVE','realtime transport failure does not break session');
-    check(intervals.includes(15000),'polling fallback remains active when realtime fails');
+    check(intervals.includes(30000),'polling fallback remains active when realtime fails');
     equal(storage.removes(),0,'realtime transport failure does not clear host context');
   }
 
@@ -311,6 +361,58 @@ function makeRealtimeTransport(){
   }
 
   {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+    await controller.start();
+    let resolveHeartbeat;
+    const heartbeatGate=new Promise(resolve=>{resolveHeartbeat=resolve;});
+    let resolveRoster;
+    const rosterGate=new Promise(resolve=>{resolveRoster=resolve;});
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return heartbeatGate;};
+    client.getLiveRoomRoster=async function(roomId,participantId){this.calls.roster.push([roomId,participantId]);return rosterGate;};
+    const firstHeartbeat=controller.heartbeat();
+    const secondHeartbeat=controller.heartbeat();
+    const firstRoster=controller.refreshRoster();
+    const secondRoster=controller.refreshRoster();
+    check(firstHeartbeat===secondHeartbeat,'host console concurrent heartbeats share one promise');
+    check(firstRoster===secondRoster,'host console concurrent roster reads share one promise');
+    equal(client.calls.heartbeat.length,2,'host console concurrent heartbeats add one request after startup');
+    equal(client.calls.roster.length,2,'host console concurrent roster reads add one request after startup');
+    resolveHeartbeat({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    resolveRoster({success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null});
+    await Promise.all([firstHeartbeat,secondHeartbeat,firstRoster,secondRoster]);
+    const thirdHeartbeat=controller.heartbeat();
+    const thirdRoster=controller.refreshRoster();
+    equal(client.calls.heartbeat.length,3,'host console heartbeat single-flight releases after completion');
+    equal(client.calls.roster.length,3,'host console roster single-flight releases after completion');
+    await Promise.all([thirdHeartbeat,thirdRoster]);
+    let rejectHeartbeat;
+    const rejectedHeartbeatGate=new Promise((resolve,reject)=>{rejectHeartbeat=reject;});
+    let rejectRoster;
+    const rejectedRosterGate=new Promise((resolve,reject)=>{rejectRoster=reject;});
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return rejectedHeartbeatGate;};
+    client.getLiveRoomRoster=async function(roomId,participantId){this.calls.roster.push([roomId,participantId]);return rejectedRosterGate;};
+    const failedHeartbeatFirst=controller.heartbeat();
+    const failedHeartbeatSecond=controller.heartbeat();
+    const failedRosterFirst=controller.refreshRoster();
+    const failedRosterSecond=controller.refreshRoster();
+    check(failedHeartbeatFirst===failedHeartbeatSecond,'host console rejected heartbeats share one promise');
+    check(failedRosterFirst===failedRosterSecond,'host console rejected roster reads share one promise');
+    equal(client.calls.heartbeat.length,4,'host console rejected heartbeats make one request');
+    equal(client.calls.roster.length,4,'host console rejected roster reads make one request');
+    rejectHeartbeat(new Error('heartbeat rejected'));
+    rejectRoster(new Error('roster rejected'));
+    const failedOutcomes=await Promise.allSettled([failedHeartbeatFirst,failedHeartbeatSecond,failedRosterFirst,failedRosterSecond]);
+    check(failedOutcomes.every(outcome=>outcome.status==='rejected'),'host console shared rejections reach all callers');
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return {success:true,data:{room:{roomId,status:'active'}},error:null};};
+    client.getLiveRoomRoster=async function(roomId,participantId){this.calls.roster.push([roomId,participantId]);return {success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null};};
+    await Promise.all([controller.heartbeat(),controller.refreshRoster()]);
+    equal(client.calls.heartbeat.length,5,'host console heartbeat single-flight releases after rejection');
+    equal(client.calls.roster.length,5,'host console roster single-flight releases after rejection');
+  }
+
+  {
     const client=makeClient({async getLiveRoomRoster(roomId,participantId){this.calls.roster.push([roomId,participantId]);return {success:false,data:null,error:{code:'SERVER_ERROR',message:'temporary',retryable:true}};}});
     const storage=makeStorage(stored);
     const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
@@ -318,6 +420,191 @@ function makeRealtimeTransport(){
     equal(state.status,'ACTIVE','transient roster failure keeps console active');
     equal(state.lastError.code,'SERVER_ERROR','transient roster error retained');
     equal(storage.removes(),0,'transient roster failure keeps context');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+    await controller.start();
+    const delayedRoster=createDeferred();
+    client.getLiveRoomRoster=async function(roomId,participantId){this.calls.roster.push([roomId,participantId]);return delayedRoster.promise;};
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return {success:false,data:null,error:{code:'ROOM_EXPIRED',message:'Esta sesión finalizó por inactividad.',retryable:false}};};
+    const staleRosterPromise=controller.refreshRoster();
+    const expired=await controller.heartbeat();
+    equal(expired.status,'EXPIRED','terminal heartbeat expires controller');
+    delayedRoster.resolve({success:true,data:{roster:{activePlayerCount:9,participants:[]}},error:null});
+    await staleRosterPromise;
+    equal(controller.getState().status,'EXPIRED','late roster success cannot reactivate expired after terminal heartbeat');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+    await controller.start();
+    const delayedHeartbeat=createDeferred();
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return delayedHeartbeat.promise;};
+    client.getLiveRoomRoster=async function(roomId,participantId){this.calls.roster.push([roomId,participantId]);return {success:false,data:null,error:{code:'ROOM_EXPIRED',message:'Esta sesión finalizó por inactividad.',retryable:false}};};
+    const staleHeartbeatPromise=controller.heartbeat();
+    const expired=await controller.refreshRoster();
+    equal(expired.status,'EXPIRED','terminal roster expires controller');
+    delayedHeartbeat.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    await staleHeartbeatPromise;
+    equal(controller.getState().status,'EXPIRED','late heartbeat success cannot reactivate expired after terminal roster');
+  }
+
+  {
+    const states=[];
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},onStateChange(state){states.push(state);}});
+    await controller.start();
+    const before=states.length;
+    const delayedHeartbeat=createDeferred();
+    client.heartbeatLiveRoom=async function(roomId,participantId){this.calls.heartbeat.push([roomId,participantId]);return delayedHeartbeat.promise;};
+    const pending=controller.heartbeat();
+    controller.destroy();
+    delayedHeartbeat.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    await pending;
+    equal(states.length,before,'late response after destroy emits no new state');
+    equal(controller.getState().status,'ACTIVE','late response after destroy does not change state snapshot');
+  }
+
+  {
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+    await controller.start();
+    const firstDeferred=createDeferred();
+    const secondDeferred=createDeferred();
+    let heartbeatCallIndex=0;
+    client.heartbeatLiveRoom=async function(roomId,participantId){
+      this.calls.heartbeat.push([roomId,participantId]);
+      heartbeatCallIndex += 1;
+      return heartbeatCallIndex === 1 ? firstDeferred.promise : secondDeferred.promise;
+    };
+    const first=controller.heartbeat();
+    const restart=controller.start();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    const second=controller.heartbeat();
+    check(first!==second,'restart creates a new in-flight heartbeat promise');
+    firstDeferred.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    await first;
+    const shared=controller.heartbeat();
+    check(shared===second,'old heartbeat resolution does not release new in-flight promise');
+    secondDeferred.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    await Promise.all([second,restart,shared]);
+  }
+
+  {
+    const client=makeClient();
+    let createGameStateCall=0;
+    let firstGameStateReadEntered=false;
+    const firstLifecycleGameStateDeferred=createDeferred();
+    client.createGameStateClient=function(gameContext){
+      this.calls.gameContext.push(JSON.parse(JSON.stringify(gameContext)));
+      createGameStateCall += 1;
+      const callNumber=createGameStateCall;
+      return {
+        available(){return true;},
+        async getLiveRoomGameState(){
+          client.calls.gameRead.push(true);
+          if (callNumber === 1) {
+            firstGameStateReadEntered=true;
+            return firstLifecycleGameStateDeferred.promise;
+          }
+          return {success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:gameContext.roomId,campaignId:gameContext.campaignId,publicationId:gameContext.publicationId,revision:callNumber,completedMissionIds:['energy'],updatedAt:'2026-08-20T00:00:00.000Z'}},error:null};
+        }
+      };
+    };
+    const storage=makeStorage(stored);
+    const intervals=[];
+    const states=[];
+    const controller=api.createController({
+      client,
+      storage,
+      href:windowStub.location.href,
+      setIntervalImpl(fn,ms){ intervals.push(ms); return intervals.length; },
+      clearIntervalImpl:()=>{},
+      onStateChange(state){ states.push(state); }
+    });
+    const firstStart=controller.start();
+    let firstStartSettled=false;
+    firstStart.then(function(){ firstStartSettled=true; }, function(){ firstStartSettled=true; });
+    for (let index = 0; index < 20 && !firstGameStateReadEntered; index += 1) await Promise.resolve();
+    check(firstGameStateReadEntered,'first start reaches initializeGameState read and stays suspended');
+    check(!firstStartSettled,'first start remains pending while initializeGameState is deferred');
+
+    const secondStart=controller.start();
+    const secondState=await secondStart;
+    equal(secondState.status,'ACTIVE','second start becomes the active lifecycle');
+    equal(intervals.length,2,'only active lifecycle schedules timers before first lifecycle resumes');
+    const statesBeforeFirstResume=states.length;
+    const snapshotBeforeFirstResume=JSON.stringify(controller.getState());
+
+    firstLifecycleGameStateDeferred.resolve({success:true,data:{gameState:{schemaVersion:'1.0.0',roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',revision:99,completedMissionIds:['energy'],updatedAt:'2026-08-20T00:00:01.000Z'}},error:null});
+    await firstStart;
+    equal(intervals.length,2,'obsolete first start does not schedule heartbeat or roster timers');
+    equal(states.length,statesBeforeFirstResume,'obsolete first start emits no additional state');
+    equal(JSON.stringify(controller.getState()),snapshotBeforeFirstResume,'obsolete first start does not mutate latest lifecycle state');
+  }
+
+  {
+    let currentNow=1000;
+    const client=makeClient();
+    const storage=makeStorage(stored);
+    const controller=api.createController({client,storage,href:windowStub.location.href,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},now:()=>currentNow});
+    await controller.start();
+    equal(controller.getState().status,'ACTIVE','foreground gating starts from active host state');
+    const heartbeatA=createDeferred();
+    const heartbeatB=createDeferred();
+    const heartbeatC=createDeferred();
+    const rosterA=createDeferred();
+    const rosterB=createDeferred();
+    const rosterC=createDeferred();
+    const heartbeatQueue=[heartbeatA,heartbeatB,heartbeatC];
+    const rosterQueue=[rosterA,rosterB,rosterC];
+    client.calls.heartbeat=[];
+    client.calls.roster=[];
+    client.heartbeatLiveRoom=async function(roomId,participantId){
+      this.calls.heartbeat.push([roomId,participantId]);
+      var next=heartbeatQueue.shift();
+      return next ? next.promise : {success:true,data:{room:{roomId:roomId,campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null};
+    };
+    client.getLiveRoomRoster=async function(roomId,participantId){
+      this.calls.roster.push([roomId,participantId]);
+      var next=rosterQueue.shift();
+      return next ? next.promise : {success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null};
+    };
+    equal(controller.refreshAfterForeground(),true,'foreground first call accepted');
+    heartbeatA.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    rosterA.resolve({success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null});
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    equal(client.calls.heartbeat.length,1,'foreground first call triggers heartbeat');
+    equal(client.calls.roster.length,1,'foreground first call triggers roster refresh');
+    currentNow = 20000;
+    equal(controller.refreshAfterForeground(),false,'foreground under 30s rejected');
+    equal(client.calls.heartbeat.length,1,'foreground under 30s adds no heartbeat');
+    equal(client.calls.roster.length,1,'foreground under 30s adds no roster');
+    currentNow = 31000;
+    equal(controller.refreshAfterForeground(),true,'foreground at 30s accepted');
+    heartbeatB.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    rosterB.resolve({success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null});
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    equal(client.calls.heartbeat.length,2,'foreground at 30s triggers heartbeat');
+    equal(client.calls.roster.length,2,'foreground at 30s triggers roster refresh');
+    currentNow = 1;
+    equal(controller.refreshAfterForeground(),true,'foreground accepts clock rollback');
+    heartbeatC.resolve({success:true,data:{room:{roomId:'room-1',campaignId:'camp-1',publicationId:'pub-1',status:'active'}},error:null});
+    rosterC.resolve({success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null});
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
   }
 
   check(html.includes('<main class="host-console" id="hostConsoleRoot"'),'host root owns dedicated console class');
@@ -366,11 +653,15 @@ function makeRealtimeTransport(){
   check(source.includes('scheduleRealtimeRefresh'),'realtime signal path and polling path are separate');
   check(source.includes('attachRealtime(context.roomId);'),'realtime signal path attaches after room validation');
   check(source.includes("context.campaignName || 'Campaña publicada'"),'campaign name preferred over technical ids in header');
-  check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 15 * 1000'),'15s polling remains transitional');
+  check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 30 * 1000'),'30s polling remains bounded');
+  check(source.includes('FOREGROUND_REFRESH_MIN_INTERVAL_MS = 30 * 1000'),'host foreground refresh interval source present');
   check(source.includes("url.searchParams.get('roomId')"),'console validates public room id');
   check(!source.includes("searchParams.set('participantId'"),'participant id never added to console URL');
   check(!source.includes("searchParams.set('capability'"),'capability never added to console URL');
   check(typeof api.defaultGameStateReconciliationFactory==='function','game-state reconciliation factory exported');
+  check(source.includes('controller.refreshAfterForeground();'),'visibility/focus listeners use foreground refresh gate');
+  check(!source.includes("controller.heartbeat();controller.refreshRoster();"),'visibility/focus listeners avoid direct heartbeat+roster calls');
+  check(source.includes('return Object.freeze({start:start,heartbeat:heartbeat,refreshRoster:refreshRoster,refreshAfterForeground:refreshAfterForeground'),'controller exports refreshAfterForeground');
   check(source.includes('lastGameStateError'),'progress failures remain separate from room and roster failures');
   check(!/prompt\s*\(/.test(source),'console never prompts for credentials');
   check(!/password/i.test(source),'console has no password concept');

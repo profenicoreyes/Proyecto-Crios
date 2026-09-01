@@ -55,8 +55,8 @@ function contextWith(configExpression) {
   check(Boolean(studio), 'repository endpoint configures Studio without auth module');
   equal(runtime.endpoint, 'https://script.google.com/macros/s/AKfycbwq4tKzIuPfJJ2tOEAHpEhLsg7tmWvPYQ5fJ8jLgo74lo1BT0Fw_eNgtE53VsMb_e33bA/exec', 'Runtime uses deployed endpoint');
   equal(studio.endpoint, runtime.endpoint, 'Studio uses same publication endpoint');
-  equal(runtime.timeoutMs, 15000, 'Runtime timeout configured');
-  equal(studio.timeoutMs, 15000, 'Studio timeout configured');
+  equal(runtime.timeoutMs, 30000, 'Runtime timeout configured');
+  equal(studio.timeoutMs, 30000, 'Studio timeout configured');
   equal(Object.keys(runtime).sort().join(','), 'endpoint,timeoutMs', 'Runtime config exact');
   equal(Object.keys(studio).sort().join(','), 'endpoint,timeoutMs', 'Studio config exact');
   check(Object.isFrozen(runtime), 'Runtime config frozen');
@@ -82,8 +82,8 @@ function contextWith(configExpression) {
 {
   const cfg = { publicationEndpoint: 'https://publication.example/exec', publicationTimeoutMs: -1 };
   const window = contextWith(cfg);
-  equal(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG.timeoutMs, 15000, 'invalid timeout uses safe default in Runtime');
-  equal(window.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG.timeoutMs, 15000, 'invalid timeout uses safe default in Studio');
+  equal(window.CRIOS_RUNTIME_REMOTE_PUBLICATION_CONFIG.timeoutMs, 30000, 'invalid timeout uses safe default in Runtime');
+  equal(window.CRIOS_STUDIO_REMOTE_PUBLICATION_CONFIG.timeoutMs, 30000, 'invalid timeout uses safe default in Studio');
 }
 
 {

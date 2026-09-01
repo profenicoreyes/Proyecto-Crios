@@ -68,9 +68,10 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_STUDIO_LIVE_ROOM_HOST;
 
 check(Boolean(api), 'host API exported');
-equal(api.version, '1.2.0', 'version');
+equal(api.version, '1.3.0', 'version');
 equal(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
-equal(api.rosterRefreshIntervalMs, 15000, 'roster refresh interval');
+equal(api.rosterRefreshIntervalMs, 30000, 'roster refresh interval');
+equal(api.foregroundRefreshMinIntervalMs, 30000, 'foreground refresh min interval');
 equal(api.contextKey, 'crios-live-room-host-context-v1', 'context key');
 check(source.includes('window.localStorage'), 'host context supports persistent browser storage');
 check(source.includes('window.sessionStorage'), 'host context keeps session mirror');
@@ -151,6 +152,13 @@ function makeClient(overrides = {}) {
   return client;
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
 const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub-1', href: '../index.html?campaignId=camp-1&publicationId=pub-1', missionOrder: ['energy','greenhouse'] };
 
 (async () => {
@@ -208,7 +216,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     check(!JSON.stringify(storage.inspect()).includes('secret'), 'host context stores no secret marker');
     equal(intervals.length, 2, 'heartbeat and roster timers started');
     equal(intervals.filter(i => i.ms === 120000).length, 1, 'heartbeat timer uses two minutes');
-    equal(intervals.filter(i => i.ms === 15000).length, 1, 'roster timer uses fifteen seconds');
+    equal(intervals.filter(i => i.ms === 30000).length, 1, 'roster timer uses thirty seconds');
     check(result.playerHref.includes('campaignId=camp-1'), 'player href keeps campaign id');
     check(result.playerHref.includes('publicationId=pub-1'), 'player href keeps publication id');
     check(result.playerHref.includes('roomId=room-abc'), 'player href adds room id');
@@ -294,7 +302,7 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(response.status, 'ACTIVE', 'restore returns active');
     equal(response.participantId, 'host-restored', 'restore preserves host participant');
     equal(response.publication.missionOrder.join(','), 'energy,greenhouse', 'restore preserves saved mission order');
-    check(intervalMs === 120000 || intervalMs === 15000, 'restore starts live-room intervals');
+    check(intervalMs === 120000 || intervalMs === 30000, 'restore starts live-room intervals');
     equal(response.roster.activePlayerCount, 1, 'restore returns current player count');
   }
 
@@ -319,6 +327,59 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(response.lastError.code, 'ROOM_PUBLICATION_MISMATCH', 'publication mismatch code');
     equal(storage.clearCalls(), 1, 'publication mismatch clears context');
     equal(client.calls.forget.length, 1, 'publication mismatch forgets capability');
+  }
+
+  {
+    const client = makeClient();
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-single-flight', setIntervalImpl: () => 1, clearIntervalImpl: () => {} });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    let resolveHeartbeat;
+    const heartbeatGate = new Promise(resolve => { resolveHeartbeat = resolve; });
+    let resolveRoster;
+    const rosterGate = new Promise(resolve => { resolveRoster = resolve; });
+    client.heartbeatLiveRoom = async function(roomId, participantId) { this.calls.heartbeat.push([roomId, participantId]); return heartbeatGate; };
+    client.getLiveRoomRoster = async function(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return rosterGate; };
+    const firstHeartbeat = controller.heartbeat();
+    const secondHeartbeat = controller.heartbeat();
+    const firstRoster = controller.refreshRoster();
+    const secondRoster = controller.refreshRoster();
+    check(firstHeartbeat === secondHeartbeat, 'Studio concurrent heartbeats share one promise');
+    check(firstRoster === secondRoster, 'Studio concurrent roster reads share one promise');
+    equal(client.calls.heartbeat.length, 1, 'Studio concurrent heartbeats make one request');
+    equal(client.calls.roster.length, 2, 'Studio concurrent roster reads add one request after initial roster');
+    resolveHeartbeat({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    resolveRoster({ success:true, data:{roster:{activePlayerCount:1,participants:[]}}, error:null });
+    await Promise.all([firstHeartbeat, secondHeartbeat, firstRoster, secondRoster]);
+    const thirdHeartbeat = controller.heartbeat();
+    const thirdRoster = controller.refreshRoster();
+    equal(client.calls.heartbeat.length, 2, 'Studio heartbeat single-flight releases after completion');
+    equal(client.calls.roster.length, 3, 'Studio roster single-flight releases after completion');
+    await Promise.all([thirdHeartbeat, thirdRoster]);
+    let rejectHeartbeat;
+    const rejectedHeartbeatGate = new Promise((resolve, reject) => { rejectHeartbeat = reject; });
+    let rejectRoster;
+    const rejectedRosterGate = new Promise((resolve, reject) => { rejectRoster = reject; });
+    client.heartbeatLiveRoom = async function(roomId, participantId) { this.calls.heartbeat.push([roomId, participantId]); return rejectedHeartbeatGate; };
+    client.getLiveRoomRoster = async function(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return rejectedRosterGate; };
+    const failedHeartbeatFirst = controller.heartbeat();
+    const failedHeartbeatSecond = controller.heartbeat();
+    const failedRosterFirst = controller.refreshRoster();
+    const failedRosterSecond = controller.refreshRoster();
+    check(failedHeartbeatFirst === failedHeartbeatSecond, 'Studio rejected heartbeats share one promise');
+    check(failedRosterFirst === failedRosterSecond, 'Studio rejected roster reads share one promise');
+    equal(client.calls.heartbeat.length, 3, 'Studio rejected heartbeats make one request');
+    equal(client.calls.roster.length, 4, 'Studio rejected roster reads make one request');
+    rejectHeartbeat(new Error('heartbeat rejected'));
+    rejectRoster(new Error('roster rejected'));
+    const failedOutcomes = await Promise.allSettled([failedHeartbeatFirst, failedHeartbeatSecond, failedRosterFirst, failedRosterSecond]);
+    check(failedOutcomes.every(outcome => outcome.status === 'rejected'), 'Studio shared rejections reach all callers');
+    client.heartbeatLiveRoom = async function(roomId, participantId) { this.calls.heartbeat.push([roomId, participantId]); return {success:true,data:{room:{roomId,status:'active'}},error:null}; };
+    client.getLiveRoomRoster = async function(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return {success:true,data:{roster:{activePlayerCount:1,participants:[]}},error:null}; };
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    equal(client.calls.heartbeat.length, 4, 'Studio heartbeat single-flight releases after rejection');
+    equal(client.calls.roster.length, 5, 'Studio roster single-flight releases after rejection');
   }
 
   {
@@ -378,18 +439,142 @@ const publication = { available: true, campaignId: 'camp-1', publicationId: 'pub
     equal(storage.clearCalls(), 1, 'host-required roster failure clears context');
   }
 
+  {
+    const client = makeClient();
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-race', setIntervalImpl: () => 1, clearIntervalImpl: () => {} });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const delayedRoster = createDeferred();
+    client.getLiveRoomRoster = async function(roomId, participantId) { this.calls.roster.push([roomId, participantId]); return delayedRoster.promise; };
+    client.heartbeatLiveRoom = async function(roomId, participantId) { this.calls.heartbeat.push([roomId, participantId]); return { success:false, data:null, error:{code:'ROOM_EXPIRED',message:'Esta sesión finalizó por inactividad.',retryable:false} }; };
+    const staleRosterPromise = controller.refreshRoster();
+    const expired = await controller.heartbeat();
+    equal(expired.status, 'EXPIRED', 'terminal heartbeat expires Studio host controller');
+    delayedRoster.resolve({ success:true, data:{roster:{activePlayerCount:3,participants:[]}}, error:null });
+    await staleRosterPromise;
+    equal(controller.getState().status, 'EXPIRED', 'late roster success does not reactivate Studio host controller');
+  }
+
+  {
+    const states = [];
+    const client = makeClient();
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-destroy', setIntervalImpl: () => 1, clearIntervalImpl: () => {}, onStateChange(state) { states.push(state); } });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const before = states.length;
+    const delayedHeartbeat = createDeferred();
+    client.heartbeatLiveRoom = async function(roomId, participantId) { this.calls.heartbeat.push([roomId, participantId]); return delayedHeartbeat.promise; };
+    const pending = controller.heartbeat();
+    controller.destroy();
+    delayedHeartbeat.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    await pending;
+    equal(states.length, before, 'late response after destroy emits no new Studio host state');
+    equal(controller.getState().status, 'ACTIVE', 'late response after destroy does not change Studio host state snapshot');
+  }
+
+  {
+    const client = makeClient();
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-identity', setIntervalImpl: () => 1, clearIntervalImpl: () => {} });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    const firstDeferred = createDeferred();
+    const secondDeferred = createDeferred();
+    let heartbeatCallIndex = 0;
+    client.heartbeatLiveRoom = async function(roomId, participantId) {
+      this.calls.heartbeat.push([roomId, participantId]);
+      heartbeatCallIndex += 1;
+      return heartbeatCallIndex === 1 ? firstDeferred.promise : secondDeferred.promise;
+    };
+    const first = controller.heartbeat();
+    const restorePromise = controller.restore();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    check(client.calls.heartbeat.length >= 2, 'Studio restore reached second heartbeat request');
+    const second = controller.heartbeat();
+    check(first !== second, 'Studio lifecycle reset creates new in-flight heartbeat promise');
+    firstDeferred.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    await first;
+    const shared = controller.heartbeat();
+    check(shared === second, 'Studio old heartbeat resolution does not release newer promise');
+    secondDeferred.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    await Promise.all([second, shared, restorePromise]);
+  }
+
+  {
+    let currentNow = 1000;
+    const client = makeClient();
+    const storage = makeStorage();
+    const controller = api.createHostController({ client, storage, participantIdFactory: () => 'host-foreground', setIntervalImpl: () => 1, clearIntervalImpl: () => {}, now: () => currentNow });
+    controller.setPublication(publication);
+    await controller.createRoom();
+    equal(controller.getState().status, 'ACTIVE', 'Studio foreground gating starts from active state');
+    const heartbeatA = createDeferred();
+    const heartbeatB = createDeferred();
+    const heartbeatC = createDeferred();
+    const rosterA = createDeferred();
+    const rosterB = createDeferred();
+    const rosterC = createDeferred();
+    const heartbeatQueue = [heartbeatA, heartbeatB, heartbeatC];
+    const rosterQueue = [rosterA, rosterB, rosterC];
+    client.calls.heartbeat = [];
+    client.calls.roster = [];
+    client.heartbeatLiveRoom = async function(roomId, participantId) {
+      this.calls.heartbeat.push([roomId, participantId]);
+      const next = heartbeatQueue.shift();
+      return next ? next.promise : { success:true, data:{room:{roomId:roomId,campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null };
+    };
+    client.getLiveRoomRoster = async function(roomId, participantId) {
+      this.calls.roster.push([roomId, participantId]);
+      const next = rosterQueue.shift();
+      return next ? next.promise : { success:true, data:{roster:{activePlayerCount:1,participants:[]}}, error:null };
+    };
+    equal(controller.refreshAfterForeground(), true, 'Studio foreground first call accepted');
+    heartbeatA.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    rosterA.resolve({ success:true, data:{roster:{activePlayerCount:1,participants:[]}}, error:null });
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    equal(client.calls.heartbeat.length, 1, 'Studio foreground first call triggers heartbeat');
+    equal(client.calls.roster.length, 1, 'Studio foreground first call triggers roster');
+    currentNow = 20000;
+    equal(controller.refreshAfterForeground(), false, 'Studio foreground under 30s rejected');
+    equal(client.calls.heartbeat.length, 1, 'Studio foreground under 30s does not trigger heartbeat');
+    equal(client.calls.roster.length, 1, 'Studio foreground under 30s does not trigger roster');
+    currentNow = 31000;
+    equal(controller.refreshAfterForeground(), true, 'Studio foreground at 30s accepted');
+    heartbeatB.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    rosterB.resolve({ success:true, data:{roster:{activePlayerCount:1,participants:[]}}, error:null });
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    equal(client.calls.heartbeat.length, 2, 'Studio foreground at 30s triggers heartbeat');
+    equal(client.calls.roster.length, 2, 'Studio foreground at 30s triggers roster');
+    currentNow = 1;
+    equal(controller.refreshAfterForeground(), true, 'Studio foreground accepts clock rollback');
+    heartbeatC.resolve({ success:true, data:{room:{roomId:'room-abc',campaignId:'camp-1',publicationId:'pub-1',status:'active'}}, error:null });
+    rosterC.resolve({ success:true, data:{roster:{activePlayerCount:1,participants:[]}}, error:null });
+    await Promise.all([controller.heartbeat(), controller.refreshRoster()]);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
   check(source.includes("start.textContent = 'Iniciar partida'"), 'visible start button label exists');
   check(source.includes("startButton.textContent = active ? 'Abrir consola de mando' : 'Iniciar partida'"), 'active Studio action opens command console');
   check(source.includes("new URL('../host/', base)"), 'Studio builds separate host console route');
   check(source.includes("window.location.assign(consoleHref)"), 'Studio redirects host after room creation');
-  check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 15 * 1000'), 'roster refresh interval source present');
+  check(source.includes('ROSTER_REFRESH_INTERVAL_MS = 30 * 1000'), 'roster refresh interval source present');
+  check(source.includes('FOREGROUND_REFRESH_MIN_INTERVAL_MS = 30 * 1000'), 'foreground refresh interval source present');
   check(source.includes('client.getLiveRoomRoster(roomId, participantId)'), 'host controller reads roster with host identity');
   check(source.includes("Esta sesión finalizó por inactividad."), 'expired UX message exists');
   check(!/prompt\s*\(/.test(source), 'host flow never prompts for credentials');
   check(!/password/i.test(source), 'host flow contains no password input concept');
   check(!/deleteLiveRoom|stopLiveRoom|closeLiveRoom/.test(source), 'host flow adds no destructive room operation');
   check(source.includes("url.searchParams.set('roomId', id)"), 'student URL carries roomId');
-  check(source.includes("document.visibilityState === 'visible'"), 'visible-tab heartbeat recovery present');
+  check(source.includes('controller.refreshAfterForeground();'), 'visibility and focus listeners route through foreground gate');
+  check(!source.includes("controller.heartbeat(); controller.refreshRoster();"), 'visibility/focus listeners avoid direct heartbeat and roster calls');
+  check(source.includes('refreshAfterForeground: refreshAfterForeground'), 'Studio controller exposes refreshAfterForeground');
   check(source.includes("campaignName: text(campaignNameProvider())"), 'host context stores display campaign name without secrets');
   check(source.includes("document.getElementById('campaign-name-input')"), 'Studio supplies visible campaign name to host context');
   check(source.includes('publicationApi.getPublication(launch.publicationId)'), 'Studio reads exact cached immutable publication');

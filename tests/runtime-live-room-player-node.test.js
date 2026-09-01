@@ -59,7 +59,7 @@ vm.runInContext(source, context, { filename: sourcePath });
 const api = windowStub.CRIOS_RUNTIME_LIVE_ROOM_PLAYER;
 
 check(Boolean(api), 'API exported');
-eq(api.version, '1.3.0', 'version');
+eq(api.version, '1.4.0', 'version');
 eq(api.heartbeatIntervalMs, 120000, 'heartbeat interval');
 eq(api.contextKey, 'crios-live-room-player-context-v1', 'context key');
 eq(api.expiredMessage, 'Esta sesión finalizó por inactividad.', 'expired message');
@@ -129,6 +129,13 @@ function makeTimer() {
     cleared: () => cleared,
     active: () => Boolean(cb)
   };
+}
+
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 (async () => {
@@ -305,6 +312,67 @@ function makeTimer() {
     eq(state.lastError.message,'Esta sesión finalizó por inactividad.','heartbeat expiry exact message');
     eq(timer.active(),false,'expiry stops timer');
     eq(storage.inspect(),null,'expiry clears context');
+  }
+
+  {
+    const storage=makeStorage();
+    let heartbeatCalls=0;
+    let resolveHeartbeat;
+    const heartbeatGate=new Promise(resolve=>{resolveHeartbeat=resolve;});
+    const client={
+      available:()=>true,
+      async getLiveRoom(){return successRoom({room:room()});},
+      async joinLiveRoom(id,p){return successRoom({room:room(),presence:presence(p)});},
+      async heartbeatLiveRoom(){heartbeatCalls+=1;return heartbeatGate;}
+    };
+    const controller=api.createPlayerController({client,storage,participantIdFactory:()=> 'player-single-flight',setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+    await controller.start(launch);
+    const first=controller.heartbeat();
+    const second=controller.heartbeat();
+    check(first===second,'concurrent heartbeats share one promise');
+    eq(heartbeatCalls,1,'concurrent heartbeats make one request');
+    resolveHeartbeat(successRoom({room:room()}));
+    await Promise.all([first,second]);
+    const third=controller.heartbeat();
+    eq(heartbeatCalls,2,'heartbeat single-flight releases after completion');
+    eq((await third).status,'ACTIVE','heartbeat after release remains active');
+    let rejectHeartbeat;
+    const rejectedHeartbeatGate=new Promise((resolve,reject)=>{rejectHeartbeat=reject;});
+    client.heartbeatLiveRoom=async function(){heartbeatCalls+=1;return rejectedHeartbeatGate;};
+    const failedFirst=controller.heartbeat();
+    const failedSecond=controller.heartbeat();
+    check(failedFirst===failedSecond,'rejected concurrent heartbeats share one promise');
+    eq(heartbeatCalls,3,'rejected concurrent heartbeats make one request');
+    rejectHeartbeat(new Error('heartbeat rejected'));
+    const failedOutcomes=await Promise.allSettled([failedFirst,failedSecond]);
+    check(failedOutcomes.every(outcome=>outcome.status==='rejected'),'shared heartbeat rejection reaches all callers');
+    client.heartbeatLiveRoom=async function(){heartbeatCalls+=1;return successRoom({room:room()});};
+    await controller.heartbeat();
+    eq(heartbeatCalls,4,'heartbeat single-flight releases after rejection');
+  }
+
+  {
+    const storage=makeStorage();
+    let nowValue=1000;
+    const states=[];
+    const delayedHeartbeat=createDeferred();
+    const client={
+      available:()=>true,
+      async getLiveRoom(){return successRoom({room:room()});},
+      async joinLiveRoom(id,p){return successRoom({room:room(),presence:presence(p)});},
+      async heartbeatLiveRoom(){return delayedHeartbeat.promise;}
+    };
+    const controller=api.createPlayerController({client,storage,participantIdFactory:()=> 'player-destroy-race',setIntervalImpl:()=>1,clearIntervalImpl:()=>{},now:()=>nowValue,onStateChange:function(state){states.push(state);}});
+    await controller.start(launch);
+    const beforeDestroyHeartbeatAt=controller.getState().lastHeartbeatAt;
+    const beforeDestroyStates=states.length;
+    nowValue=9000;
+    const pending=controller.heartbeat();
+    controller.destroy();
+    delayedHeartbeat.resolve(successRoom({room:room()}));
+    await pending;
+    eq(controller.getState().lastHeartbeatAt,beforeDestroyHeartbeatAt,'late heartbeat after destroy does not update timestamp');
+    eq(states.length,beforeDestroyStates,'late heartbeat after destroy emits no new state');
   }
 
   {

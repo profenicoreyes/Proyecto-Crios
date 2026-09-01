@@ -97,7 +97,7 @@
     var gameStateContract = opts.gameStateContract || window.CRIOS_REMOTE_LIVE_ROOM_GAME_STATE_CONTRACT || null;
     var gameStateModel = opts.gameStateModel || window.CRIOS_LIVE_ROOM_GAME_STATE_MODEL || null;
     var gameStateClientFactory = opts.gameStateClientFactory || window.CRIOS_REMOTE_LIVE_ROOM_GAME_STATE_CLIENT || null;
-    var timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0 ? Math.floor(Number(opts.timeoutMs)) : 15000;
+    var timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0 ? Math.floor(Number(opts.timeoutMs)) : 30000;
 
     function available() {
       return Boolean(contract && endpoint && fetchImpl &&

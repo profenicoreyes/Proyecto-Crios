@@ -2,9 +2,10 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
-  var ROSTER_REFRESH_INTERVAL_MS = 15 * 1000;
+  var ROSTER_REFRESH_INTERVAL_MS = 30 * 1000;
+  var FOREGROUND_REFRESH_MIN_INTERVAL_MS = 30 * 1000;
   var REALTIME_SIGNAL_DEBOUNCE_MS = 300;
   var CLOCK_REFRESH_INTERVAL_MS = 1000;
   var CONTEXT_KEY = 'crios-live-room-host-context-v1';
@@ -161,6 +162,7 @@
     var href = text(opts.href) || window.location.href;
     var setIntervalImpl = opts.setIntervalImpl || window.setInterval.bind(window);
     var clearIntervalImpl = opts.clearIntervalImpl || window.clearInterval.bind(window);
+    var nowImpl = typeof opts.now === 'function' ? opts.now : now;
     var setTimeoutImpl = opts.setTimeoutImpl || (typeof window.setTimeout === 'function'
       ? window.setTimeout.bind(window)
       : function(callback){ if (typeof callback === 'function') callback(); return 0; });
@@ -173,6 +175,10 @@
     var state = {status:'LOADING',context:null,room:null,roster:null,lastSyncAt:null,lastError:null,trend:[],gameState:null,lastGameStateSyncAt:null,lastGameStateError:null};
     var heartbeatTimer = null;
     var rosterTimer = null;
+    var heartbeatInFlight = null;
+    var rosterInFlight = null;
+    var presenceRequestGeneration = 0;
+    var lastForegroundRefreshAt = null;
     var signalRefreshTimer = null;
     var realtimeTransport = null;
     var realtimeSubscribedRoomId = '';
@@ -185,6 +191,19 @@
       state = Object.assign({}, state, patch || {});
       try { onStateChange(Object.freeze(Object.assign({}, state, {trend:Object.freeze(state.trend.slice())}))); } catch (ignore) {}
       return state;
+    }
+
+    function resetPresenceRequests(){
+      presenceRequestGeneration += 1;
+      heartbeatInFlight = null;
+      rosterInFlight = null;
+      lastForegroundRefreshAt = null;
+      return presenceRequestGeneration;
+    }
+
+    function activePresenceRequest(generation, roomId, participantId){
+      return !destroyed && generation === presenceRequestGeneration && state.status === 'ACTIVE' && state.context &&
+        text(state.context.roomId) === roomId && text(state.context.participantId) === participantId;
     }
 
     function stopTimers(){
@@ -222,6 +241,7 @@
     }
 
     function fatal(error){
+      resetPresenceRequests();
       stopTimers();
       stopGameStateReconciliation();
       detachRealtime();
@@ -232,21 +252,34 @@
     function recordTrend(roster){
       if (!roster || !Number.isInteger(roster.activePlayerCount)) return;
       var samples = state.trend.slice();
-      samples.push({at:now(),count:roster.activePlayerCount});
+      samples.push({at:nowImpl(),count:roster.activePlayerCount});
       if (samples.length > MAX_TREND_SAMPLES) samples = samples.slice(samples.length - MAX_TREND_SAMPLES);
       state.trend = samples;
     }
 
-    async function refreshRoster(){
+    function refreshRoster(){
+      if(rosterInFlight)return rosterInFlight;
+      var request=performRosterRefresh();
+      rosterInFlight=request;
+      request.then(function(){ clearRosterInFlight(request); },function(){ clearRosterInFlight(request); });
+      return request;
+    }
+    function clearRosterInFlight(request){ if (rosterInFlight === request) rosterInFlight = null; }
+
+    async function performRosterRefresh(){
       if (destroyed || state.status !== 'ACTIVE' || !state.context) return state;
-      var response = await client.getLiveRoomRoster(state.context.roomId, state.context.participantId);
+      var roomId = text(state.context.roomId);
+      var participantId = text(state.context.participantId);
+      var requestGeneration = presenceRequestGeneration;
+      var response = await client.getLiveRoomRoster(roomId, participantId);
+      if (!activePresenceRequest(requestGeneration, roomId, participantId)) return state;
       if (!response || response.success !== true || !response.data || !response.data.roster) {
         var error = response && response.error || {code:'LIVE_ROOM_ROSTER_FAILED',message:'No se pudo actualizar la presencia.'};
         if (['ROOM_EXPIRED','ROOM_UNAVAILABLE','PARTICIPANT_UNAVAILABLE','CAPABILITY_INVALID','CAPABILITY_STORAGE_UNAVAILABLE','HOST_REQUIRED'].indexOf(error.code) >= 0) return fatal(error);
         return emit({status:'ACTIVE',lastError:error});
       }
       recordTrend(response.data.roster);
-      return emit({status:'ACTIVE',roster:response.data.roster,lastSyncAt:now(),lastError:null,trend:state.trend});
+      return emit({status:'ACTIVE',roster:response.data.roster,lastSyncAt:nowImpl(),lastError:null,trend:state.trend});
     }
 
     function gameStateError(code,message,retryable){
@@ -257,12 +290,38 @@
       return Boolean(error&&['ROOM_EXPIRED','ROOM_UNAVAILABLE','PARTICIPANT_UNAVAILABLE','CAPABILITY_INVALID','CAPABILITY_STORAGE_UNAVAILABLE','HOST_REQUIRED'].indexOf(error.code)>=0);
     }
 
-    async function performGameStateRefresh(){
+    function isSchedulerRefreshMetadata(value, expectedRoomId, expectedParticipantId){
+      if(!value||typeof value!=='object'||Array.isArray(value))return false;
+      if(typeof expectedRoomId!=='undefined'||typeof expectedParticipantId!=='undefined')return false;
+      return ['signal','visibility','manual','periodic','retry'].indexOf(text(value.reason))>=0&&
+        Number.isInteger(value.attempt)&&value.attempt>=1&&
+        Number.isInteger(value.requestedAt);
+    }
+
+    async function performGameStateRefresh(expectedGeneration, expectedRoomId, expectedParticipantId){
       if(destroyed||state.status!=='ACTIVE'||!state.context||!gameStateClient){
         return {success:false,retryable:false,terminal:true};
       }
+      var schedulerRefresh = isSchedulerRefreshMetadata(expectedGeneration, expectedRoomId, expectedParticipantId);
+      var usesExpectedContext = !schedulerRefresh && (
+        typeof expectedGeneration !== 'undefined' ||
+        typeof expectedRoomId !== 'undefined' ||
+        typeof expectedParticipantId !== 'undefined');
+      var normalizedExpectedRoomId = text(expectedRoomId);
+      var normalizedExpectedParticipantId = text(expectedParticipantId);
+      if (usesExpectedContext) {
+        if (!Number.isInteger(expectedGeneration) || !normalizedExpectedRoomId || !normalizedExpectedParticipantId) {
+          return {success:false,retryable:false,terminal:true};
+        }
+        if (!activePresenceRequest(expectedGeneration, normalizedExpectedRoomId, normalizedExpectedParticipantId)) {
+          return {success:false,retryable:false,terminal:true};
+        }
+      }
       var response;
       try{response=await gameStateClient.getLiveRoomGameState();}catch(ignoreGameStateRead){response=null;}
+      if (usesExpectedContext && !activePresenceRequest(expectedGeneration, normalizedExpectedRoomId, normalizedExpectedParticipantId)) {
+        return {success:false,retryable:false,terminal:true};
+      }
       if(!response||response.success!==true||!response.data||!response.data.gameState){
         var error=response&&response.error||gameStateError('LIVE_ROOM_GAME_STATE_READ_FAILED','No se pudo actualizar el progreso compartido.',true);
         if(isFatalGameStateError(error)){
@@ -273,11 +332,11 @@
         emit({status:'ACTIVE',lastGameStateError:error});
         return {success:false,retryable:retryable,terminal:!retryable};
       }
-      emit({status:'ACTIVE',gameState:response.data.gameState,lastGameStateSyncAt:now(),lastGameStateError:null});
+      emit({status:'ACTIVE',gameState:response.data.gameState,lastGameStateSyncAt:nowImpl(),lastGameStateError:null});
       return {success:true,retryable:true,terminal:false};
     }
 
-    async function initializeGameState(context){
+    async function initializeGameState(context, lifecycleGeneration){
       stopGameStateReconciliation();
       if(!context||!Array.isArray(context.missionOrder)||!context.missionOrder.length){
         emit({status:'ACTIVE',lastGameStateError:gameStateError('LIVE_ROOM_GAME_STATE_CONTEXT_UNAVAILABLE','El progreso compartido no está disponible para esta sala.',false)});
@@ -300,7 +359,11 @@
         emit({status:'ACTIVE',lastGameStateError:gameStateError('LIVE_ROOM_GAME_STATE_CLIENT_UNAVAILABLE','El progreso compartido no está disponible en esta consola.',false)});
         return false;
       }
-      var initialOutcome=await performGameStateRefresh();
+      var initialOutcome=await performGameStateRefresh(
+        Number.isInteger(lifecycleGeneration) ? lifecycleGeneration : null,
+        context.roomId,
+        context.participantId
+      );
       if(destroyed||state.status!=='ACTIVE'||initialOutcome.terminal)return false;
       if(!gameStateReconciliationFactory||typeof gameStateReconciliationFactory.createScheduler!=='function')return true;
       var created;
@@ -366,15 +429,42 @@
       }
     }
 
-    async function heartbeat(){
+    function heartbeat(){
+      if(heartbeatInFlight)return heartbeatInFlight;
+      var request=performHeartbeat();
+      heartbeatInFlight=request;
+      request.then(function(){ clearHeartbeatInFlight(request); },function(){ clearHeartbeatInFlight(request); });
+      return request;
+    }
+    function clearHeartbeatInFlight(request){ if (heartbeatInFlight === request) heartbeatInFlight = null; }
+
+    async function performHeartbeat(){
       if (destroyed || state.status !== 'ACTIVE' || !state.context) return state;
-      var response = await client.heartbeatLiveRoom(state.context.roomId, state.context.participantId);
+      var roomId = text(state.context.roomId);
+      var participantId = text(state.context.participantId);
+      var requestGeneration = presenceRequestGeneration;
+      var response = await client.heartbeatLiveRoom(roomId, participantId);
+      if (!activePresenceRequest(requestGeneration, roomId, participantId)) return state;
       if (!response || response.success !== true) {
         var error = response && response.error || {code:'LIVE_ROOM_HEARTBEAT_FAILED',message:'No se pudo actualizar la presencia del anfitrión.'};
         if (['ROOM_EXPIRED','ROOM_UNAVAILABLE','PARTICIPANT_UNAVAILABLE','CAPABILITY_STORAGE_UNAVAILABLE'].indexOf(error.code) >= 0) return fatal(error);
         return emit({status:'ACTIVE',lastError:error});
       }
       return emit({status:'ACTIVE',room:response.data && response.data.room || state.room,lastError:null});
+    }
+
+    function refreshAfterForeground(){
+      if (destroyed || state.status !== 'ACTIVE') return false;
+      var current = Number(nowImpl());
+      if (!Number.isFinite(current)) current = Date.now();
+      if (lastForegroundRefreshAt !== null) {
+        var elapsed = current - lastForegroundRefreshAt;
+        if (elapsed >= 0 && elapsed < FOREGROUND_REFRESH_MIN_INTERVAL_MS) return false;
+      }
+      lastForegroundRefreshAt = current;
+      heartbeat();
+      refreshRoster();
+      return true;
     }
 
     async function start(){
@@ -385,7 +475,9 @@
       state.context = context;
       if (!validateUrlContext(context, href)) return fatal({code:'HOST_CONTEXT_URL_MISMATCH',message:'La URL de la consola no coincide con la sala guardada.'});
 
+      var lifecycleGeneration = resetPresenceRequests();
       var response = await client.getLiveRoom(context.roomId);
+      if (destroyed || lifecycleGeneration !== presenceRequestGeneration || !state.context || text(state.context.roomId) !== text(context.roomId) || text(state.context.participantId) !== text(context.participantId)) return state;
       if (!response || response.success !== true || !response.data || !response.data.room) {
         var error = response && response.error || {code:'ROOM_UNAVAILABLE',message:'La sala ya no está disponible.'};
         return fatal(error);
@@ -397,18 +489,20 @@
       emit({status:'ACTIVE',room:room,lastError:null});
       attachRealtime(context.roomId);
       await heartbeat();
+      if (destroyed || lifecycleGeneration !== presenceRequestGeneration || !state.context || text(state.context.roomId) !== text(context.roomId) || text(state.context.participantId) !== text(context.participantId)) return state;
       await refreshRoster();
-      await initializeGameState(context);
-      if(destroyed||state.status!=='ACTIVE')return state;
+      if (destroyed || lifecycleGeneration !== presenceRequestGeneration || !state.context || text(state.context.roomId) !== text(context.roomId) || text(state.context.participantId) !== text(context.participantId)) return state;
+      await initializeGameState(context, lifecycleGeneration);
+      if (!activePresenceRequest(lifecycleGeneration, text(context.roomId), text(context.participantId))) return state;
       heartbeatTimer = setIntervalImpl(function(){ heartbeat(); }, HEARTBEAT_INTERVAL_MS);
       rosterTimer = setIntervalImpl(function(){ refreshRoster(); }, ROSTER_REFRESH_INTERVAL_MS);
       return state;
     }
 
     function getState(){ return Object.assign({}, state, {trend:state.trend.slice()}); }
-    function destroy(){ destroyed = true; stopTimers(); stopGameStateReconciliation(); detachRealtime(); }
+    function destroy(){ destroyed = true; resetPresenceRequests(); stopTimers(); stopGameStateReconciliation(); detachRealtime(); }
 
-    return Object.freeze({start:start,heartbeat:heartbeat,refreshRoster:refreshRoster,refreshGameState:refreshGameState,setGameStateVisibility:setGameStateVisibility,getState:getState,destroy:destroy});
+    return Object.freeze({start:start,heartbeat:heartbeat,refreshRoster:refreshRoster,refreshAfterForeground:refreshAfterForeground,refreshGameState:refreshGameState,setGameStateVisibility:setGameStateVisibility,getState:getState,destroy:destroy});
   }
 
   function renderTrend(samples){
@@ -590,8 +684,9 @@
     var clockTimer=window.setInterval(updateClock,CLOCK_REFRESH_INTERVAL_MS);
     document.addEventListener('visibilitychange',function(){
       controller.setGameStateVisibility(document.visibilityState!=='hidden');
-      if(document.visibilityState==='visible'&&controller.getState().status==='ACTIVE'){controller.heartbeat();controller.refreshRoster();}
+      if(document.visibilityState==='visible')controller.refreshAfterForeground();
     });
+    if(typeof window.addEventListener==='function')window.addEventListener('focus',function(){controller.refreshAfterForeground();});
     window.addEventListener('beforeunload',function(){window.clearInterval(clockTimer);controller.destroy();});
     window.CRIOS_HOST_CONSOLE_CONTROLLER=controller;
   }
@@ -600,6 +695,7 @@
     version:VERSION,
     heartbeatIntervalMs:HEARTBEAT_INTERVAL_MS,
     rosterRefreshIntervalMs:ROSTER_REFRESH_INTERVAL_MS,
+    foregroundRefreshMinIntervalMs:FOREGROUND_REFRESH_MIN_INTERVAL_MS,
     realtimeSignalDebounceMs:REALTIME_SIGNAL_DEBOUNCE_MS,
     contextKey:CONTEXT_KEY,
     presenceSignalType:PRESENCE_SIGNAL_TYPE,

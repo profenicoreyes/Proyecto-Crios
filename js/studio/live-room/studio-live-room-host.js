@@ -2,9 +2,10 @@
 (function(){
   'use strict';
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
   var HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
-  var ROSTER_REFRESH_INTERVAL_MS = 15 * 1000;
+  var ROSTER_REFRESH_INTERVAL_MS = 30 * 1000;
+  var FOREGROUND_REFRESH_MIN_INTERVAL_MS = 30 * 1000;
   var CONTEXT_KEY = 'crios-live-room-host-context-v1';
 
   function clone(value) {
@@ -164,6 +165,10 @@
     var state = baseState(client && typeof client.available === 'function' && client.available() ? 'IDLE' : 'UNAVAILABLE');
     var timer = null;
     var rosterTimer = null;
+    var heartbeatInFlight = null;
+    var rosterInFlight = null;
+    var presenceRequestGeneration = 0;
+    var lastForegroundRefreshAt = null;
     var destroyed = false;
 
     function emit(next) {
@@ -173,6 +178,19 @@
       return snapshot;
     }
 
+
+    function resetPresenceRequests() {
+      presenceRequestGeneration += 1;
+      heartbeatInFlight = null;
+      rosterInFlight = null;
+      lastForegroundRefreshAt = null;
+      return presenceRequestGeneration;
+    }
+
+    function activePresenceRequest(generation, roomId, participantId) {
+      return !destroyed && generation === presenceRequestGeneration && state.status === 'ACTIVE' && state.room &&
+        text(state.room.roomId) === roomId && text(state.participantId) === participantId;
+    }
     function stopHeartbeat() {
       if (timer !== null) {
         try { clearIntervalImpl(timer); } catch (ignore) {}
@@ -259,8 +277,10 @@
       }
 
       var publication = state.publication;
+      var lifecycleGeneration = resetPresenceRequests();
       emit({status:'CREATING', busy:true, participantId:participantId, lastError:null});
       var response = await client.createLiveRoom(publication.campaignId, publication.publicationId, participantId);
+      if (destroyed || lifecycleGeneration !== presenceRequestGeneration) return getState();
       if (!response || response.success !== true || !response.data || !response.data.room) {
         return emit({status:'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:frozen(response && response.error || {code:'LIVE_ROOM_CREATE_FAILED', message:'No se pudo iniciar la partida.'})});
       }
@@ -278,16 +298,28 @@
       return refreshRoster();
     }
 
-    async function heartbeat() {
+    function heartbeat() {
+      if (heartbeatInFlight) return heartbeatInFlight;
+      var request = performHeartbeat();
+      heartbeatInFlight = request;
+      request.then(function(){ clearHeartbeatInFlight(request); }, function(){ clearHeartbeatInFlight(request); });
+      return request;
+    }
+    function clearHeartbeatInFlight(request) { if (heartbeatInFlight === request) heartbeatInFlight = null; }
+
+    async function performHeartbeat() {
       if (destroyed || state.status !== 'ACTIVE' || !state.room || !state.participantId) return getState();
       var roomId = text(state.room.roomId);
       var participantId = text(state.participantId);
+      var requestGeneration = presenceRequestGeneration;
       var response = await client.heartbeatLiveRoom(roomId, participantId);
+      if (!activePresenceRequest(requestGeneration, roomId, participantId)) return getState();
       if (!response || response.success !== true) {
         var error = frozen(response && response.error || {code:'LIVE_ROOM_HEARTBEAT_FAILED', message:'No se pudo actualizar la presencia del anfitrión.'});
         if (error.code === 'ROOM_EXPIRED' || error.code === 'ROOM_UNAVAILABLE' || error.code === 'PARTICIPANT_UNAVAILABLE' || error.code === 'CAPABILITY_STORAGE_UNAVAILABLE') {
           stopHeartbeat();
           stopRosterPolling();
+          resetPresenceRequests();
           clearContext(roomId, participantId);
           return emit({status:error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'ERROR', busy:false, room:null, participantId:null, playerHref:null, lastError:error});
         }
@@ -297,19 +329,31 @@
       return emit({status:'ACTIVE', busy:false, room:room, lastError:null, lastHeartbeatAt:now()});
     }
 
-    async function refreshRoster() {
+    function refreshRoster() {
+      if (rosterInFlight) return rosterInFlight;
+      var request = performRosterRefresh();
+      rosterInFlight = request;
+      request.then(function(){ clearRosterInFlight(request); }, function(){ clearRosterInFlight(request); });
+      return request;
+    }
+    function clearRosterInFlight(request) { if (rosterInFlight === request) rosterInFlight = null; }
+
+    async function performRosterRefresh() {
       if (destroyed || state.status !== 'ACTIVE' || !state.room || !state.participantId) return getState();
       if (!client || typeof client.getLiveRoomRoster !== 'function') {
         return emit({status:'ACTIVE', lastRosterError:frozen({code:'LIVE_ROOM_ROSTER_UNAVAILABLE', message:'No se pudo consultar la lista de jugadores conectados.'})});
       }
       var roomId = text(state.room.roomId);
       var participantId = text(state.participantId);
+      var requestGeneration = presenceRequestGeneration;
       var response = await client.getLiveRoomRoster(roomId, participantId);
+      if (!activePresenceRequest(requestGeneration, roomId, participantId)) return getState();
       if (!response || response.success !== true || !response.data || !response.data.roster) {
         var error = frozen(response && response.error || {code:'LIVE_ROOM_ROSTER_FAILED', message:'No se pudo actualizar la lista de jugadores conectados.'});
         if (error.code === 'ROOM_EXPIRED' || error.code === 'ROOM_UNAVAILABLE' || error.code === 'PARTICIPANT_UNAVAILABLE' || error.code === 'CAPABILITY_INVALID' || error.code === 'CAPABILITY_STORAGE_UNAVAILABLE' || error.code === 'HOST_REQUIRED') {
           stopHeartbeat();
           stopRosterPolling();
+          resetPresenceRequests();
           clearContext(roomId, participantId);
           return emit({status:error.code === 'ROOM_EXPIRED' ? 'EXPIRED' : 'ERROR', busy:false, room:null, participantId:null, playerHref:null, roster:null, lastRosterError:error, lastError:error});
         }
@@ -337,8 +381,10 @@
         return emit({status:'UNAVAILABLE', room:null, participantId:null, playerHref:null});
       }
 
+      var lifecycleGeneration = resetPresenceRequests();
       emit({status:'RESTORING', busy:true, publication:frozen({campaignId:campaignId,publicationId:publicationId,href:runtimeHref,missionOrder:missionOrder}), participantId:participantId, playerHref:playerHref, lastError:null});
       var response = await client.getLiveRoom(roomId);
+      if (destroyed || lifecycleGeneration !== presenceRequestGeneration) return getState();
       if (!response || response.success !== true || !response.data || !response.data.room) {
         var error = frozen(response && response.error || {code:'ROOM_UNAVAILABLE',message:'La sala ya no está disponible.'});
         clearContext(roomId, participantId);
@@ -360,10 +406,25 @@
       return refreshRoster();
     }
 
+    function refreshAfterForeground() {
+      if (destroyed || state.status !== 'ACTIVE') return false;
+      var current = Number(now());
+      if (!Number.isFinite(current)) current = Date.now();
+      if (lastForegroundRefreshAt !== null) {
+        var elapsed = current - lastForegroundRefreshAt;
+        if (elapsed >= 0 && elapsed < FOREGROUND_REFRESH_MIN_INTERVAL_MS) return false;
+      }
+      lastForegroundRefreshAt = current;
+      heartbeat();
+      refreshRoster();
+      return true;
+    }
+
     function getState() { return frozen(state); }
 
     function destroy() {
       destroyed = true;
+      resetPresenceRequests();
       stopHeartbeat();
       stopRosterPolling();
     }
@@ -374,6 +435,7 @@
       createRoom: createRoom,
       heartbeat: heartbeat,
       refreshRoster: refreshRoster,
+      refreshAfterForeground: refreshAfterForeground,
       restore: restore,
       getState: getState,
       destroy: destroy
@@ -540,8 +602,9 @@
     }
 
     document.addEventListener('visibilitychange', function(){
-      if (document.visibilityState === 'visible' && controller.getState().status === 'ACTIVE') { controller.heartbeat(); controller.refreshRoster(); }
+      if (document.visibilityState === 'visible') controller.refreshAfterForeground();
     });
+    if (typeof window.addEventListener === 'function') window.addEventListener('focus', function(){ controller.refreshAfterForeground(); });
 
     window.CRIOS_STUDIO_LIVE_ROOM_HOST_CONTROLLER = controller;
     return true;
@@ -559,6 +622,7 @@
     version: VERSION,
     heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
     rosterRefreshIntervalMs: ROSTER_REFRESH_INTERVAL_MS,
+    foregroundRefreshMinIntervalMs: FOREGROUND_REFRESH_MIN_INTERVAL_MS,
     contextKey: CONTEXT_KEY,
     buildPlayerHref: buildPlayerHref,
     buildHostConsoleHref: buildHostConsoleHref,

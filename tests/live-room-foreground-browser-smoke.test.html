@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRIOS · live-room foreground browser smoke</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#041724;color:#dff8ff}
+    body{max-width:920px;margin:0 auto;padding:28px}
+    h1{font-size:1.35rem;margin:0 0 8px}
+    #status{font-weight:800;padding:10px 12px;border:1px solid #5bd7ff;border-radius:8px;background:#08293b}
+    #status[data-state="PASS"]{border-color:#67e8a7;color:#9affc6}
+    #status[data-state="FAIL"]{border-color:#ff748c;color:#ff9aac}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px;border-radius:8px;background:#021019;border:1px solid #17445b}
+    #harnesses{display:none}
+  </style>
+</head>
+<body>
+  <h1>CRIOS · Smoke real de foreground/focus LiveRoom</h1>
+  <p id="status" data-state="RUNNING">RUNNING</p>
+  <pre id="output" aria-live="polite"></pre>
+  <div id="harnesses"></div>
+  <script src="./live-room-foreground-browser-smoke.test.js"></script>
+</body>
+</html>

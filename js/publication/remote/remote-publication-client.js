@@ -77,7 +77,7 @@
       : defaultRequestIdFactory;
     var timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
       ? Math.floor(Number(opts.timeoutMs))
-      : 15000;
+      : 30000;
 
     function available() {
       return Boolean(contract && endpoint && fetchImpl &&
