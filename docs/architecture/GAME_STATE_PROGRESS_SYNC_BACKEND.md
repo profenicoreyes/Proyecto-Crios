@@ -2,9 +2,9 @@
 
 ## Estado
 
-Este documento registra el backend local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f` y no fue desplegada.
+Este documento registra el backend del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap y quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`. Las operaciones base fueron publicadas posteriormente en Apps Script versión 9; el worktree actual contiene además ajustes de resiliencia que no forman parte de esa publicación.
 
-El backend publicado vigente continúa sin conocer `getLiveRoomGameState` ni `completeLiveRoomMission` hasta que exista una autorización de despliegue independiente.
+Una consulta remota no mutante del 31 de agosto de 2026 confirmó que el endpoint publicado reconoce `getLiveRoomGameState` y devuelve `ROOM_UNAVAILABLE` para una sala inexistente. Esto no valida una capability real, `completeLiveRoomMission`, propagación realtime ni carga; el alcance exacto se conserva en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md).
 
 ## Alcance implementado
 
@@ -175,4 +175,4 @@ El cliente remoto, su coordinación Runtime, la señal de invalidación, el reco
 
 El siguiente límite verificable es el despliegue coherente y el smoke real multi-navegador, con observación de carga antes de considerar definitiva la cadencia. Firebase continúa sin ser autoridad.
 
-Un despliegue posterior deberá incluir, como conjunto coherente, `Code.gs`, `PublicationBackend.gs`, `LiveRoomBackend.gs` y `LiveRoomGameStateBackend.gs`, seguido de smoke remoto. Nada de eso está autorizado por este documento.
+Cualquier despliegue adicional del worktree actual deberá incluir, como conjunto coherente, `Code.gs`, `PublicationBackend.gs`, `LiveRoomBackend.gs` y `LiveRoomGameStateBackend.gs`, seguido de smoke remoto. La existencia de Apps Script versión 9 no autoriza esa actualización ni el candidato posterior de resiliencia.

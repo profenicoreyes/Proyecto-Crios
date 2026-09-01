@@ -40,12 +40,14 @@ No capability token or capability hash is returned.
 
 ## Presence semantics
 
-A participant is connected when the server clock is **at or before** `lastSeenAt + 600000 ms`.
+A participant is connected when the server clock is **at or before** `lastSeenAt + 300000 ms`.
 
-- exactly 10 minutes: connected;
-- more than 10 minutes: disconnected.
+- exactly 5 minutes: connected;
+- more than 5 minutes: disconnected.
 
 Room expiration remains separate and unchanged: the room expires when more than 10 minutes pass without valid activity from any host/player.
+
+This five-minute presence window belongs to the later local network-resilience candidate and has no definitive stage identifier yet. The historical A4-003A boundary remains otherwise unchanged.
 
 ## Read-only rule
 

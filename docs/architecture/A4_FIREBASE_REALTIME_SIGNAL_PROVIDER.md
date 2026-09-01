@@ -4,7 +4,7 @@
 
 Firebase Realtime Database es un canal opcional de invalidación para LiveRoom. Apps Script LiveRoom continúa siendo la única fuente autoritativa. Una señal recibida activa el debounce de 300 ms de A4-004A; después, la consola consulta `getLiveRoomRoster` con la identidad autorizada del host y renderiza esa respuesta. El jugador publica una señal únicamente después de un JOIN o HEARTBEAT que Apps Script confirmó correctamente; la señal nunca sustituye esa confirmación.
 
-El polling de roster cada 15000 ms permanece activo aunque Firebase funcione. Un fallo al inicializar el SDK, autenticar, suscribir, leer o escribir se absorbe dentro del proveedor y no interrumpe la sala, heartbeat, recuperación del host ni Compartir.
+El candidato local posterior consulta el roster cada 30000 ms aunque Firebase funcione. Las señales conservan la actualización reactiva y el polling permanece como fallback; un fallo al inicializar el SDK, autenticar, suscribir, leer o escribir se absorbe dentro del proveedor y no interrumpe la sala, heartbeat, recuperación del host ni Compartir.
 
 ## Selección y configuración
 

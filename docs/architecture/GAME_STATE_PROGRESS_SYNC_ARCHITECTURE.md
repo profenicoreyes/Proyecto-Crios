@@ -123,7 +123,7 @@ La implementación debe agregar solamente dos comandos específicos al sobre Liv
 
 La frontera JavaScript se mantiene como un contrato complementario de progreso sobre el mismo protocolo `1.0`. No se amplía silenciosamente el conjunto exacto de operaciones del contrato estable de presencia; el cliente de estado implementado depende explícitamente del nuevo contrato.
 
-El almacenamiento y procesamiento autoritativo local se documentan en [`GAME_STATE_PROGRESS_SYNC_BACKEND.md`](GAME_STATE_PROGRESS_SYNC_BACKEND.md). Ese backend todavía no fue desplegado.
+El almacenamiento y procesamiento autoritativo se documentan en [`GAME_STATE_PROGRESS_SYNC_BACKEND.md`](GAME_STATE_PROGRESS_SYNC_BACKEND.md). Las operaciones base fueron publicadas posteriormente en Apps Script versión 9, pero la release acumulada y el candidato posterior de resiliencia permanecen locales; la evidencia y los límites de la verificación remota están en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md).
 
 ### `getLiveRoomGameState`
 
@@ -206,7 +206,7 @@ La política provisional aplica 300 ms de debounce, hasta 29.700 ms de jitter de
 
 El detalle de composición, degradación y límites de esta política se registra en [`GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md).
 
-La ampliación de reglas Firebase y cualquier despliegue pertenecen a un tramo posterior y requieren autorización explícita.
+La ampliación de reglas Firebase fue publicada posteriormente según la evidencia aportada por el operador. Esto no convierte Firebase en autoridad ni cierra el smoke remoto integral; cualquier despliegue adicional, incluida la resiliencia posterior, conserva autorización explícita separada.
 
 ## Ciclo de vida y persistencia
 
@@ -255,7 +255,7 @@ Toda memoria local, outbox, caché y solicitud se vincula a `roomId + campaignId
 Estos tramos describen orden y evidencia, no asignan identificadores de roadmap:
 
 1. **implementado y validado localmente:** modelo puro y contrato estricto de `LiveRoomGameState`, con pruebas de forma, orden, revisión y unión monotónica;
-2. **implementado y validado localmente:** backend local Apps Script, almacenamiento separado, autorización, expiración, idempotencia y concurrencia, sin despliegue;
+2. **implementado y validado localmente:** backend Apps Script, almacenamiento separado, autorización, expiración, idempotencia y concurrencia; sus operaciones base fueron publicadas posteriormente en versión 9, con validación remota integral todavía pendiente;
 3. **implementado y validado localmente:** cliente remoto de navegador de contexto único, capability inyectada, replay explícito y protección contra regresión de revisión; Runtime lo usa para lectura y completado, mientras la consola lo usa solo para lectura; su contrato operativo se registra en [`GAME_STATE_PROGRESS_SYNC_CLIENT.md`](GAME_STATE_PROGRESS_SYNC_CLIENT.md);
 4. **implementado y validado localmente:** coordinador Runtime post-commit, outbox acotada y proyección separada de progreso personal/compartido; su frontera se registra en [`GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](GAME_STATE_PROGRESS_SYNC_RUNTIME.md);
 5. **implementado y validado localmente:** lectura agregada de solo lectura en consola, señal `game-state-change` y reconciliación con control de carga sintético; su frontera se registra en [`GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md);

@@ -4,7 +4,7 @@
 
 Este documento registra la implementación local de la señal de invalidación, la reconciliación acotada y la lectura agregada del progreso cooperativo de `LiveRoom`. La implementación no tiene un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`, no fue desplegada y no habilita todavía una capacidad disponible para usuarios.
 
-El endpoint Apps Script publicado y las reglas Firebase desplegadas permanecen sin esta ampliación. Toda la evidencia de este documento es local.
+El endpoint Apps Script versión 9 y las reglas Firebase ampliadas fueron publicados después del checkpoint local. Una consulta no mutante confirmó que el endpoint reconoce `getLiveRoomGameState`; la evidencia aportada y sus límites están en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md). El frontend acumulado, la reconciliación aquí descripta y el candidato posterior de resiliencia permanecen locales, y el smoke remoto integral sigue pendiente.
 
 ## Contrato de señal
 
@@ -63,20 +63,20 @@ Las pruebas focales nuevas o ampliadas verifican:
 
 - scheduler puro: 122/122;
 - coordinador Runtime: 79/79;
-- Runtime player: 153/153;
+- Runtime player: 163/163;
 - composición y proyección Runtime: 80/80;
-- consola de mando: 148/148;
-- Studio host: 144/144;
+- consola de mando: 246/246;
+- Studio host: 179/179;
 - proveedor realtime: 58/58;
 - transporte realtime: 34/34.
 
-La regresión Node completa vigente aprueba 38/38 suites y 2888/2888 comprobaciones. Tres smokes autocertificantes en navegador local aprueban 89/89 comprobaciones: 64 de Runtime/proyección y 25 de consola agregada con dos jugadores lógicos, señales tipadas, degradación transitoria, recuperación, lectura exclusiva y ausencia de IDs técnicos o atribución en la UI. Corresponden a una sola instancia con contextos lógicos y no validan el flujo contra servicios desplegados.
+La regresión Node completa vigente aprueba 38/38 suites y 3034/3034 comprobaciones. Tres smokes autocertificantes de progreso en navegador local aprueban 89/89 comprobaciones: 64 de Runtime/proyección y 25 de consola agregada con dos jugadores lógicos, señales tipadas, degradación transitoria, recuperación, lectura exclusiva y ausencia de IDs técnicos o atribución en la UI. Corresponden a una sola instancia con contextos lógicos y no validan el flujo contra servicios desplegados. El smoke complementario de foreground/focus aprueba 36/36 en Runtime, Host y Studio sin red real.
 
 ## Límites pendientes
 
 Permanecen pendientes y requieren autorización y evidencia independientes:
 
-- desplegar de forma coherente Apps Script y las reglas Firebase ampliadas;
+- publicar de forma coherente el frontend acumulado y el backend exacto del candidato, con reconfirmación autenticada de las reglas Firebase;
 - ejecutar smoke contra el endpoint y el proyecto Firebase reales;
 - validar dos o más navegadores o dispositivos independientes, incluida red degradada, recarga y expiración;
 - observar carga y latencia reales antes de declarar definitiva la cadencia;

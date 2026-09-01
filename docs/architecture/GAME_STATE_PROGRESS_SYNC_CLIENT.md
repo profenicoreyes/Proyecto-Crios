@@ -4,7 +4,7 @@
 
 Este documento registra el cliente remoto local del primer progreso cooperativo de `LiveRoom`. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f` y no fue desplegada. Runtime carga el cliente para lectura y completado; la consola de mando lo carga con un contexto host para lectura exclusiva; Studio permanece fuera y usa solamente el modelo puro.
 
-El endpoint publicado vigente continúa sin estas operaciones hasta una autorización de despliegue independiente. La existencia del cliente local no convierte el progreso compartido en una capacidad disponible para usuarios.
+El endpoint Apps Script versión 9 reconoce las operaciones base, pero este cliente y la release acumulada permanecen locales. La verificación remota parcial se registra en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md); la existencia del cliente local no convierte el progreso compartido en una capacidad disponible para usuarios.
 
 ## Alcance implementado
 
@@ -160,7 +160,7 @@ Regresión ampliada relacionada:
 - 1232/1232 comprobaciones aprobadas;
 - modelo, contratos, cliente lifecycle, bootstrap, backend, Runtime jugador, Studio host, transporte y proveedor realtime, nuevo estado cooperativo y fronteras de publicación sin regresiones.
 
-Esta evidencia corresponde al tramo aislado del cliente. La composición posterior en Runtime, la invalidación y la lectura host se documentan y prueban por separado en [`GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y [`GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md); todavía no demuestran comportamiento contra Apps Script o Firebase desplegados.
+Esta evidencia corresponde al tramo aislado del cliente. La composición posterior en Runtime, la invalidación y la lectura host se documentan y prueban por separado en [`GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y [`GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La consulta remota parcial prueba que el endpoint reconoce la lectura, pero no demuestra capability válida, completado, propagación Firebase ni comportamiento integral del cliente contra servicios desplegados.
 
 ## Próximo límite
 

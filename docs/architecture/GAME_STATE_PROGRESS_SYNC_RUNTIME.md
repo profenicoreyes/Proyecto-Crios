@@ -4,7 +4,7 @@
 
 Este documento registra la composición local del primer progreso cooperativo de `LiveRoom` dentro de Runtime. La implementación no tiene todavía un identificador definitivo de roadmap; quedó comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`, no fue desplegada y no habilita una capacidad disponible para usuarios.
 
-Runtime carga modelo, outbox, reconciliador, cliente y coordinador. Studio carga solamente el modelo puro para validar el orden público de misiones; la consola de mando carga modelo, reconciliador y cliente, pero no outbox ni coordinador y utiliza exclusivamente la lectura. El endpoint publicado vigente todavía no contiene las operaciones autoritativas requeridas.
+Runtime carga modelo, outbox, reconciliador, cliente y coordinador. Studio carga solamente el modelo puro para validar el orden público de misiones; la consola de mando carga modelo, reconciliador y cliente, pero no outbox ni coordinador y utiliza exclusivamente la lectura. El endpoint Apps Script versión 9 reconoce las operaciones base, pero esta composición de navegador no fue publicada como release acumulada.
 
 ## Composición sin exposición de capability
 
@@ -89,7 +89,7 @@ Esta separación conserva un único almacén lifecycle de credenciales y evita q
 
 ## Evidencia local focal
 
-La regresión Node completa vigente aprueba 38/38 suites y 2888/2888 comprobaciones. Las suites focales ampliadas verifican, entre otras fronteras, reconciliador 122/122, coordinador 79/79, Runtime player 153/153 y composición/proyección 80/80.
+La regresión Node completa vigente aprueba 38/38 suites y 3034/3034 comprobaciones. Las suites focales ampliadas verifican, entre otras fronteras, reconciliador 122/122, coordinador 79/79, Runtime player 163/163 y composición/proyección 80/80.
 
 La evidencia incluye recarga con el mismo `requestId`, red transitoria, invalidación realtime tipada, coalescencia, recuperación de visibilidad, expiración terminal irreversible, callbacks tardíos entre generaciones, cruce de contexto, outbox corrupta, reloj regresivo, ausencia de room, separación de persistencia y ausencia de capability en las APIs de composición.
 
@@ -99,10 +99,12 @@ Se completaron además tres smokes autocertificantes en un navegador real local:
 - `runtime-live-room-game-state-game-projection-browser-smoke.test.html`: 25/25 comprobaciones. Ejecutó el `index.html` y `js/crios.js` reales con un lanzamiento publicado explícito, verificó la proyección compartida `0/4 -> 3/4 -> 4/4 -> 0/4`, el bloqueo y desbloqueo del final, el rechazo de una publicación cruzada, la preservación del progreso personal y cero errores o advertencias de página/consola;
 - `host-live-room-game-state-browser-smoke.test.html`: 25/25 comprobaciones. Ejecutó el DOM y controlador reales de `host/index.html` con dos jugadores lógicos, separó señales de presencia y progreso, conservó el último progreso válido ante una falla transitoria, recuperó el agregado completo, usó solo lectura y no mostró IDs técnicos ni atribución individual.
 
-Los smokes de navegador aprueban 89/89 comprobaciones. Su alcance es una sola instancia con contextos lógicos aislados; no equivale a dos procesos, navegadores o dispositivos reales independientes y no valida Apps Script ni Firebase desplegados.
+Estos tres smokes de progreso aprueban 89/89 comprobaciones. Su alcance es una sola instancia con contextos lógicos aislados; no equivale a dos procesos, navegadores o dispositivos reales independientes y no valida Apps Script ni Firebase desplegados.
+
+Como evidencia complementaria del lifecycle que contiene esta sincronización, `live-room-foreground-browser-smoke.test.html` aprueba 36/36 comprobaciones de foco, visibilidad, coalescencia, frontera de 30000 ms, reloj regresivo, estados terminales y `destroy` en Runtime, Host y Studio, sin red real.
 
 ## Próximo límite
 
-La lectura agregada en consola, la señal Firebase `game-state-change` como invalidación sin datos pedagógicos y la reconciliación con control sintético de carga ya están implementadas y validadas localmente. Quedan pendientes el despliegue coherente, la validación integral con dos o más navegadores o dispositivos reales independientes, la observación de carga real y el smoke contra Apps Script y Firebase desplegados.
+La lectura agregada en consola, la señal Firebase `game-state-change` como invalidación sin datos pedagógicos y la reconciliación con control sintético de carga ya están implementadas y validadas localmente. Quedan pendientes la publicación coherente de la release acumulada, la validación integral con dos o más navegadores o dispositivos reales independientes, la observación de carga real y el smoke completo contra Apps Script y Firebase desplegados.
 
 Nada en este documento autoriza asignar un identificador, generar bundle, desplegar Apps Script o modificar Firebase.
