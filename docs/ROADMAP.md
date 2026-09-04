@@ -333,17 +333,17 @@ Este cierre no sincroniza progreso, respuestas, resultados ni estado pedagógico
 
 ## Trabajo posterior
 
-Con LiveRoom, la consola y la presencia realtime cerrados, la sincronización cooperativa de progreso dentro de una misma room ya cuenta con implementación de backend, cliente, post-commit, proyección de juego, señal de invalidación, reconciliación acotada y lectura agregada de consola. El backend de progreso y la ampliación de reglas Firebase fueron publicados posteriormente, pero el frontend acumulado y el candidato de resiliencia continúan locales; la capacidad no está disponible como release versionada ni tiene cierre remoto integral.
+Con LiveRoom, la consola y la presencia realtime cerrados, la sincronización cooperativa de progreso dentro de una misma room ya cuenta con backend, cliente, post-commit, proyección de juego, señal de invalidación, reconciliación acotada y lectura agregada de consola publicados en `main` el 2026-09-03. El cierre documental de esta publicación se registra sin asignar identificador definitivo de etapa.
 
 Este roadmap no le asigna todavía un identificador de tramo. La decisión de arquitectura separada delimita qué estado es compartido, quién puede escribirlo, qué fuente es autoritativa y qué datos quedan expresamente fuera. La presencia realtime cerrada en A4-004 no se amplía implícitamente a datos pedagógicos.
 
-La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). Su aceptación habilitó implementación por tramos verificables, comprometida localmente en `6df495850d2a925c18ceb5556f60b4967df50c7f`; no le asigna un identificador definitivo ni habilita por sí sola bundle o despliegue.
+La decisión aceptada se documenta en [`architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md`](architecture/GAME_STATE_PROGRESS_SYNC_ARCHITECTURE.md). El tramo de implementación por verificaciones incrementales conserva su carácter sin numeración definitiva, aun después de la publicación acumulada.
 
-El perfil local posterior de timeout, heartbeat, presencia, polling, single-flight, invalidación de respuestas tardías y gate de foco/visibilidad de 30 segundos se documenta en [`architecture/LIVE_ROOM_NETWORK_RESILIENCE.md`](architecture/LIVE_ROOM_NETWORK_RESILIENCE.md). Es un candidato sin numerar y mantiene separados la presencia derivada de cinco minutos, el lease de sala de diez minutos y la sincronización de progreso.
+El perfil de timeout, heartbeat, presencia, polling, single-flight, invalidación de respuestas tardías y gate de foco/visibilidad de 30 segundos se documenta en [`architecture/LIVE_ROOM_NETWORK_RESILIENCE.md`](architecture/LIVE_ROOM_NETWORK_RESILIENCE.md). Se mantiene como candidato sin numerar y conserva separados la presencia derivada de cinco minutos, el lease de sala de diez minutos y la sincronización de progreso.
 
 La arquitectura general en [ARCHITECTURE.md](ARCHITECTURE.md) conserva alcance histórico posterior a A2-006J y apunta explícitamente a este roadmap para el estado posterior. La frontera de lectura Firebase, su riesgo residual y los gates de publicación quedan registrados en [architecture/LIVE_ROOM_FIREBASE_SIGNAL_METADATA_SECURITY.md](architecture/LIVE_ROOM_FIREBASE_SIGNAL_METADATA_SECURITY.md).
 
-El contrato físico queda registrado en [`architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md`](architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md), la frontera del cliente en [`architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md`](architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md), la composición del juego en [`architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y la política de invalidación/lectura agregada en [`architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La regresión Node local vigente aprueba 38/38 suites y 3038/3038 comprobaciones. Los tres smokes de progreso aprueban 89/89 y el smoke adicional de foreground/focus aprueba 36/36, para 125/125 comprobaciones locales de navegador. El estado remoto parcial y sus límites se conservan en [`evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md); el frontend acumulado y la resiliencia posterior no fueron desplegados.
+El contrato físico queda registrado en [`architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md`](architecture/GAME_STATE_PROGRESS_SYNC_BACKEND.md), la frontera del cliente en [`architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md`](architecture/GAME_STATE_PROGRESS_SYNC_CLIENT.md), la composición del juego en [`architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md`](architecture/GAME_STATE_PROGRESS_SYNC_RUNTIME.md) y la política de invalidación/lectura agregada en [`architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md`](architecture/GAME_STATE_PROGRESS_SYNC_RECONCILIATION.md). La regresión Node aprobó 38/38 suites y 3038/3038 comprobaciones. Los tres smokes de progreso aprobaron 89/89 y el smoke adicional de foreground/focus aprobó 36/36, para 125/125 comprobaciones locales de navegador. La evidencia remota parcial previa se conserva en [`evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md) y el cierre de publicación del 2026-09-03 se registra en [`evidence/GAME_STATE_PROGRESS_SYNC_DEPLOYMENT_EVIDENCE_2026-09-03.md`](evidence/GAME_STATE_PROGRESS_SYNC_DEPLOYMENT_EVIDENCE_2026-09-03.md).
 
 También permanecen como decisiones independientes:
 
@@ -356,7 +356,7 @@ También permanecen como decisiones independientes:
 
 Permanecen futuras hasta contar con implementación y evidencia específicas:
 
-- disponibilidad de la release acumulada y validación integral de sincronización de progreso entre dispositivos reales dentro de una misma sesión;
+- validación de capacidad y estabilidad para cargas altas sostenidas (por ejemplo, cohortes grandes simultáneas) más allá del smoke funcional multi-actor ya aprobado;
 - desconexión autoritativa inmediata ante cierre abrupto, si una decisión de arquitectura la prioriza;
 - datos pedagógicos, respuestas, resultados y métricas avanzadas en la consola de mando;
 - declarar `published` como modo principal cuando una entrada explícita ya no sea necesaria;
@@ -366,12 +366,19 @@ Permanecen futuras hasta contar con implementación y evidencia específicas:
 
 ## Estado técnico fechado
 
-Esta actualización local del 20 de agosto de 2026 incorpora sobre el checkpoint verificado `75fa84b48a957f3eb4d85024ce17ff8ed675320b` la sincronización de progreso comprometida en `6df495850d2a925c18ceb5556f60b4967df50c7f` y su cierre documental `626563afd1c1a88ba1905220abe20ded90774186`. La publicación remota inmutable, LiveRoom, la consola de mando y la presencia realtime `presence-change` permanecen cerrados funcionalmente. El backend de progreso y el enum Firebase ampliado fueron publicados después de ese cierre, pero el frontend acumulado no fue publicado como release y la validación remota integral continúa pendiente.
+El 2026-09-03 se publicó por fast-forward en `main` el candidato de sincronización de estado/progreso con commit `9971b46d603090246e2d7e3356ecfd8d5dfaeca2`, manteniendo el tramo sin identificador definitivo de etapa.
 
-El respaldo más reciente anterior a este preflight es `Proyecto-Crios-b5fe6fb422dd4335-main.bundle`, SHA-256 `b1976d9d7785c01c89c3b4e5555773f2c5d7f23b5c072fac55c6baa0011bcb34`, de 3274286 bytes, verificado contra `main` en `b5fe6fb422dd43351df00758abc9daec061d0bc2` con historial completo. El bundle documental previo `Proyecto-Crios-626563afd1c1a88b-main.bundle`, SHA-256 `24f977487c5a6264bec7679dccba0512862d00e0adf50a7930775bf56e03f615`, de 3270793 bytes, y el rollback `Proyecto-Crios-75fa84b48a957f3e-main.bundle`, SHA-256 `2bc68e97d2f024e126c163d227ef49bc83a3d36f0c46f29bd78dbd99098a5b1b`, de 3166505 bytes, también fueron reverificados.
+Validaciones registradas para este cierre:
 
-El preflight Firebase del 21 de agosto de 2026 conservó el snapshot remoto aportado por el operador y lo comparó con `719b7fb05c6f7cb277543e4e50836918b8357b4f` y con la candidata. En ese momento el remoto aceptaba solo `presence-change` y omitía tres denegaciones explícitas de raíz que Firebase resuelve por defecto; la candidata conservaba esas defensas y agregaba `game-state-change`. La evidencia previa y el rollback exacto están en [`FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md`](evidence/FIREBASE_RTDB_RULES_PREFLIGHT_2026-08-21.md). La publicación posterior aportada por el operador se registra por separado en [`GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md).
+- gate externo de presencia versión 10: PASS (aportado por operador, con verificación externa del comportamiento de cinco minutos);
+- Firebase real: `presence-change` PASS y `game-state-change` PASS;
+- smoke remoto Host + P1 + P2: 25/25 PASS, ingreso tardío PASS, progreso `0/2 -> 1/2 -> 2/2` PASS, señal hacia Host PASS, recuperación de outbox tras falla transitoria PASS;
+- regresión Node: 38/38 suites, 3038/3038 comprobaciones;
+- navegador local: 125/125 comprobaciones;
+- verificación pública post-push en GitHub Pages con cache-busting:
+	- Runtime LiveRoom game-state smoke: 39/39 PASS;
+	- Host game-state smoke: 25/25 PASS;
+	- Live-room foreground smoke: 36/36 PASS;
+	- game-state projection smoke: 25/25 PASS.
 
-El push permanece diferido. El preflight externo de solo lectura del 20 de agosto de 2026 confirmó que `origin/main` y GitHub Pages sirven `81e39c5d89633ca6c13d0f732f3e940533f475b6`: 75 commits y 198 archivos por detrás del candidato de ese preflight, `626563afd1c1a88ba1905220abe20ded90774186`. El `UNSUPPORTED_OPERATION` observado entonces quedó superado por una consulta no mutante del 31 de agosto: el endpoint publicado reconoció `getLiveRoomGameState` y devolvió `ROOM_UNAVAILABLE` para una sala inexistente. Esto prueba disponibilidad de la operación, no autorización válida, completado, propagación realtime ni capacidad. Por lo tanto, el próximo push constituye una release acumulada y no un hotfix de sincronización.
-
-No existe un identificador aprobado para el tramo posterior a A4-004. La secuencia puede cambiar únicamente ante evidencia explícita más reciente y una nueva decisión de arquitectura.
+La evidencia histórica del 2026-08-31 se conserva sin modificaciones en [`evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md). El cierre documental de esta publicación se registra en [`evidence/GAME_STATE_PROGRESS_SYNC_DEPLOYMENT_EVIDENCE_2026-09-03.md`](evidence/GAME_STATE_PROGRESS_SYNC_DEPLOYMENT_EVIDENCE_2026-09-03.md).

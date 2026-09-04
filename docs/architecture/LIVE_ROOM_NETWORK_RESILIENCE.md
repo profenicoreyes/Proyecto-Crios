@@ -2,9 +2,9 @@
 
 ## Estado
 
-Este documento describe un candidato implementado localmente y todavía no desplegado. No le asigna un identificador definitivo de etapa, no modifica el protocolo `1.0` y no habilita por sí solo commit, bundle ni despliegue.
+Este documento describe un candidato sin identificador de etapa definitivo que fue publicado y verificado el 2026-09-03 como release acumulada de sincronización de estado y progreso. Mantiene protocolo `1.0` y no introduce un identificador nuevo de roadmap.
 
-El endpoint Apps Script versión 9 y el enum Firebase de progreso fueron publicados antes de este candidato. Esa publicación base y su verificación parcial se separan de la resiliencia aquí descripta en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md).
+La versión 10 de Apps Script fue informada por el operador. El comportamiento de cinco minutos para presencia se verificó externamente con gate PASS y quedó separado de la evidencia local previa del 2026-08-31 en [`../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md`](../evidence/GAME_STATE_PROGRESS_SYNC_REMOTE_EVIDENCE_2026-08-31.md).
 
 El objetivo es tolerar latencia, suspensión de pestañas y disparos simultáneos sin exigir que los alumnos se conecten durante una ventana inicial breve y sin convertir Firebase en autoridad.
 
@@ -74,21 +74,25 @@ No se agrega jitter al heartbeat en este candidato. Antes de ampliar el número 
 - La sincronización de progreso y su reconciliación mantienen sus políticas separadas.
 - Cierre manual, duración máxima absoluta y desconexión autoritativa inmediata permanecen fuera de alcance.
 
-## Evidencia local vigente
+## Evidencia vigente
 
 - suites dirigidas de lifecycle: Runtime 163/163, Studio 179/179 y Host 250/250; total 592/592;
 - regresión Node completa: 38/38 suites y 3038/3038 comprobaciones;
 - `live-room-foreground-browser-smoke.test.html`: 36/36 en navegador real local, con eventos `focus` y `visibilitychange`, frontera exacta de 30000 ms, reloj regresivo, coalescencia, estados terminales y `destroy`;
-- el smoke usa clientes falsos por iframe y no accede a Apps Script ni Firebase reales.
+- smokes locales de progreso/sincronización: 89/89 en navegador;
+- cobertura browser local total declarada para este tramo: 125/125;
+- Firebase real: `presence-change` PASS y `game-state-change` PASS;
+- smoke remoto Host + P1 + P2: 25/25 PASS, ingreso tardío PASS, progreso `0/2 -> 1/2 -> 2/2` PASS, señal hacia Host PASS y recuperación de outbox tras falla transitoria PASS;
+- verificación pública en GitHub Pages con cache-busting: Runtime sync 39/39 PASS, Host progress 25/25 PASS, foreground/focus 36/36 PASS y game projection 25/25 PASS.
 
-## Gates antes de desplegar
+## Gates ejecutados para publicación (2026-09-03)
 
-1. Regresión Node completa y `git diff --check` sin errores.
-2. Smokes browserless, los tres smokes de progreso (89/89) y el smoke de foreground/focus (36/36).
-3. Smoke real con host y dos jugadores en navegadores independientes: entrada tardía, avance compartido, pestaña oculta, retorno a foco y recuperación tras una falla transitoria.
-4. Confirmar en Apps Script que no hay excepciones de lock ni aumento sostenido de timeouts.
-5. Verificar que Firebase solo transporta `presence-change` y `game-state-change`; no requiere nuevas reglas.
-6. Desplegar y registrar evidencia únicamente con aprobación separada.
+1. Regresión Node completa: PASS (38/38 suites, 3038/3038).
+2. Browser local: PASS (125/125).
+3. Smoke remoto multi-actor: PASS (Host + P1 + P2, 25/25 y casos críticos).
+4. Gate externo de presencia versión 10: PASS (`registeredParticipantCount=2`, `activeParticipantCount=0`, `activePlayerCount=0`, `playerConnected=false` tras 310000 ms sin heartbeat).
+5. Firebase real: PASS (`presence-change`, `game-state-change`).
+6. Verificación pública post-push en GitHub Pages con cache-busting: PASS.
 
 ## Referencias externas
 
