@@ -27,7 +27,7 @@ Observación reportada tras `310000 ms` sin heartbeat:
 - `activePlayerCount=0`
 - `playerConnected=false`
 
-La versión 10 y el comportamiento de cinco minutos fueron aportados y verificados externamente por el operador.
+La versión 10 fue informada por el operador; el comportamiento de cinco minutos fue verificado externamente contra el endpoint desplegado.
 
 ### Firebase real
 

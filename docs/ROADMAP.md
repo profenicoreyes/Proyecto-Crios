@@ -370,7 +370,7 @@ El 2026-09-03 se publicó por fast-forward en `main` el candidato de sincronizac
 
 Validaciones registradas para este cierre:
 
-- gate externo de presencia versión 10: PASS (aportado por operador, con verificación externa del comportamiento de cinco minutos);
+- gate externo de presencia versión 10: PASS (versión informada por el operador; comportamiento de cinco minutos verificado externamente contra el endpoint desplegado);
 - Firebase real: `presence-change` PASS y `game-state-change` PASS;
 - smoke remoto Host + P1 + P2: 25/25 PASS, ingreso tardío PASS, progreso `0/2 -> 1/2 -> 2/2` PASS, señal hacia Host PASS, recuperación de outbox tras falla transitoria PASS;
 - regresión Node: 38/38 suites, 3038/3038 comprobaciones;
